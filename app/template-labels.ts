@@ -1,0 +1,3807 @@
+/**
+ * Document label translations for template Language setting.
+ * Changing language replaces built-in PDF/document labels (not the store name).
+ */
+
+export const TEMPLATE_LANGUAGES = [
+  { value: "sq", label: "Shqip (Albanian)" },
+  { value: "ar", label: "العربية (Arabic)" },
+  { value: "eu", label: "Euskara (Basque)" },
+  { value: "be", label: "Беларуская (Belarusian)" },
+  { value: "bs", label: "Bosanski (Bosnian)" },
+  { value: "bg", label: "Български (Bulgarian)" },
+  { value: "ca", label: "Català (Catalan)" },
+  { value: "zh-CN", label: "简体中文 (Chinese Simplified)" },
+  { value: "zh-TW", label: "繁體中文 (Chinese Traditional)" },
+  { value: "hr", label: "Hrvatski (Croatian)" },
+  { value: "cs", label: "Čeština (Czech)" },
+  { value: "da", label: "Dansk (Danish)" },
+  { value: "nl", label: "Nederlands (Dutch)" },
+  { value: "en", label: "English" },
+  { value: "en-AU", label: "English (Australia)" },
+  { value: "en-CA", label: "English (Canada)" },
+  { value: "en-GB", label: "English (United Kingdom)" },
+  { value: "et", label: "Eesti (Estonian)" },
+  { value: "fi", label: "Suomi (Finnish)" },
+  { value: "fr", label: "Français (French)" },
+  { value: "gl", label: "Galego (Galician)" },
+  { value: "de", label: "Deutsch (German)" },
+  { value: "el", label: "Ελληνικά (Greek)" },
+  { value: "he", label: "עברית (Hebrew)" },
+  { value: "hi", label: "हिन्दी (Hindi)" },
+  { value: "hu", label: "Magyar (Hungarian)" },
+  { value: "is", label: "Íslenska (Icelandic)" },
+  { value: "id", label: "Bahasa Indonesia" },
+  { value: "ga", label: "Gaeilge (Irish)" },
+  { value: "it", label: "Italiano (Italian)" },
+  { value: "ja", label: "日本語 (Japanese)" },
+  { value: "ko", label: "한국어 (Korean)" },
+  { value: "lv", label: "Latviešu (Latvian)" },
+  { value: "lt", label: "Lietuvių (Lithuanian)" },
+  { value: "lb", label: "Lëtzebuergesch (Luxembourgish)" },
+  { value: "mk", label: "Македонски (Macedonian)" },
+  { value: "ms", label: "Bahasa Melayu" },
+  { value: "mt", label: "Malti (Maltese)" },
+  { value: "no", label: "Norsk (Norwegian)" },
+  { value: "pl", label: "Polski (Polish)" },
+  { value: "pt", label: "Português (Portuguese)" },
+  { value: "pt-BR", label: "Português — Brasil" },
+  { value: "pt-PT", label: "Português — Portugal" },
+  { value: "ro", label: "Română (Romanian)" },
+  { value: "ru", label: "Русский (Russian)" },
+  { value: "sr", label: "Српски (Serbian)" },
+  { value: "sk", label: "Slovenčina (Slovak)" },
+  { value: "sl", label: "Slovenščina (Slovenian)" },
+  { value: "es", label: "Español (Spanish)" },
+  { value: "sv", label: "Svenska (Swedish)" },
+  { value: "ta", label: "தமிழ் (Tamil)" },
+  { value: "th", label: "ไทย (Thai)" },
+  { value: "tr", label: "Türkçe (Turkish)" },
+  { value: "uk", label: "Українська (Ukrainian)" },
+  { value: "vi", label: "Tiếng Việt (Vietnamese)" },
+  { value: "cy", label: "Cymraeg (Welsh)" },
+] as const;
+
+export type TemplateLanguage = (typeof TEMPLATE_LANGUAGES)[number]["value"];
+
+export const DEFAULT_TEMPLATE_LANGUAGE: TemplateLanguage = "en";
+
+export type TemplateLabelPack = {
+  transaction: {
+    customer: string;
+    shipping: string;
+    customerDetails: string;
+    documentTitle: string;
+    orderNumber: string;
+    date: string;
+    reference: string;
+    expectedShipmentDate: string;
+    paymentMethod: string;
+  };
+  columns: {
+    number: string;
+    item: string;
+    custom: string;
+    sku: string;
+    quantity: string;
+    rate: string;
+    discount: string;
+    discountPercentage: string;
+    taxPercentage: string;
+    taxAmount: string;
+    amount: string;
+  };
+  customerFields: {
+    company: string;
+    name: string;
+    nameFallback: string;
+    address: string;
+    taxId: string;
+    vatNumber: string;
+    phone: string;
+    email: string;
+  };
+  totals: {
+    subtotalLabel: string;
+    discountAmountLabel: string;
+    shippingPriceLabel: string;
+    vatAmountLabel: string;
+    paidAmountLabel: string;
+    balanceDueLabel: string;
+    totalLabel: string;
+  };
+  taxSummary: {
+    title: string;
+    detailsLabel: string;
+    taxableAmountLabel: string;
+    taxAmountLabel: string;
+    totalAmountLabel: string;
+    totalLabel: string;
+  };
+  notesLabel: string;
+  notes: string;
+  termsLabel: string;
+  terms: string;
+};
+
+const en: TemplateLabelPack = {
+  transaction: {
+    customer: "Bill To",
+    shipping: "Ship To",
+    customerDetails: "Customer Details",
+    documentTitle: "SALES ORDER",
+    orderNumber: "Sales Order#",
+    date: "Order Date",
+    reference: "Ref#",
+    expectedShipmentDate: "Expected Shipment Date",
+    paymentMethod: "Payment Method",
+  },
+  columns: {
+    number: "#",
+    item: "Item",
+    custom: "Custom",
+    sku: "SKU",
+    quantity: "Qty",
+    rate: "Rate",
+    discount: "Discount",
+    discountPercentage: "Discount %",
+    taxPercentage: "Tax %",
+    taxAmount: "Tax",
+    amount: "Amount",
+  },
+  customerFields: {
+    company: "Company",
+    name: "Name",
+    nameFallback: "First name and last name",
+    address: "Address",
+    taxId: "Tax ID",
+    vatNumber: "VAT number",
+    phone: "Phone",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Sub Total",
+    discountAmountLabel: "Discount",
+    shippingPriceLabel: "Shipping Charge",
+    vatAmountLabel: "Total Tax",
+    paidAmountLabel: "Paid Amount",
+    balanceDueLabel: "Balance Due",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Tax Summary",
+    detailsLabel: "Tax Details",
+    taxableAmountLabel: "Taxable Amount ({currency})",
+    taxAmountLabel: "Tax Amount ({currency})",
+    totalAmountLabel: "Total Amount ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notes",
+  notes: "Thanks for your business.",
+  termsLabel: "Terms & Conditions",
+  terms: "Payment is due on receipt.",
+};
+
+const de: TemplateLabelPack = {
+  transaction: {
+    customer: "Rechnungsadresse",
+    shipping: "Lieferadresse",
+    customerDetails: "Kundendetails",
+    documentTitle: "AUFTRAG",
+    orderNumber: "Auftragsnr.",
+    date: "Bestelldatum",
+    reference: "Ref.",
+    expectedShipmentDate: "Voraussichtliches Versanddatum",
+    paymentMethod: "Zahlungsart",
+  },
+  columns: {
+    number: "#",
+    item: "Artikel",
+    custom: "Benutzerdefiniert",
+    sku: "Art.-Nr.",
+    quantity: "Menge",
+    rate: "Preis",
+    discount: "Rabatt",
+    discountPercentage: "Rabatt %",
+    taxPercentage: "Steuer %",
+    taxAmount: "Steuer",
+    amount: "Betrag",
+  },
+  customerFields: {
+    company: "Firma",
+    name: "Name",
+    nameFallback: "Vor- und Nachname",
+    address: "Adresse",
+    taxId: "Steuer-ID",
+    vatNumber: "USt-IdNr.",
+    phone: "Telefon",
+    email: "E-Mail",
+  },
+  totals: {
+    subtotalLabel: "Zwischensumme",
+    discountAmountLabel: "Rabatt",
+    shippingPriceLabel: "Versandkosten",
+    vatAmountLabel: "Steuer gesamt",
+    paidAmountLabel: "Bezahlt",
+    balanceDueLabel: "Offener Betrag",
+    totalLabel: "Gesamt",
+  },
+  taxSummary: {
+    title: "Steuerübersicht",
+    detailsLabel: "Steuerdetails",
+    taxableAmountLabel: "Steuerpflichtiger Betrag ({currency})",
+    taxAmountLabel: "Steuerbetrag ({currency})",
+    totalAmountLabel: "Gesamtbetrag ({currency})",
+    totalLabel: "Gesamt",
+  },
+  notesLabel: "Hinweise",
+  notes: "Vielen Dank für Ihren Auftrag.",
+  termsLabel: "Bedingungen",
+  terms: "Zahlung bei Erhalt fällig.",
+};
+
+const fr: TemplateLabelPack = {
+  transaction: {
+    customer: "Facturer à",
+    shipping: "Livrer à",
+    customerDetails: "Détails client",
+    documentTitle: "BON DE COMMANDE",
+    orderNumber: "N° de commande",
+    date: "Date de commande",
+    reference: "Réf.",
+    expectedShipmentDate: "Date d'expédition prévue",
+    paymentMethod: "Mode de paiement",
+  },
+  columns: {
+    number: "#",
+    item: "Article",
+    custom: "Personnalisé",
+    sku: "Réf.",
+    quantity: "Qté",
+    rate: "Prix",
+    discount: "Remise",
+    discountPercentage: "Remise %",
+    taxPercentage: "Taxe %",
+    taxAmount: "Taxe",
+    amount: "Montant",
+  },
+  customerFields: {
+    company: "Société",
+    name: "Nom",
+    nameFallback: "Prénom et nom",
+    address: "Adresse",
+    taxId: "N° fiscal",
+    vatNumber: "N° TVA",
+    phone: "Téléphone",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Sous-total",
+    discountAmountLabel: "Remise",
+    shippingPriceLabel: "Frais de livraison",
+    vatAmountLabel: "Taxes totales",
+    paidAmountLabel: "Montant payé",
+    balanceDueLabel: "Solde dû",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Récapitulatif des taxes",
+    detailsLabel: "Détails des taxes",
+    taxableAmountLabel: "Montant taxable ({currency})",
+    taxAmountLabel: "Montant de la taxe ({currency})",
+    totalAmountLabel: "Montant total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notes",
+  notes: "Merci pour votre commande.",
+  termsLabel: "Conditions générales",
+  terms: "Paiement dû à réception.",
+};
+
+const es: TemplateLabelPack = {
+  transaction: {
+    customer: "Facturar a",
+    shipping: "Enviar a",
+    customerDetails: "Detalles del cliente",
+    documentTitle: "PEDIDO DE VENTA",
+    orderNumber: "N.º de pedido",
+    date: "Fecha del pedido",
+    reference: "Ref.",
+    expectedShipmentDate: "Fecha de envío prevista",
+    paymentMethod: "Método de pago",
+  },
+  columns: {
+    number: "#",
+    item: "Artículo",
+    custom: "Personalizado",
+    sku: "Ref.",
+    quantity: "Cant.",
+    rate: "Precio",
+    discount: "Descuento",
+    discountPercentage: "Descuento %",
+    taxPercentage: "Impuesto %",
+    taxAmount: "Impuesto",
+    amount: "Importe",
+  },
+  customerFields: {
+    company: "Empresa",
+    name: "Nombre",
+    nameFallback: "Nombre y apellidos",
+    address: "Dirección",
+    taxId: "ID fiscal",
+    vatNumber: "N.º de IVA",
+    phone: "Teléfono",
+    email: "Correo",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Descuento",
+    shippingPriceLabel: "Cargo de envío",
+    vatAmountLabel: "Impuestos totales",
+    paidAmountLabel: "Importe pagado",
+    balanceDueLabel: "Saldo pendiente",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Resumen de impuestos",
+    detailsLabel: "Detalles de impuestos",
+    taxableAmountLabel: "Base imponible ({currency})",
+    taxAmountLabel: "Importe del impuesto ({currency})",
+    totalAmountLabel: "Importe total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notas",
+  notes: "Gracias por su compra.",
+  termsLabel: "Términos y condiciones",
+  terms: "El pago vence a la recepción.",
+};
+
+const it: TemplateLabelPack = {
+  transaction: {
+    customer: "Fatturare a",
+    shipping: "Spedire a",
+    customerDetails: "Dettagli cliente",
+    documentTitle: "ORDINE DI VENDITA",
+    orderNumber: "N. ordine",
+    date: "Data ordine",
+    reference: "Rif.",
+    expectedShipmentDate: "Data di spedizione prevista",
+    paymentMethod: "Metodo di pagamento",
+  },
+  columns: {
+    number: "#",
+    item: "Articolo",
+    custom: "Personalizzato",
+    sku: "Cod.",
+    quantity: "Qtà",
+    rate: "Prezzo",
+    discount: "Sconto",
+    discountPercentage: "Sconto %",
+    taxPercentage: "IVA %",
+    taxAmount: "IVA",
+    amount: "Importo",
+  },
+  customerFields: {
+    company: "Azienda",
+    name: "Nome",
+    nameFallback: "Nome e cognome",
+    address: "Indirizzo",
+    taxId: "Codice fiscale",
+    vatNumber: "Partita IVA",
+    phone: "Telefono",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Subtotale",
+    discountAmountLabel: "Sconto",
+    shippingPriceLabel: "Spese di spedizione",
+    vatAmountLabel: "Totale imposte",
+    paidAmountLabel: "Importo pagato",
+    balanceDueLabel: "Saldo dovuto",
+    totalLabel: "Totale",
+  },
+  taxSummary: {
+    title: "Riepilogo imposte",
+    detailsLabel: "Dettagli imposte",
+    taxableAmountLabel: "Imponibile ({currency})",
+    taxAmountLabel: "Imposta ({currency})",
+    totalAmountLabel: "Importo totale ({currency})",
+    totalLabel: "Totale",
+  },
+  notesLabel: "Note",
+  notes: "Grazie per il tuo ordine.",
+  termsLabel: "Termini e condizioni",
+  terms: "Pagamento alla ricezione.",
+};
+
+const pt: TemplateLabelPack = {
+  transaction: {
+    customer: "Faturar para",
+    shipping: "Enviar para",
+    customerDetails: "Detalhes do cliente",
+    documentTitle: "PEDIDO DE VENDA",
+    orderNumber: "N.º do pedido",
+    date: "Data do pedido",
+    reference: "Ref.",
+    expectedShipmentDate: "Data de envio prevista",
+    paymentMethod: "Método de pagamento",
+  },
+  columns: {
+    number: "#",
+    item: "Item",
+    custom: "Personalizado",
+    sku: "Cód.",
+    quantity: "Qtd",
+    rate: "Preço",
+    discount: "Desconto",
+    discountPercentage: "Desconto %",
+    taxPercentage: "Imposto %",
+    taxAmount: "Imposto",
+    amount: "Valor",
+  },
+  customerFields: {
+    company: "Empresa",
+    name: "Nome",
+    nameFallback: "Nome e sobrenome",
+    address: "Endereço",
+    taxId: "ID fiscal",
+    vatNumber: "N.º de IVA",
+    phone: "Telefone",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Desconto",
+    shippingPriceLabel: "Taxa de envio",
+    vatAmountLabel: "Impostos totais",
+    paidAmountLabel: "Valor pago",
+    balanceDueLabel: "Saldo devido",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Resumo de impostos",
+    detailsLabel: "Detalhes dos impostos",
+    taxableAmountLabel: "Valor tributável ({currency})",
+    taxAmountLabel: "Valor do imposto ({currency})",
+    totalAmountLabel: "Valor total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notas",
+  notes: "Obrigado pela sua compra.",
+  termsLabel: "Termos e condições",
+  terms: "Pagamento devido no recebimento.",
+};
+
+const nl: TemplateLabelPack = {
+  transaction: {
+    customer: "Factuuradres",
+    shipping: "Verzendadres",
+    customerDetails: "Klantgegevens",
+    documentTitle: "VERKOOPORDER",
+    orderNumber: "Ordernr.",
+    date: "Orderdatum",
+    reference: "Ref.",
+    expectedShipmentDate: "Verwachte verzenddatum",
+    paymentMethod: "Betaalmethode",
+  },
+  columns: {
+    number: "#",
+    item: "Artikel",
+    custom: "Aangepast",
+    sku: "Artikelnr.",
+    quantity: "Aantal",
+    rate: "Prijs",
+    discount: "Korting",
+    discountPercentage: "Korting %",
+    taxPercentage: "BTW %",
+    taxAmount: "BTW",
+    amount: "Bedrag",
+  },
+  customerFields: {
+    company: "Bedrijf",
+    name: "Naam",
+    nameFallback: "Voor- en achternaam",
+    address: "Adres",
+    taxId: "Belasting-ID",
+    vatNumber: "BTW-nummer",
+    phone: "Telefoon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Subtotaal",
+    discountAmountLabel: "Korting",
+    shippingPriceLabel: "Verzendkosten",
+    vatAmountLabel: "Totaal BTW",
+    paidAmountLabel: "Betaald bedrag",
+    balanceDueLabel: "Openstaand saldo",
+    totalLabel: "Totaal",
+  },
+  taxSummary: {
+    title: "Belastingoverzicht",
+    detailsLabel: "Belastingdetails",
+    taxableAmountLabel: "Belastbaar bedrag ({currency})",
+    taxAmountLabel: "Belastingbedrag ({currency})",
+    totalAmountLabel: "Totaalbedrag ({currency})",
+    totalLabel: "Totaal",
+  },
+  notesLabel: "Opmerkingen",
+  notes: "Bedankt voor uw bestelling.",
+  termsLabel: "Voorwaarden",
+  terms: "Betaling verschuldigd bij ontvangst.",
+};
+
+const pl: TemplateLabelPack = {
+  transaction: {
+    customer: "Nabywca",
+    shipping: "Adres dostawy",
+    customerDetails: "Dane klienta",
+    documentTitle: "ZAMÓWIENIE",
+    orderNumber: "Nr zamówienia",
+    date: "Data zamówienia",
+    reference: "Ref.",
+    expectedShipmentDate: "Planowana data wysyłki",
+    paymentMethod: "Metoda płatności",
+  },
+  columns: {
+    number: "#",
+    item: "Pozycja",
+    custom: "Niestandardowe",
+    sku: "Kod",
+    quantity: "Ilość",
+    rate: "Cena",
+    discount: "Rabat",
+    discountPercentage: "Rabat %",
+    taxPercentage: "Podatek %",
+    taxAmount: "Podatek",
+    amount: "Kwota",
+  },
+  customerFields: {
+    company: "Firma",
+    name: "Nazwa",
+    nameFallback: "Imię i nazwisko",
+    address: "Adres",
+    taxId: "NIP",
+    vatNumber: "Numer VAT",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Suma częściowa",
+    discountAmountLabel: "Rabat",
+    shippingPriceLabel: "Opłata za wysyłkę",
+    vatAmountLabel: "Suma podatku",
+    paidAmountLabel: "Zapłacono",
+    balanceDueLabel: "Do zapłaty",
+    totalLabel: "Razem",
+  },
+  taxSummary: {
+    title: "Podsumowanie podatku",
+    detailsLabel: "Szczegóły podatku",
+    taxableAmountLabel: "Kwota opodatkowana ({currency})",
+    taxAmountLabel: "Kwota podatku ({currency})",
+    totalAmountLabel: "Kwota całkowita ({currency})",
+    totalLabel: "Razem",
+  },
+  notesLabel: "Uwagi",
+  notes: "Dziękujemy za zakupy.",
+  termsLabel: "Warunki",
+  terms: "Płatność wymagana przy odbiorze.",
+};
+
+const sv: TemplateLabelPack = {
+  transaction: {
+    customer: "Faktureringsadress",
+    shipping: "Leveransadress",
+    customerDetails: "Kunduppgifter",
+    documentTitle: "SÄLJORDER",
+    orderNumber: "Ordernr",
+    date: "Orderdatum",
+    reference: "Ref.",
+    expectedShipmentDate: "Förväntat leveransdatum",
+    paymentMethod: "Betalningsmetod",
+  },
+  columns: {
+    number: "#",
+    item: "Artikel",
+    custom: "Anpassad",
+    sku: "Art.nr",
+    quantity: "Antal",
+    rate: "Pris",
+    discount: "Rabatt",
+    discountPercentage: "Rabatt %",
+    taxPercentage: "Moms %",
+    taxAmount: "Moms",
+    amount: "Belopp",
+  },
+  customerFields: {
+    company: "Företag",
+    name: "Namn",
+    nameFallback: "För- och efternamn",
+    address: "Adress",
+    taxId: "Skatte-ID",
+    vatNumber: "Momsnummer",
+    phone: "Telefon",
+    email: "E-post",
+  },
+  totals: {
+    subtotalLabel: "Delsumma",
+    discountAmountLabel: "Rabatt",
+    shippingPriceLabel: "Fraktkostnad",
+    vatAmountLabel: "Total moms",
+    paidAmountLabel: "Betalt belopp",
+    balanceDueLabel: "Att betala",
+    totalLabel: "Totalt",
+  },
+  taxSummary: {
+    title: "Momssammanfattning",
+    detailsLabel: "Momsdetaljer",
+    taxableAmountLabel: "Beskattningsbart belopp ({currency})",
+    taxAmountLabel: "Momsbelopp ({currency})",
+    totalAmountLabel: "Totalt belopp ({currency})",
+    totalLabel: "Totalt",
+  },
+  notesLabel: "Anteckningar",
+  notes: "Tack för din order.",
+  termsLabel: "Villkor",
+  terms: "Betalning ska ske vid mottagande.",
+};
+
+const da: TemplateLabelPack = {
+  transaction: {
+    customer: "Faktureres til",
+    shipping: "Sendes til",
+    customerDetails: "Kundeoplysninger",
+    documentTitle: "SALGSORDRE",
+    orderNumber: "Ordrenr.",
+    date: "Ordredato",
+    reference: "Ref.",
+    expectedShipmentDate: "Forventet forsendelsesdato",
+    paymentMethod: "Betalingsmetode",
+  },
+  columns: {
+    number: "#",
+    item: "Vare",
+    custom: "Tilpasset",
+    sku: "Varenr.",
+    quantity: "Antal",
+    rate: "Pris",
+    discount: "Rabat",
+    discountPercentage: "Rabat %",
+    taxPercentage: "Moms %",
+    taxAmount: "Moms",
+    amount: "Beløb",
+  },
+  customerFields: {
+    company: "Virksomhed",
+    name: "Navn",
+    nameFallback: "For- og efternavn",
+    address: "Adresse",
+    taxId: "Skatte-ID",
+    vatNumber: "CVR/momsnr.",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Rabat",
+    shippingPriceLabel: "Fragtomkostning",
+    vatAmountLabel: "Moms i alt",
+    paidAmountLabel: "Betalt beløb",
+    balanceDueLabel: "Skyldigt beløb",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Momsoversigt",
+    detailsLabel: "Momsdetaljer",
+    taxableAmountLabel: "Afgiftspligtigt beløb ({currency})",
+    taxAmountLabel: "Momsbeløb ({currency})",
+    totalAmountLabel: "Samlet beløb ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Noter",
+  notes: "Tak for din ordre.",
+  termsLabel: "Vilkår og betingelser",
+  terms: "Betaling forfalder ved modtagelse.",
+};
+
+const fi: TemplateLabelPack = {
+  transaction: {
+    customer: "Laskutusosoite",
+    shipping: "Toimitusosoite",
+    customerDetails: "Asiakastiedot",
+    documentTitle: "MYYNTITILAUS",
+    orderNumber: "Tilausnro",
+    date: "Tilauspäivä",
+    reference: "Viite",
+    expectedShipmentDate: "Arvioitu lähetyspäivä",
+    paymentMethod: "Maksutapa",
+  },
+  columns: {
+    number: "#",
+    item: "Tuote",
+    custom: "Mukautettu",
+    sku: "Tuotekoodi",
+    quantity: "Määrä",
+    rate: "Hinta",
+    discount: "Alennus",
+    discountPercentage: "Alennus %",
+    taxPercentage: "Vero %",
+    taxAmount: "Vero",
+    amount: "Summa",
+  },
+  customerFields: {
+    company: "Yritys",
+    name: "Nimi",
+    nameFallback: "Etunimi ja sukunimi",
+    address: "Osoite",
+    taxId: "Verotunnus",
+    vatNumber: "ALV-numero",
+    phone: "Puhelin",
+    email: "Sähköposti",
+  },
+  totals: {
+    subtotalLabel: "Välisumma",
+    discountAmountLabel: "Alennus",
+    shippingPriceLabel: "Toimituskulu",
+    vatAmountLabel: "Verot yhteensä",
+    paidAmountLabel: "Maksettu summa",
+    balanceDueLabel: "Maksettavaa",
+    totalLabel: "Yhteensä",
+  },
+  taxSummary: {
+    title: "Veroyhteenveto",
+    detailsLabel: "Verotiedot",
+    taxableAmountLabel: "Verollinen summa ({currency})",
+    taxAmountLabel: "Veron määrä ({currency})",
+    totalAmountLabel: "Kokonaissumma ({currency})",
+    totalLabel: "Yhteensä",
+  },
+  notesLabel: "Huomautukset",
+  notes: "Kiitos tilauksestasi.",
+  termsLabel: "Ehdot",
+  terms: "Maksu erääntyy vastaanoton yhteydessä.",
+};
+
+const no: TemplateLabelPack = {
+  transaction: {
+    customer: "Faktureres til",
+    shipping: "Sendes til",
+    customerDetails: "Kundedetaljer",
+    documentTitle: "SALGSORDRE",
+    orderNumber: "Ordrenr.",
+    date: "Ordredato",
+    reference: "Ref.",
+    expectedShipmentDate: "Forventet forsendelsesdato",
+    paymentMethod: "Betalingsmetode",
+  },
+  columns: {
+    number: "#",
+    item: "Vare",
+    custom: "Tilpasset",
+    sku: "Varenr.",
+    quantity: "Antall",
+    rate: "Pris",
+    discount: "Rabatt",
+    discountPercentage: "Rabatt %",
+    taxPercentage: "MVA %",
+    taxAmount: "MVA",
+    amount: "Beløp",
+  },
+  customerFields: {
+    company: "Firma",
+    name: "Navn",
+    nameFallback: "For- og etternavn",
+    address: "Adresse",
+    taxId: "Skatte-ID",
+    vatNumber: "MVA-nummer",
+    phone: "Telefon",
+    email: "E-post",
+  },
+  totals: {
+    subtotalLabel: "Delsum",
+    discountAmountLabel: "Rabatt",
+    shippingPriceLabel: "Fraktkostnad",
+    vatAmountLabel: "Total MVA",
+    paidAmountLabel: "Betalt beløp",
+    balanceDueLabel: "Utestående",
+    totalLabel: "Totalt",
+  },
+  taxSummary: {
+    title: "MVA-oversikt",
+    detailsLabel: "MVA-detaljer",
+    taxableAmountLabel: "Avgiftspliktig beløp ({currency})",
+    taxAmountLabel: "Avgiftsbeløp ({currency})",
+    totalAmountLabel: "Totalbeløp ({currency})",
+    totalLabel: "Totalt",
+  },
+  notesLabel: "Merknader",
+  notes: "Takk for bestillingen.",
+  termsLabel: "Vilkår",
+  terms: "Betaling forfaller ved mottak.",
+};
+
+const cs: TemplateLabelPack = {
+  transaction: {
+    customer: "Fakturační adresa",
+    shipping: "Dodací adresa",
+    customerDetails: "Údaje o zákazníkovi",
+    documentTitle: "PRODEJNÍ OBJEDNÁVKA",
+    orderNumber: "Č. objednávky",
+    date: "Datum objednávky",
+    reference: "Ref.",
+    expectedShipmentDate: "Očekávané datum odeslání",
+    paymentMethod: "Způsob platby",
+  },
+  columns: {
+    number: "#",
+    item: "Položka",
+    custom: "Vlastní",
+    sku: "Kód",
+    quantity: "Množství",
+    rate: "Cena",
+    discount: "Sleva",
+    discountPercentage: "Sleva %",
+    taxPercentage: "DPH %",
+    taxAmount: "DPH",
+    amount: "Částka",
+  },
+  customerFields: {
+    company: "Společnost",
+    name: "Jméno",
+    nameFallback: "Jméno a příjmení",
+    address: "Adresa",
+    taxId: "DIČ",
+    vatNumber: "IČ DPH",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Mezisoučet",
+    discountAmountLabel: "Sleva",
+    shippingPriceLabel: "Poplatek za dopravu",
+    vatAmountLabel: "DPH celkem",
+    paidAmountLabel: "Zaplaceno",
+    balanceDueLabel: "Zbývá uhradit",
+    totalLabel: "Celkem",
+  },
+  taxSummary: {
+    title: "Přehled DPH",
+    detailsLabel: "Detaily DPH",
+    taxableAmountLabel: "Základ daně ({currency})",
+    taxAmountLabel: "Částka daně ({currency})",
+    totalAmountLabel: "Celková částka ({currency})",
+    totalLabel: "Celkem",
+  },
+  notesLabel: "Poznámky",
+  notes: "Děkujeme za vaši objednávku.",
+  termsLabel: "Obchodní podmínky",
+  terms: "Platba je splatná při převzetí.",
+};
+
+const hu: TemplateLabelPack = {
+  transaction: {
+    customer: "Számlázási cím",
+    shipping: "Szállítási cím",
+    customerDetails: "Ügyféladatok",
+    documentTitle: "ÉRTÉKESÍTÉSI RENDELÉS",
+    orderNumber: "Rendelésszám",
+    date: "Rendelés dátuma",
+    reference: "Hivatkozás",
+    expectedShipmentDate: "Várható szállítási dátum",
+    paymentMethod: "Fizetési mód",
+  },
+  columns: {
+    number: "#",
+    item: "Tétel",
+    custom: "Egyedi",
+    sku: "Cikkszám",
+    quantity: "Menny.",
+    rate: "Ár",
+    discount: "Kedvezmény",
+    discountPercentage: "Kedvezmény %",
+    taxPercentage: "ÁFA %",
+    taxAmount: "ÁFA",
+    amount: "Összeg",
+  },
+  customerFields: {
+    company: "Cég",
+    name: "Név",
+    nameFallback: "Vezetéknév és keresztnév",
+    address: "Cím",
+    taxId: "Adóazonosító",
+    vatNumber: "ÁFA-szám",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Részösszeg",
+    discountAmountLabel: "Kedvezmény",
+    shippingPriceLabel: "Szállítási díj",
+    vatAmountLabel: "ÁFA összesen",
+    paidAmountLabel: "Fizetett összeg",
+    balanceDueLabel: "Fizetendő egyenleg",
+    totalLabel: "Összesen",
+  },
+  taxSummary: {
+    title: "ÁFA-összesítő",
+    detailsLabel: "ÁFA-részletek",
+    taxableAmountLabel: "Adóköteles összeg ({currency})",
+    taxAmountLabel: "Adó összege ({currency})",
+    totalAmountLabel: "Teljes összeg ({currency})",
+    totalLabel: "Összesen",
+  },
+  notesLabel: "Megjegyzések",
+  notes: "Köszönjük a rendelését.",
+  termsLabel: "Általános szerződési feltételek",
+  terms: "A fizetés átvételkor esedékes.",
+};
+
+const ro: TemplateLabelPack = {
+  transaction: {
+    customer: "Facturare către",
+    shipping: "Livrare către",
+    customerDetails: "Detalii client",
+    documentTitle: "COMANDĂ DE VÂNZARE",
+    orderNumber: "Nr. comandă",
+    date: "Data comenzii",
+    reference: "Ref.",
+    expectedShipmentDate: "Data estimată de expediere",
+    paymentMethod: "Metodă de plată",
+  },
+  columns: {
+    number: "#",
+    item: "Articol",
+    custom: "Personalizat",
+    sku: "Cod",
+    quantity: "Cant.",
+    rate: "Preț",
+    discount: "Discount",
+    discountPercentage: "Discount %",
+    taxPercentage: "TVA %",
+    taxAmount: "TVA",
+    amount: "Sumă",
+  },
+  customerFields: {
+    company: "Companie",
+    name: "Nume",
+    nameFallback: "Prenume și nume",
+    address: "Adresă",
+    taxId: "CIF",
+    vatNumber: "Nr. TVA",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Discount",
+    shippingPriceLabel: "Taxă de livrare",
+    vatAmountLabel: "TVA total",
+    paidAmountLabel: "Sumă plătită",
+    balanceDueLabel: "Sold restant",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Rezumat TVA",
+    detailsLabel: "Detalii TVA",
+    taxableAmountLabel: "Bază impozabilă ({currency})",
+    taxAmountLabel: "Valoare TVA ({currency})",
+    totalAmountLabel: "Valoare totală ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Note",
+  notes: "Vă mulțumim pentru comandă.",
+  termsLabel: "Termeni și condiții",
+  terms: "Plata este scadentă la primire.",
+};
+
+const el: TemplateLabelPack = {
+  transaction: {
+    customer: "Χρέωση σε",
+    shipping: "Αποστολή σε",
+    customerDetails: "Στοιχεία πελάτη",
+    documentTitle: "ΠΑΡΑΓΓΕΛΙΑ ΠΩΛΗΣΗΣ",
+    orderNumber: "Αρ. παραγγελίας",
+    date: "Ημερομηνία παραγγελίας",
+    reference: "Αναφ.",
+    expectedShipmentDate: "Αναμενόμενη ημερομηνία αποστολής",
+    paymentMethod: "Τρόπος πληρωμής",
+  },
+  columns: {
+    number: "#",
+    item: "Είδος",
+    custom: "Προσαρμοσμένο",
+    sku: "Κωδ.",
+    quantity: "Ποσ.",
+    rate: "Τιμή",
+    discount: "Έκπτωση",
+    discountPercentage: "Έκπτωση %",
+    taxPercentage: "ΦΠΑ %",
+    taxAmount: "ΦΠΑ",
+    amount: "Ποσό",
+  },
+  customerFields: {
+    company: "Εταιρεία",
+    name: "Όνομα",
+    nameFallback: "Όνομα και επώνυμο",
+    address: "Διεύθυνση",
+    taxId: "ΑΦΜ",
+    vatNumber: "Αρ. ΦΠΑ",
+    phone: "Τηλέφωνο",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Υποσύνολο",
+    discountAmountLabel: "Έκπτωση",
+    shippingPriceLabel: "Έξοδα μεταφοράς",
+    vatAmountLabel: "Συνολικός φόρος",
+    paidAmountLabel: "Πληρωμένο ποσό",
+    balanceDueLabel: "Υπόλοιπο",
+    totalLabel: "Σύνολο",
+  },
+  taxSummary: {
+    title: "Περίληψη φόρου",
+    detailsLabel: "Λεπτομέρειες φόρου",
+    taxableAmountLabel: "Φορολογητέο ποσό ({currency})",
+    taxAmountLabel: "Ποσό φόρου ({currency})",
+    totalAmountLabel: "Συνολικό ποσό ({currency})",
+    totalLabel: "Σύνολο",
+  },
+  notesLabel: "Σημειώσεις",
+  notes: "Ευχαριστούμε για την παραγγελία σας.",
+  termsLabel: "Όροι και προϋποθέσεις",
+  terms: "Η πληρωμή οφείλεται κατά την παραλαβή.",
+};
+
+const tr: TemplateLabelPack = {
+  transaction: {
+    customer: "Fatura adresi",
+    shipping: "Teslimat adresi",
+    customerDetails: "Müşteri bilgileri",
+    documentTitle: "SATIŞ SİPARİŞİ",
+    orderNumber: "Sipariş no",
+    date: "Sipariş tarihi",
+    reference: "Ref.",
+    expectedShipmentDate: "Tahmini sevk tarihi",
+    paymentMethod: "Ödeme yöntemi",
+  },
+  columns: {
+    number: "#",
+    item: "Ürün",
+    custom: "Özel",
+    sku: "Stok kodu",
+    quantity: "Adet",
+    rate: "Fiyat",
+    discount: "İndirim",
+    discountPercentage: "İndirim %",
+    taxPercentage: "Vergi %",
+    taxAmount: "Vergi",
+    amount: "Tutar",
+  },
+  customerFields: {
+    company: "Şirket",
+    name: "Ad",
+    nameFallback: "Ad ve soyad",
+    address: "Adres",
+    taxId: "Vergi no",
+    vatNumber: "KDV no",
+    phone: "Telefon",
+    email: "E-posta",
+  },
+  totals: {
+    subtotalLabel: "Ara toplam",
+    discountAmountLabel: "İndirim",
+    shippingPriceLabel: "Kargo ücreti",
+    vatAmountLabel: "Toplam vergi",
+    paidAmountLabel: "Ödenen tutar",
+    balanceDueLabel: "Kalan bakiye",
+    totalLabel: "Toplam",
+  },
+  taxSummary: {
+    title: "Vergi özeti",
+    detailsLabel: "Vergi ayrıntıları",
+    taxableAmountLabel: "Vergiye tabi tutar ({currency})",
+    taxAmountLabel: "Vergi tutarı ({currency})",
+    totalAmountLabel: "Toplam tutar ({currency})",
+    totalLabel: "Toplam",
+  },
+  notesLabel: "Notlar",
+  notes: "Siparişiniz için teşekkürler.",
+  termsLabel: "Şartlar ve koşullar",
+  terms: "Ödeme teslimatta yapılmalıdır.",
+};
+
+const ru: TemplateLabelPack = {
+  transaction: {
+    customer: "Плательщик",
+    shipping: "Доставка",
+    customerDetails: "Данные клиента",
+    documentTitle: "ЗАКАЗ НА ПРОДАЖУ",
+    orderNumber: "№ заказа",
+    date: "Дата заказа",
+    reference: "Реф.",
+    expectedShipmentDate: "Ожидаемая дата отгрузки",
+    paymentMethod: "Способ оплаты",
+  },
+  columns: {
+    number: "#",
+    item: "Товар",
+    custom: "Дополнительно",
+    sku: "Артикул",
+    quantity: "Кол-во",
+    rate: "Цена",
+    discount: "Скидка",
+    discountPercentage: "Скидка %",
+    taxPercentage: "Налог %",
+    taxAmount: "Налог",
+    amount: "Сумма",
+  },
+  customerFields: {
+    company: "Компания",
+    name: "Имя",
+    nameFallback: "Имя и фамилия",
+    address: "Адрес",
+    taxId: "ИНН",
+    vatNumber: "НДС номер",
+    phone: "Телефон",
+    email: "Эл. почта",
+  },
+  totals: {
+    subtotalLabel: "Подытог",
+    discountAmountLabel: "Скидка",
+    shippingPriceLabel: "Стоимость доставки",
+    vatAmountLabel: "Налог всего",
+    paidAmountLabel: "Оплачено",
+    balanceDueLabel: "К оплате",
+    totalLabel: "Итого",
+  },
+  taxSummary: {
+    title: "Сводка по налогам",
+    detailsLabel: "Детали налога",
+    taxableAmountLabel: "Налогооблагаемая сумма ({currency})",
+    taxAmountLabel: "Сумма налога ({currency})",
+    totalAmountLabel: "Общая сумма ({currency})",
+    totalLabel: "Итого",
+  },
+  notesLabel: "Примечания",
+  notes: "Спасибо за ваш заказ.",
+  termsLabel: "Условия",
+  terms: "Оплата при получении.",
+};
+
+const uk: TemplateLabelPack = {
+  transaction: {
+    customer: "Платник",
+    shipping: "Доставка",
+    customerDetails: "Дані клієнта",
+    documentTitle: "ЗАМОВЛЕННЯ",
+    orderNumber: "№ замовлення",
+    date: "Дата замовлення",
+    reference: "Реф.",
+    expectedShipmentDate: "Очікувана дата відправки",
+    paymentMethod: "Спосіб оплати",
+  },
+  columns: {
+    number: "#",
+    item: "Товар",
+    custom: "Додатково",
+    sku: "Артикул",
+    quantity: "К-сть",
+    rate: "Ціна",
+    discount: "Знижка",
+    discountPercentage: "Знижка %",
+    taxPercentage: "Податок %",
+    taxAmount: "Податок",
+    amount: "Сума",
+  },
+  customerFields: {
+    company: "Компанія",
+    name: "Ім'я",
+    nameFallback: "Ім'я та прізвище",
+    address: "Адреса",
+    taxId: "ІПН",
+    vatNumber: "Номер ПДВ",
+    phone: "Телефон",
+    email: "Ел. пошта",
+  },
+  totals: {
+    subtotalLabel: "Підсумок",
+    discountAmountLabel: "Знижка",
+    shippingPriceLabel: "Вартість доставки",
+    vatAmountLabel: "Податок разом",
+    paidAmountLabel: "Сплачено",
+    balanceDueLabel: "До сплати",
+    totalLabel: "Разом",
+  },
+  taxSummary: {
+    title: "Підсумок податків",
+    detailsLabel: "Деталі податку",
+    taxableAmountLabel: "Оподатковувана сума ({currency})",
+    taxAmountLabel: "Сума податку ({currency})",
+    totalAmountLabel: "Загальна сума ({currency})",
+    totalLabel: "Разом",
+  },
+  notesLabel: "Примітки",
+  notes: "Дякуємо за ваше замовлення.",
+  termsLabel: "Умови",
+  terms: "Оплата при отриманні.",
+};
+
+const ar: TemplateLabelPack = {
+  transaction: {
+    customer: "فاتورة إلى",
+    shipping: "شحن إلى",
+    customerDetails: "بيانات العميل",
+    documentTitle: "أمر بيع",
+    orderNumber: "رقم أمر البيع",
+    date: "تاريخ الطلب",
+    reference: "مرجع",
+    expectedShipmentDate: "تاريخ الشحن المتوقع",
+    paymentMethod: "طريقة الدفع",
+  },
+  columns: {
+    number: "#",
+    item: "الصنف",
+    custom: "مخصص",
+    sku: "رمز المنتج",
+    quantity: "الكمية",
+    rate: "السعر",
+    discount: "الخصم",
+    discountPercentage: "الخصم %",
+    taxPercentage: "الضريبة %",
+    taxAmount: "الضريبة",
+    amount: "المبلغ",
+  },
+  customerFields: {
+    company: "الشركة",
+    name: "الاسم",
+    nameFallback: "الاسم الأول واسم العائلة",
+    address: "العنوان",
+    taxId: "الرقم الضريبي",
+    vatNumber: "رقم ضريبة القيمة المضافة",
+    phone: "الهاتف",
+    email: "البريد الإلكتروني",
+  },
+  totals: {
+    subtotalLabel: "المجموع الفرعي",
+    discountAmountLabel: "الخصم",
+    shippingPriceLabel: "رسوم الشحن",
+    vatAmountLabel: "إجمالي الضريبة",
+    paidAmountLabel: "المبلغ المدفوع",
+    balanceDueLabel: "الرصيد المستحق",
+    totalLabel: "الإجمالي",
+  },
+  taxSummary: {
+    title: "ملخص الضريبة",
+    detailsLabel: "تفاصيل الضريبة",
+    taxableAmountLabel: "المبلغ الخاضع للضريبة ({currency})",
+    taxAmountLabel: "مبلغ الضريبة ({currency})",
+    totalAmountLabel: "المبلغ الإجمالي ({currency})",
+    totalLabel: "الإجمالي",
+  },
+  notesLabel: "ملاحظات",
+  notes: "شكرًا لتعاملكم معنا.",
+  termsLabel: "الشروط والأحكام",
+  terms: "الدفع مستحق عند الاستلام.",
+};
+
+const he: TemplateLabelPack = {
+  transaction: {
+    customer: "לחיוב",
+    shipping: "למשלוח",
+    customerDetails: "פרטי לקוח",
+    documentTitle: "הזמנת מכירה",
+    orderNumber: "מס' הזמנה",
+    date: "תאריך הזמנה",
+    reference: "אסמכתא",
+    expectedShipmentDate: "תאריך משלוח משוער",
+    paymentMethod: "אמצעי תשלום",
+  },
+  columns: {
+    number: "#",
+    item: "פריט",
+    custom: "מותאם",
+    sku: "מק״ט",
+    quantity: "כמות",
+    rate: "מחיר",
+    discount: "הנחה",
+    discountPercentage: "הנחה %",
+    taxPercentage: "מס %",
+    taxAmount: "מס",
+    amount: "סכום",
+  },
+  customerFields: {
+    company: "חברה",
+    name: "שם",
+    nameFallback: "שם פרטי ושם משפחה",
+    address: "כתובת",
+    taxId: "מס' עוסק",
+    vatNumber: "מס' מע\"מ",
+    phone: "טלפון",
+    email: "אימייל",
+  },
+  totals: {
+    subtotalLabel: "סכום ביניים",
+    discountAmountLabel: "הנחה",
+    shippingPriceLabel: "דמי משלוח",
+    vatAmountLabel: "סה\"כ מס",
+    paidAmountLabel: "סכום ששולם",
+    balanceDueLabel: "יתרה לתשלום",
+    totalLabel: "סה\"כ",
+  },
+  taxSummary: {
+    title: "סיכום מס",
+    detailsLabel: "פרטי מס",
+    taxableAmountLabel: "סכום חייב במס ({currency})",
+    taxAmountLabel: "סכום המס ({currency})",
+    totalAmountLabel: "סכום כולל ({currency})",
+    totalLabel: "סה\"כ",
+  },
+  notesLabel: "הערות",
+  notes: "תודה על ההזמנה.",
+  termsLabel: "תנאים והתניות",
+  terms: "התשלום ישולם עם קבלה.",
+};
+
+const hi: TemplateLabelPack = {
+  transaction: {
+    customer: "बिल प्राप्तकर्ता",
+    shipping: "शिपिंग पता",
+    customerDetails: "ग्राहक विवरण",
+    documentTitle: "सेल्स ऑर्डर",
+    orderNumber: "सेल्स ऑर्डर#",
+    date: "ऑर्डर तिथि",
+    reference: "संदर्भ#",
+    expectedShipmentDate: "अपेक्षित शिपमेंट तिथि",
+    paymentMethod: "भुगतान विधि",
+  },
+  columns: {
+    number: "#",
+    item: "आइटम",
+    custom: "कस्टम",
+    sku: "उत्पाद कोड",
+    quantity: "मात्रा",
+    rate: "दर",
+    discount: "छूट",
+    discountPercentage: "छूट %",
+    taxPercentage: "कर %",
+    taxAmount: "कर",
+    amount: "राशि",
+  },
+  customerFields: {
+    company: "कंपनी",
+    name: "नाम",
+    nameFallback: "पहला और अंतिम नाम",
+    address: "पता",
+    taxId: "कर ID",
+    vatNumber: "VAT नंबर",
+    phone: "फ़ोन",
+    email: "ईमेल",
+  },
+  totals: {
+    subtotalLabel: "उप योग",
+    discountAmountLabel: "छूट",
+    shippingPriceLabel: "शिपिंग शुल्क",
+    vatAmountLabel: "कुल कर",
+    paidAmountLabel: "भुगतान राशि",
+    balanceDueLabel: "बकाया राशि",
+    totalLabel: "कुल",
+  },
+  taxSummary: {
+    title: "कर सारांश",
+    detailsLabel: "कर विवरण",
+    taxableAmountLabel: "कर योग्य राशि ({currency})",
+    taxAmountLabel: "कर राशि ({currency})",
+    totalAmountLabel: "कुल राशि ({currency})",
+    totalLabel: "कुल",
+  },
+  notesLabel: "नोट्स",
+  notes: "आपके व्यवसाय के लिए धन्यवाद।",
+  termsLabel: "नियम और शर्तें",
+  terms: "प्राप्ति पर भुगतान देय है।",
+};
+
+const ta: TemplateLabelPack = {
+  transaction: {
+    customer: "பில் பெறுநர்",
+    shipping: "அனுப்பும் முகவரி",
+    customerDetails: "வாடிக்கையாளர் விவரங்கள்",
+    documentTitle: "விற்பனை ஆர்டர்",
+    orderNumber: "விற்பனை ஆர்டர்#",
+    date: "ஆர்டர் தேதி",
+    reference: "குறிப்பு#",
+    expectedShipmentDate: "எதிர்பார்க்கும் அனுப்புதல் தேதி",
+    paymentMethod: "பணம் செலுத்தும் முறை",
+  },
+  columns: {
+    number: "#",
+    item: "பொருள்",
+    custom: "தனிப்பயன்",
+    sku: "பொருள் குறியீடு",
+    quantity: "அளவு",
+    rate: "விலை",
+    discount: "தள்ளுபடி",
+    discountPercentage: "தள்ளுபடி %",
+    taxPercentage: "வரி %",
+    taxAmount: "வரி",
+    amount: "தொகை",
+  },
+  customerFields: {
+    company: "நிறுவனம்",
+    name: "பெயர்",
+    nameFallback: "முதல் மற்றும் கடைசி பெயர்",
+    address: "முகவரி",
+    taxId: "வரி ID",
+    vatNumber: "VAT எண்",
+    phone: "தொலைபேசி",
+    email: "மின்னஞ்சல்",
+  },
+  totals: {
+    subtotalLabel: "உப மொத்தம்",
+    discountAmountLabel: "தள்ளுபடி",
+    shippingPriceLabel: "ஷிப்பிங் கட்டணம்",
+    vatAmountLabel: "மொத்த வரி",
+    paidAmountLabel: "செலுத்திய தொகை",
+    balanceDueLabel: "நிலுவைத் தொகை",
+    totalLabel: "மொத்தம்",
+  },
+  taxSummary: {
+    title: "வரி சுருக்கம்",
+    detailsLabel: "வரி விவரங்கள்",
+    taxableAmountLabel: "வரி விதிக்கக்கூடிய தொகை ({currency})",
+    taxAmountLabel: "வரித் தொகை ({currency})",
+    totalAmountLabel: "மொத்தத் தொகை ({currency})",
+    totalLabel: "மொத்தம்",
+  },
+  notesLabel: "குறிப்புகள்",
+  notes: "உங்கள் வாடிக்கைக்கு நன்றி.",
+  termsLabel: "விதிமுறைகள் மற்றும் நிபந்தனைகள்",
+  terms: "பெறும்போது பணம் செலுத்த வேண்டும்.",
+};
+
+const th: TemplateLabelPack = {
+  transaction: {
+    customer: "ออกบิลถึง",
+    shipping: "จัดส่งถึง",
+    customerDetails: "รายละเอียดลูกค้า",
+    documentTitle: "ใบสั่งขาย",
+    orderNumber: "เลขที่ใบสั่งขาย",
+    date: "วันที่สั่งซื้อ",
+    reference: "อ้างอิง",
+    expectedShipmentDate: "วันที่คาดว่าจะจัดส่ง",
+    paymentMethod: "วิธีชำระเงิน",
+  },
+  columns: {
+    number: "#",
+    item: "รายการ",
+    custom: "กำหนดเอง",
+    sku: "รหัสสินค้า",
+    quantity: "จำนวน",
+    rate: "ราคา",
+    discount: "ส่วนลด",
+    discountPercentage: "ส่วนลด %",
+    taxPercentage: "ภาษี %",
+    taxAmount: "ภาษี",
+    amount: "จำนวนเงิน",
+  },
+  customerFields: {
+    company: "บริษัท",
+    name: "ชื่อ",
+    nameFallback: "ชื่อและนามสกุล",
+    address: "ที่อยู่",
+    taxId: "เลขประจำตัวผู้เสียภาษี",
+    vatNumber: "เลข VAT",
+    phone: "โทรศัพท์",
+    email: "อีเมล",
+  },
+  totals: {
+    subtotalLabel: "ยอดรวมย่อย",
+    discountAmountLabel: "ส่วนลด",
+    shippingPriceLabel: "ค่าบริการจัดส่ง",
+    vatAmountLabel: "ภาษีรวม",
+    paidAmountLabel: "จำนวนที่ชำระ",
+    balanceDueLabel: "ยอดคงเหลือ",
+    totalLabel: "ยอดรวม",
+  },
+  taxSummary: {
+    title: "สรุปภาษี",
+    detailsLabel: "รายละเอียดภาษี",
+    taxableAmountLabel: "ยอดที่ต้องเสียภาษี ({currency})",
+    taxAmountLabel: "จำนวนภาษี ({currency})",
+    totalAmountLabel: "ยอดรวมทั้งหมด ({currency})",
+    totalLabel: "ยอดรวม",
+  },
+  notesLabel: "หมายเหตุ",
+  notes: "ขอบคุณสำหรับการสั่งซื้อ",
+  termsLabel: "ข้อกำหนดและเงื่อนไข",
+  terms: "ชำระเงินเมื่อได้รับสินค้า",
+};
+
+const vi: TemplateLabelPack = {
+  transaction: {
+    customer: "Thanh toán tới",
+    shipping: "Giao tới",
+    customerDetails: "Chi tiết khách hàng",
+    documentTitle: "ĐƠN BÁN HÀNG",
+    orderNumber: "Số đơn bán",
+    date: "Ngày đặt hàng",
+    reference: "Tham chiếu",
+    expectedShipmentDate: "Ngày giao hàng dự kiến",
+    paymentMethod: "Phương thức thanh toán",
+  },
+  columns: {
+    number: "#",
+    item: "Mặt hàng",
+    custom: "Tùy chỉnh",
+    sku: "Mã SP",
+    quantity: "SL",
+    rate: "Đơn giá",
+    discount: "Giảm giá",
+    discountPercentage: "Giảm giá %",
+    taxPercentage: "Thuế %",
+    taxAmount: "Thuế",
+    amount: "Thành tiền",
+  },
+  customerFields: {
+    company: "Công ty",
+    name: "Tên",
+    nameFallback: "Họ và tên",
+    address: "Địa chỉ",
+    taxId: "Mã số thuế",
+    vatNumber: "Số VAT",
+    phone: "Điện thoại",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Tạm tính",
+    discountAmountLabel: "Giảm giá",
+    shippingPriceLabel: "Phí vận chuyển",
+    vatAmountLabel: "Tổng thuế",
+    paidAmountLabel: "Đã thanh toán",
+    balanceDueLabel: "Còn lại",
+    totalLabel: "Tổng cộng",
+  },
+  taxSummary: {
+    title: "Tóm tắt thuế",
+    detailsLabel: "Chi tiết thuế",
+    taxableAmountLabel: "Số tiền chịu thuế ({currency})",
+    taxAmountLabel: "Số tiền thuế ({currency})",
+    totalAmountLabel: "Tổng số tiền ({currency})",
+    totalLabel: "Tổng cộng",
+  },
+  notesLabel: "Ghi chú",
+  notes: "Cảm ơn quý khách đã mua hàng.",
+  termsLabel: "Điều khoản và điều kiện",
+  terms: "Thanh toán khi nhận hàng.",
+};
+
+const id: TemplateLabelPack = {
+  transaction: {
+    customer: "Tagihkan ke",
+    shipping: "Kirim ke",
+    customerDetails: "Detail pelanggan",
+    documentTitle: "PESANAN PENJUALAN",
+    orderNumber: "No. pesanan",
+    date: "Tanggal pesanan",
+    reference: "Ref.",
+    expectedShipmentDate: "Perkiraan tanggal pengiriman",
+    paymentMethod: "Metode pembayaran",
+  },
+  columns: {
+    number: "#",
+    item: "Item",
+    custom: "Kustom",
+    sku: "Kode",
+    quantity: "Jml",
+    rate: "Harga",
+    discount: "Diskon",
+    discountPercentage: "Diskon %",
+    taxPercentage: "Pajak %",
+    taxAmount: "Pajak",
+    amount: "Jumlah",
+  },
+  customerFields: {
+    company: "Perusahaan",
+    name: "Nama",
+    nameFallback: "Nama depan dan belakang",
+    address: "Alamat",
+    taxId: "NPWP",
+    vatNumber: "Nomor PPN",
+    phone: "Telepon",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Diskon",
+    shippingPriceLabel: "Biaya pengiriman",
+    vatAmountLabel: "Total pajak",
+    paidAmountLabel: "Jumlah dibayar",
+    balanceDueLabel: "Saldo terutang",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Ringkasan pajak",
+    detailsLabel: "Detail pajak",
+    taxableAmountLabel: "Jumlah kena pajak ({currency})",
+    taxAmountLabel: "Jumlah pajak ({currency})",
+    totalAmountLabel: "Jumlah total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Catatan",
+  notes: "Terima kasih atas pesanan Anda.",
+  termsLabel: "Syarat dan ketentuan",
+  terms: "Pembayaran jatuh tempo saat diterima.",
+};
+
+const ms: TemplateLabelPack = {
+  transaction: {
+    customer: "Bil kepada",
+    shipping: "Hantar kepada",
+    customerDetails: "Butiran pelanggan",
+    documentTitle: "PESANAN JUALAN",
+    orderNumber: "No. pesanan",
+    date: "Tarikh pesanan",
+    reference: "Ruj.",
+    expectedShipmentDate: "Tarikh penghantaran dijangka",
+    paymentMethod: "Kaedah pembayaran",
+  },
+  columns: {
+    number: "#",
+    item: "Item",
+    custom: "Tersuai",
+    sku: "Kod",
+    quantity: "Kuantiti",
+    rate: "Kadar",
+    discount: "Diskaun",
+    discountPercentage: "Diskaun %",
+    taxPercentage: "Cukai %",
+    taxAmount: "Cukai",
+    amount: "Jumlah",
+  },
+  customerFields: {
+    company: "Syarikat",
+    name: "Nama",
+    nameFallback: "Nama pertama dan akhir",
+    address: "Alamat",
+    taxId: "ID cukai",
+    vatNumber: "No. VAT",
+    phone: "Telefon",
+    email: "E-mel",
+  },
+  totals: {
+    subtotalLabel: "Jumlah kecil",
+    discountAmountLabel: "Diskaun",
+    shippingPriceLabel: "Caj penghantaran",
+    vatAmountLabel: "Jumlah cukai",
+    paidAmountLabel: "Jumlah dibayar",
+    balanceDueLabel: "Baki hutang",
+    totalLabel: "Jumlah",
+  },
+  taxSummary: {
+    title: "Ringkasan cukai",
+    detailsLabel: "Butiran cukai",
+    taxableAmountLabel: "Jumlah kena cukai ({currency})",
+    taxAmountLabel: "Jumlah cukai ({currency})",
+    totalAmountLabel: "Jumlah keseluruhan ({currency})",
+    totalLabel: "Jumlah",
+  },
+  notesLabel: "Nota",
+  notes: "Terima kasih atas perniagaan anda.",
+  termsLabel: "Terma dan syarat",
+  terms: "Bayaran perlu dibayar semasa diterima.",
+};
+
+const ja: TemplateLabelPack = {
+  transaction: {
+    customer: "請求先",
+    shipping: "配送先",
+    customerDetails: "お客様情報",
+    documentTitle: "販売注文",
+    orderNumber: "注文番号",
+    date: "注文日",
+    reference: "参照番号",
+    expectedShipmentDate: "発送予定日",
+    paymentMethod: "お支払い方法",
+  },
+  columns: {
+    number: "#",
+    item: "商品",
+    custom: "カスタム",
+    sku: "型番",
+    quantity: "数量",
+    rate: "単価",
+    discount: "割引",
+    discountPercentage: "割引 %",
+    taxPercentage: "税 %",
+    taxAmount: "税額",
+    amount: "金額",
+  },
+  customerFields: {
+    company: "会社名",
+    name: "氏名",
+    nameFallback: "姓名",
+    address: "住所",
+    taxId: "税務番号",
+    vatNumber: "VAT番号",
+    phone: "電話",
+    email: "メール",
+  },
+  totals: {
+    subtotalLabel: "小計",
+    discountAmountLabel: "割引",
+    shippingPriceLabel: "配送料",
+    vatAmountLabel: "税合計",
+    paidAmountLabel: "支払済額",
+    balanceDueLabel: "未払残高",
+    totalLabel: "合計",
+  },
+  taxSummary: {
+    title: "税サマリー",
+    detailsLabel: "税の詳細",
+    taxableAmountLabel: "課税対象額 ({currency})",
+    taxAmountLabel: "税額 ({currency})",
+    totalAmountLabel: "合計金額 ({currency})",
+    totalLabel: "合計",
+  },
+  notesLabel: "備考",
+  notes: "ご注文ありがとうございます。",
+  termsLabel: "利用規約",
+  terms: "お支払いは受領時に発生します。",
+};
+
+const ko: TemplateLabelPack = {
+  transaction: {
+    customer: "청구처",
+    shipping: "배송지",
+    customerDetails: "고객 정보",
+    documentTitle: "판매 주문",
+    orderNumber: "주문 번호",
+    date: "주문일",
+    reference: "참조",
+    expectedShipmentDate: "예상 발송일",
+    paymentMethod: "결제 방법",
+  },
+  columns: {
+    number: "#",
+    item: "품목",
+    custom: "사용자 지정",
+    sku: "품번",
+    quantity: "수량",
+    rate: "단가",
+    discount: "할인",
+    discountPercentage: "할인 %",
+    taxPercentage: "세금 %",
+    taxAmount: "세금",
+    amount: "금액",
+  },
+  customerFields: {
+    company: "회사",
+    name: "이름",
+    nameFallback: "이름과 성",
+    address: "주소",
+    taxId: "세금 ID",
+    vatNumber: "VAT 번호",
+    phone: "전화",
+    email: "이메일",
+  },
+  totals: {
+    subtotalLabel: "소계",
+    discountAmountLabel: "할인",
+    shippingPriceLabel: "배송비",
+    vatAmountLabel: "총 세금",
+    paidAmountLabel: "결제 금액",
+    balanceDueLabel: "미결제 잔액",
+    totalLabel: "합계",
+  },
+  taxSummary: {
+    title: "세금 요약",
+    detailsLabel: "세금 세부정보",
+    taxableAmountLabel: "과세 금액 ({currency})",
+    taxAmountLabel: "세금 금액 ({currency})",
+    totalAmountLabel: "총 금액 ({currency})",
+    totalLabel: "합계",
+  },
+  notesLabel: "메모",
+  notes: "주문해 주셔서 감사합니다.",
+  termsLabel: "이용 약관",
+  terms: "수령 시 결제가 필요합니다.",
+};
+
+const zhCN: TemplateLabelPack = {
+  transaction: {
+    customer: "账单地址",
+    shipping: "收货地址",
+    customerDetails: "客户详情",
+    documentTitle: "销售订单",
+    orderNumber: "销售订单号",
+    date: "订单日期",
+    reference: "参考号",
+    expectedShipmentDate: "预计发货日期",
+    paymentMethod: "付款方式",
+  },
+  columns: {
+    number: "#",
+    item: "商品",
+    custom: "自定义",
+    sku: "货号",
+    quantity: "数量",
+    rate: "单价",
+    discount: "折扣",
+    discountPercentage: "折扣 %",
+    taxPercentage: "税率 %",
+    taxAmount: "税额",
+    amount: "金额",
+  },
+  customerFields: {
+    company: "公司",
+    name: "姓名",
+    nameFallback: "姓名",
+    address: "地址",
+    taxId: "税号",
+    vatNumber: "增值税号",
+    phone: "电话",
+    email: "邮箱",
+  },
+  totals: {
+    subtotalLabel: "小计",
+    discountAmountLabel: "折扣",
+    shippingPriceLabel: "运费",
+    vatAmountLabel: "税费合计",
+    paidAmountLabel: "已付金额",
+    balanceDueLabel: "应付余额",
+    totalLabel: "合计",
+  },
+  taxSummary: {
+    title: "税费摘要",
+    detailsLabel: "税费明细",
+    taxableAmountLabel: "应税金额 ({currency})",
+    taxAmountLabel: "税额 ({currency})",
+    totalAmountLabel: "总金额 ({currency})",
+    totalLabel: "合计",
+  },
+  notesLabel: "备注",
+  notes: "感谢您的惠顾。",
+  termsLabel: "条款与条件",
+  terms: "货到付款。",
+};
+
+const zhTW: TemplateLabelPack = {
+  transaction: {
+    customer: "帳單地址",
+    shipping: "收貨地址",
+    customerDetails: "客戶詳情",
+    documentTitle: "銷售訂單",
+    orderNumber: "銷售訂單號",
+    date: "訂單日期",
+    reference: "參考號",
+    expectedShipmentDate: "預計出貨日期",
+    paymentMethod: "付款方式",
+  },
+  columns: {
+    number: "#",
+    item: "商品",
+    custom: "自訂",
+    sku: "貨號",
+    quantity: "數量",
+    rate: "單價",
+    discount: "折扣",
+    discountPercentage: "折扣 %",
+    taxPercentage: "稅率 %",
+    taxAmount: "稅額",
+    amount: "金額",
+  },
+  customerFields: {
+    company: "公司",
+    name: "姓名",
+    nameFallback: "姓名",
+    address: "地址",
+    taxId: "稅號",
+    vatNumber: "加值稅號",
+    phone: "電話",
+    email: "電子郵件",
+  },
+  totals: {
+    subtotalLabel: "小計",
+    discountAmountLabel: "折扣",
+    shippingPriceLabel: "運費",
+    vatAmountLabel: "稅費合計",
+    paidAmountLabel: "已付金額",
+    balanceDueLabel: "應付餘額",
+    totalLabel: "合計",
+  },
+  taxSummary: {
+    title: "稅費摘要",
+    detailsLabel: "稅費明細",
+    taxableAmountLabel: "應稅金額 ({currency})",
+    taxAmountLabel: "稅額 ({currency})",
+    totalAmountLabel: "總金額 ({currency})",
+    totalLabel: "合計",
+  },
+  notesLabel: "備註",
+  notes: "感謝您的惠顧。",
+  termsLabel: "條款與條件",
+  terms: "貨到付款。",
+};
+
+const ptBR: TemplateLabelPack = {
+  ...pt,
+  transaction: {
+    ...pt.transaction,
+    customer: "Faturar para",
+    shipping: "Enviar para",
+    documentTitle: "PEDIDO DE VENDA",
+    orderNumber: "Nº do pedido",
+  },
+  notes: "Obrigado pela sua compra.",
+  terms: "Pagamento devido no recebimento.",
+};
+
+const ptPT: TemplateLabelPack = {
+  transaction: {
+    customer: "Faturar a",
+    shipping: "Enviar para",
+    customerDetails: "Detalhes do cliente",
+    documentTitle: "ENCOMENDA DE VENDA",
+    orderNumber: "N.º da encomenda",
+    date: "Data da encomenda",
+    reference: "Ref.",
+    expectedShipmentDate: "Data de envio prevista",
+    paymentMethod: "Método de pagamento",
+  },
+  columns: {
+    number: "#",
+    item: "Artigo",
+    custom: "Personalizado",
+    sku: "Ref.",
+    quantity: "Qtd.",
+    rate: "Preço",
+    discount: "Desconto",
+    discountPercentage: "Desconto %",
+    taxPercentage: "Imposto %",
+    taxAmount: "Imposto",
+    amount: "Valor",
+  },
+  customerFields: {
+    company: "Empresa",
+    name: "Nome",
+    nameFallback: "Nome e apelido",
+    address: "Morada",
+    taxId: "NIF",
+    vatNumber: "N.º de IVA",
+    phone: "Telefone",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Desconto",
+    shippingPriceLabel: "Taxa de envio",
+    vatAmountLabel: "Impostos totais",
+    paidAmountLabel: "Valor pago",
+    balanceDueLabel: "Saldo em dívida",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Resumo de impostos",
+    detailsLabel: "Detalhes dos impostos",
+    taxableAmountLabel: "Valor tributável ({currency})",
+    taxAmountLabel: "Valor do imposto ({currency})",
+    totalAmountLabel: "Valor total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notas",
+  notes: "Obrigado pela sua encomenda.",
+  termsLabel: "Termos e condições",
+  terms: "Pagamento devido na receção.",
+};
+
+const bg: TemplateLabelPack = {
+  transaction: {
+    customer: "Фактура към",
+    shipping: "Доставка до",
+    customerDetails: "Данни за клиента",
+    documentTitle: "ПОРЪЧКА ЗА ПРОДАЖБА",
+    orderNumber: "№ на поръчка",
+    date: "Дата на поръчка",
+    reference: "Реф.",
+    expectedShipmentDate: "Очаквана дата на изпращане",
+    paymentMethod: "Начин на плащане",
+  },
+  columns: {
+    number: "#",
+    item: "Артикул",
+    custom: "По избор",
+    sku: "Код",
+    quantity: "Кол.",
+    rate: "Цена",
+    discount: "Отстъпка",
+    discountPercentage: "Отстъпка %",
+    taxPercentage: "Данък %",
+    taxAmount: "Данък",
+    amount: "Сума",
+  },
+  customerFields: {
+    company: "Фирма",
+    name: "Име",
+    nameFallback: "Име и фамилия",
+    address: "Адрес",
+    taxId: "ДДС номер",
+    vatNumber: "ДДС номер",
+    phone: "Телефон",
+    email: "Имейл",
+  },
+  totals: {
+    subtotalLabel: "Междинна сума",
+    discountAmountLabel: "Отстъпка",
+    shippingPriceLabel: "Такса доставка",
+    vatAmountLabel: "Общ данък",
+    paidAmountLabel: "Платена сума",
+    balanceDueLabel: "Дължима сума",
+    totalLabel: "Общо",
+  },
+  taxSummary: {
+    title: "Обобщение на данъка",
+    detailsLabel: "Данъчни детайли",
+    taxableAmountLabel: "Данъчна основа ({currency})",
+    taxAmountLabel: "Данъчна сума ({currency})",
+    totalAmountLabel: "Обща сума ({currency})",
+    totalLabel: "Общо",
+  },
+  notesLabel: "Бележки",
+  notes: "Благодарим за поръчката.",
+  termsLabel: "Условия",
+  terms: "Плащането е дължимо при получаване.",
+};
+
+const hr: TemplateLabelPack = {
+  transaction: {
+    customer: "Naplatiti",
+    shipping: "Dostaviti",
+    customerDetails: "Podaci o kupcu",
+    documentTitle: "PRODAJNI NALOG",
+    orderNumber: "Br. narudžbe",
+    date: "Datum narudžbe",
+    reference: "Ref.",
+    expectedShipmentDate: "Očekivani datum slanja",
+    paymentMethod: "Način plaćanja",
+  },
+  columns: {
+    number: "#",
+    item: "Stavka",
+    custom: "Prilagođeno",
+    sku: "Šifra",
+    quantity: "Kol.",
+    rate: "Cijena",
+    discount: "Popust",
+    discountPercentage: "Popust %",
+    taxPercentage: "Porez %",
+    taxAmount: "Porez",
+    amount: "Iznos",
+  },
+  customerFields: {
+    company: "Tvrtka",
+    name: "Ime",
+    nameFallback: "Ime i prezime",
+    address: "Adresa",
+    taxId: "OIB",
+    vatNumber: "PDV broj",
+    phone: "Telefon",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Međuzbroj",
+    discountAmountLabel: "Popust",
+    shippingPriceLabel: "Trošak dostave",
+    vatAmountLabel: "Ukupni porez",
+    paidAmountLabel: "Plaćeni iznos",
+    balanceDueLabel: "Dugovanje",
+    totalLabel: "Ukupno",
+  },
+  taxSummary: {
+    title: "Sažetak poreza",
+    detailsLabel: "Detalji poreza",
+    taxableAmountLabel: "Oporezivi iznos ({currency})",
+    taxAmountLabel: "Iznos poreza ({currency})",
+    totalAmountLabel: "Ukupan iznos ({currency})",
+    totalLabel: "Ukupno",
+  },
+  notesLabel: "Napomene",
+  notes: "Hvala na narudžbi.",
+  termsLabel: "Uvjeti",
+  terms: "Plaćanje dospijeva pri primitku.",
+};
+
+const sk: TemplateLabelPack = {
+  transaction: {
+    customer: "Fakturačná adresa",
+    shipping: "Dodacia adresa",
+    customerDetails: "Údaje o zákazníkovi",
+    documentTitle: "PREDAJNÁ OBJEDNÁVKA",
+    orderNumber: "Č. objednávky",
+    date: "Dátum objednávky",
+    reference: "Ref.",
+    expectedShipmentDate: "Očakávaný dátum odoslania",
+    paymentMethod: "Spôsob platby",
+  },
+  columns: {
+    number: "#",
+    item: "Položka",
+    custom: "Vlastné",
+    sku: "Kód",
+    quantity: "Množstvo",
+    rate: "Cena",
+    discount: "Zľava",
+    discountPercentage: "Zľava %",
+    taxPercentage: "DPH %",
+    taxAmount: "DPH",
+    amount: "Suma",
+  },
+  customerFields: {
+    company: "Spoločnosť",
+    name: "Meno",
+    nameFallback: "Meno a priezvisko",
+    address: "Adresa",
+    taxId: "DIČ",
+    vatNumber: "IČ DPH",
+    phone: "Telefón",
+    email: "E-mail",
+  },
+  totals: {
+    subtotalLabel: "Medzisúčet",
+    discountAmountLabel: "Zľava",
+    shippingPriceLabel: "Poplatek za dopravu",
+    vatAmountLabel: "DPH spolu",
+    paidAmountLabel: "Zaplatené",
+    balanceDueLabel: "Zostáva uhradiť",
+    totalLabel: "Spolu",
+  },
+  taxSummary: {
+    title: "Prehľad DPH",
+    detailsLabel: "Detaily DPH",
+    taxableAmountLabel: "Základ dane ({currency})",
+    taxAmountLabel: "Suma dane ({currency})",
+    totalAmountLabel: "Celková suma ({currency})",
+    totalLabel: "Spolu",
+  },
+  notesLabel: "Poznámky",
+  notes: "Ďakujeme za vašu objednávku.",
+  termsLabel: "Obchodné podmienky",
+  terms: "Platba je splatná pri prevzatí.",
+};
+
+const sl: TemplateLabelPack = {
+  transaction: {
+    customer: "Račun za",
+    shipping: "Dostava na",
+    customerDetails: "Podatki o stranki",
+    documentTitle: "PRODAJNI NALOG",
+    orderNumber: "Št. naročila",
+    date: "Datum naročila",
+    reference: "Ref.",
+    expectedShipmentDate: "Predvideni datum pošiljanja",
+    paymentMethod: "Način plačila",
+  },
+  columns: {
+    number: "#",
+    item: "Artikel",
+    custom: "Po meri",
+    sku: "Šifra",
+    quantity: "Kol.",
+    rate: "Cena",
+    discount: "Popust",
+    discountPercentage: "Popust %",
+    taxPercentage: "DDV %",
+    taxAmount: "DDV",
+    amount: "Znesek",
+  },
+  customerFields: {
+    company: "Podjetje",
+    name: "Ime",
+    nameFallback: "Ime in priimek",
+    address: "Naslov",
+    taxId: "Davčna št.",
+    vatNumber: "ID za DDV",
+    phone: "Telefon",
+    email: "E-pošta",
+  },
+  totals: {
+    subtotalLabel: "Vmesna vsota",
+    discountAmountLabel: "Popust",
+    shippingPriceLabel: "Trošak dostave",
+    vatAmountLabel: "Skupni davek",
+    paidAmountLabel: "Plačani znesek",
+    balanceDueLabel: "Preostalo za plačilo",
+    totalLabel: "Skupaj",
+  },
+  taxSummary: {
+    title: "Povzetek davka",
+    detailsLabel: "Podrobnosti davka",
+    taxableAmountLabel: "Obdavčljivi znesek ({currency})",
+    taxAmountLabel: "Znesek davka ({currency})",
+    totalAmountLabel: "Skupni znesek ({currency})",
+    totalLabel: "Skupaj",
+  },
+  notesLabel: "Opombe",
+  notes: "Hvala za vaše naročilo.",
+  termsLabel: "Pogoji",
+  terms: "Plačilo zapade ob prejemu.",
+};
+
+const lt: TemplateLabelPack = {
+  transaction: {
+    customer: "Sąskaita",
+    shipping: "Pristatymas",
+    customerDetails: "Kliento duomenys",
+    documentTitle: "PARDAVIMO UŽSAKYMAS",
+    orderNumber: "Užsakymo nr.",
+    date: "Užsakymo data",
+    reference: "Nuoroda",
+    expectedShipmentDate: "Numatoma išsiuntimo data",
+    paymentMethod: "Mokėjimo būdas",
+  },
+  columns: {
+    number: "#",
+    item: "Prekė",
+    custom: "Pasirinktinis",
+    sku: "Kodas",
+    quantity: "Kiekis",
+    rate: "Kaina",
+    discount: "Nuolaida",
+    discountPercentage: "Nuolaida %",
+    taxPercentage: "Mokestis %",
+    taxAmount: "Mokestis",
+    amount: "Suma",
+  },
+  customerFields: {
+    company: "Įmonė",
+    name: "Vardas",
+    nameFallback: "Vardas ir pavardė",
+    address: "Adresas",
+    taxId: "Mokesčių ID",
+    vatNumber: "PVM kodas",
+    phone: "Telefonas",
+    email: "El. paštas",
+  },
+  totals: {
+    subtotalLabel: "Tarpinė suma",
+    discountAmountLabel: "Nuolaida",
+    shippingPriceLabel: "Pristatymo mokestis",
+    vatAmountLabel: "Mokesčiai iš viso",
+    paidAmountLabel: "Sumokėta",
+    balanceDueLabel: "Mokėtina suma",
+    totalLabel: "Iš viso",
+  },
+  taxSummary: {
+    title: "Mokesčių santrauka",
+    detailsLabel: "Mokesčių detalės",
+    taxableAmountLabel: "Apmokestinama suma ({currency})",
+    taxAmountLabel: "Mokesčio suma ({currency})",
+    totalAmountLabel: "Bendra suma ({currency})",
+    totalLabel: "Iš viso",
+  },
+  notesLabel: "Pastabos",
+  notes: "Ačiū už jūsų užsakymą.",
+  termsLabel: "Sąlygos",
+  terms: "Mokėjimas mokėtinas gavus.",
+};
+
+const et: TemplateLabelPack = {
+  transaction: {
+    customer: "Arve saaja",
+    shipping: "Tarneaadress",
+    customerDetails: "Kliendi andmed",
+    documentTitle: "MÜÜGITELLIMUS",
+    orderNumber: "Tellimuse nr",
+    date: "Tellimuse kuupäev",
+    reference: "Viide",
+    expectedShipmentDate: "Eeldatav saatmise kuupäev",
+    paymentMethod: "Makseviis",
+  },
+  columns: {
+    number: "#",
+    item: "Kaup",
+    custom: "Kohandatud",
+    sku: "Tootekood",
+    quantity: "Kogus",
+    rate: "Hind",
+    discount: "Allahindlus",
+    discountPercentage: "Allahindlus %",
+    taxPercentage: "Maks %",
+    taxAmount: "Maks",
+    amount: "Summa",
+  },
+  customerFields: {
+    company: "Ettevõte",
+    name: "Nimi",
+    nameFallback: "Ees- ja perekonnanimi",
+    address: "Aadress",
+    taxId: "Maksu ID",
+    vatNumber: "KMKR nr",
+    phone: "Telefon",
+    email: "E-post",
+  },
+  totals: {
+    subtotalLabel: "Vahesumma",
+    discountAmountLabel: "Allahindlus",
+    shippingPriceLabel: "Tarnekulu",
+    vatAmountLabel: "Maksud kokku",
+    paidAmountLabel: "Makstud summa",
+    balanceDueLabel: "Tasumata jääk",
+    totalLabel: "Kokku",
+  },
+  taxSummary: {
+    title: "Maksude kokkuvõte",
+    detailsLabel: "Maksude üksikasjad",
+    taxableAmountLabel: "Maksustatav summa ({currency})",
+    taxAmountLabel: "Maksusumma ({currency})",
+    totalAmountLabel: "Kogusumma ({currency})",
+    totalLabel: "Kokku",
+  },
+  notesLabel: "Märkused",
+  notes: "Täname teie tellimuse eest.",
+  termsLabel: "Tingimused",
+  terms: "Makse on tasumisele kuuluv kättesaamisel.",
+};
+
+const lv: TemplateLabelPack = {
+  transaction: {
+    customer: "Rēķina adrese",
+    shipping: "Piegādes adrese",
+    customerDetails: "Klienta dati",
+    documentTitle: "PĀRDOŠANAS PASŪTĪJUMS",
+    orderNumber: "Pasūtījuma nr.",
+    date: "Pasūtījuma datums",
+    reference: "Atsauce",
+    expectedShipmentDate: "Paredzamais nosūtīšanas datums",
+    paymentMethod: "Maksājuma veids",
+  },
+  columns: {
+    number: "#",
+    item: "Prece",
+    custom: "Pielāgots",
+    sku: "Kods",
+    quantity: "Daudzums",
+    rate: "Cena",
+    discount: "Atlaide",
+    discountPercentage: "Atlaide %",
+    taxPercentage: "Nodoklis %",
+    taxAmount: "Nodoklis",
+    amount: "Summa",
+  },
+  customerFields: {
+    company: "Uzņēmums",
+    name: "Vārds",
+    nameFallback: "Vārds un uzvārds",
+    address: "Adrese",
+    taxId: "Nodokļa ID",
+    vatNumber: "PVN numurs",
+    phone: "Tālrunis",
+    email: "E-pasts",
+  },
+  totals: {
+    subtotalLabel: "Starpsumma",
+    discountAmountLabel: "Atlaide",
+    shippingPriceLabel: "Piegādes maksa",
+    vatAmountLabel: "Nodokļi kopā",
+    paidAmountLabel: "Samaksātā summa",
+    balanceDueLabel: "Atlikums",
+    totalLabel: "Kopā",
+  },
+  taxSummary: {
+    title: "Nodokļu kopsavilkums",
+    detailsLabel: "Nodokļu informācija",
+    taxableAmountLabel: "Aplikšanas bāze ({currency})",
+    taxAmountLabel: "Nodokļa summa ({currency})",
+    totalAmountLabel: "Kopējā summa ({currency})",
+    totalLabel: "Kopā",
+  },
+  notesLabel: "Piezīmes",
+  notes: "Paldies par jūsu pasūtījumu.",
+  termsLabel: "Noteikumi",
+  terms: "Maksājums jāveic saņemot.",
+};
+
+const ga: TemplateLabelPack = {
+  transaction: {
+    customer: "Billeáil chuig",
+    shipping: "Seol chuig",
+    customerDetails: "Sonraí an chustaiméara",
+    documentTitle: "ORDÚ DÍOLACHÁIN",
+    orderNumber: "Uimh. ordaithe",
+    date: "Dáta an ordaithe",
+    reference: "Tag.",
+    expectedShipmentDate: "Dáta seolta measta",
+    paymentMethod: "Modh íocaíochta",
+  },
+  columns: {
+    number: "#",
+    item: "Mír",
+    custom: "Saincheaptha",
+    sku: "Cód",
+    quantity: "Cain.",
+    rate: "Ráta",
+    discount: "Lascaine",
+    discountPercentage: "Lascaine %",
+    taxPercentage: "Cáin %",
+    taxAmount: "Cáin",
+    amount: "Méid",
+  },
+  customerFields: {
+    company: "Cuideachta",
+    name: "Ainm",
+    nameFallback: "Céadainm agus sloinne",
+    address: "Seoladh",
+    taxId: "Aitheantas cánach",
+    vatNumber: "Uimhir CBL",
+    phone: "Fón",
+    email: "Ríomhphost",
+  },
+  totals: {
+    subtotalLabel: "Fo-iomlán",
+    discountAmountLabel: "Lascaine",
+    shippingPriceLabel: "Táille loingseoireachta",
+    vatAmountLabel: "Cáin iomlán",
+    paidAmountLabel: "Méid íoctha",
+    balanceDueLabel: "Iarmhéid dlite",
+    totalLabel: "Iomlán",
+  },
+  taxSummary: {
+    title: "Achoimre cánach",
+    detailsLabel: "Sonraí cánach",
+    taxableAmountLabel: "Méid inchánach ({currency})",
+    taxAmountLabel: "Méid cánach ({currency})",
+    totalAmountLabel: "Méid iomlán ({currency})",
+    totalLabel: "Iomlán",
+  },
+  notesLabel: "Nótaí",
+  notes: "Go raibh maith agat as do ghnó.",
+  termsLabel: "Téarmaí & Coinníollacha",
+  terms: "Tá íocaíocht dlite ar fháil.",
+};
+
+const mt: TemplateLabelPack = {
+  transaction: {
+    customer: "Iffattura lil",
+    shipping: "Ibgħat lil",
+    customerDetails: "Dettalji tal-klijent",
+    documentTitle: "ORDNI TAL-BEJGĦ",
+    orderNumber: "Nru. tal-ordni",
+    date: "Data tal-ordni",
+    reference: "Ref.",
+    expectedShipmentDate: "Data mistennija tal-bgħat",
+    paymentMethod: "Metodu ta' ħlas",
+  },
+  columns: {
+    number: "#",
+    item: "Oġġett",
+    custom: "Personalizzat",
+    sku: "Kodiċi",
+    quantity: "Kwantità",
+    rate: "Rata",
+    discount: "Skont",
+    discountPercentage: "Skont %",
+    taxPercentage: "Taxxa %",
+    taxAmount: "Taxxa",
+    amount: "Ammont",
+  },
+  customerFields: {
+    company: "Kumpanija",
+    name: "Isem",
+    nameFallback: "Isem u kunjom",
+    address: "Indirizz",
+    taxId: "ID tat-taxxa",
+    vatNumber: "Numru tal-VAT",
+    phone: "Telefon",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Skont",
+    shippingPriceLabel: "Ħlas tat-tbaħħir",
+    vatAmountLabel: "Taxxa totali",
+    paidAmountLabel: "Ammont imħallas",
+    balanceDueLabel: "Bilanċ dovut",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Sommarju tat-taxxa",
+    detailsLabel: "Dettalji tat-taxxa",
+    taxableAmountLabel: "Ammont taxxabbli ({currency})",
+    taxAmountLabel: "Ammont tat-taxxa ({currency})",
+    totalAmountLabel: "Ammont totali ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Noti",
+  notes: "Grazzi għall-ordni tiegħek.",
+  termsLabel: "Termini u Kundizzjonijiet",
+  terms: "Il-ħlas huwa dovut mal-wasla.",
+};
+
+const isLang: TemplateLabelPack = {
+  transaction: {
+    customer: "Reikningsfang",
+    shipping: "Sendingarfang",
+    customerDetails: "Upplýsingar viðskiptavinar",
+    documentTitle: "SÖLUPÖNTUN",
+    orderNumber: "Pöntunarnr.",
+    date: "Pöntunardagur",
+    reference: "Tilv.",
+    expectedShipmentDate: "Áætlaður sendingardagur",
+    paymentMethod: "Greiðslumáti",
+  },
+  columns: {
+    number: "#",
+    item: "Vara",
+    custom: "Sérsniðið",
+    sku: "Vörunr.",
+    quantity: "Magn",
+    rate: "Verð",
+    discount: "Afsláttur",
+    discountPercentage: "Afsláttur %",
+    taxPercentage: "Skattur %",
+    taxAmount: "Skattur",
+    amount: "Upphæð",
+  },
+  customerFields: {
+    company: "Fyrirtæki",
+    name: "Nafn",
+    nameFallback: "Fornafn og eftirnafn",
+    address: "Heimilisfang",
+    taxId: "Skattnr.",
+    vatNumber: "VSK númer",
+    phone: "Sími",
+    email: "Netfang",
+  },
+  totals: {
+    subtotalLabel: "Millisamtala",
+    discountAmountLabel: "Afsláttur",
+    shippingPriceLabel: "Sendingarkostnaður",
+    vatAmountLabel: "Skattur samtals",
+    paidAmountLabel: "Greidd upphæð",
+    balanceDueLabel: "Ógreitt",
+    totalLabel: "Samtals",
+  },
+  taxSummary: {
+    title: "Skattayfirlit",
+    detailsLabel: "Skattaupplýsingar",
+    taxableAmountLabel: "Skattskyld upphæð ({currency})",
+    taxAmountLabel: "Skattupphæð ({currency})",
+    totalAmountLabel: "Heildarupphæð ({currency})",
+    totalLabel: "Samtals",
+  },
+  notesLabel: "Athugasemdir",
+  notes: "Takk fyrir pöntunina.",
+  termsLabel: "Skilmálar",
+  terms: "Greiðsla greiðist við móttöku.",
+};
+
+const sq: TemplateLabelPack = {
+  transaction: {
+    customer: "Faturimi për",
+    shipping: "Dërgesa te",
+    customerDetails: "Detajet e klientit",
+    documentTitle: "POROSI SHITJEJE",
+    orderNumber: "Nr. i porosisë",
+    date: "Data e porosisë",
+    reference: "Ref.",
+    expectedShipmentDate: "Data e pritshme e dërgimit",
+    paymentMethod: "Mënyra e pagesës",
+  },
+  columns: {
+    number: "#",
+    item: "Artikulli",
+    custom: "I personalizuar",
+    sku: "Kodi",
+    quantity: "Sasia",
+    rate: "Çmimi",
+    discount: "Zbritje",
+    discountPercentage: "Zbritje %",
+    taxPercentage: "Tatim %",
+    taxAmount: "Tatim",
+    amount: "Shuma",
+  },
+  customerFields: {
+    company: "Kompania",
+    name: "Emri",
+    nameFallback: "Emri dhe mbiemri",
+    address: "Adresa",
+    taxId: "NIPT",
+    vatNumber: "Nr. i TVSH",
+    phone: "Telefoni",
+    email: "Email",
+  },
+  totals: {
+    subtotalLabel: "Nëntotali",
+    discountAmountLabel: "Zbritje",
+    shippingPriceLabel: "Tarifa e transportit",
+    vatAmountLabel: "Tatimi total",
+    paidAmountLabel: "Shuma e paguar",
+    balanceDueLabel: "Gjendja e detyrimit",
+    totalLabel: "Totali",
+  },
+  taxSummary: {
+    title: "Përmbledhja e tatimit",
+    detailsLabel: "Detajet e tatimit",
+    taxableAmountLabel: "Shuma e tatueshme ({currency})",
+    taxAmountLabel: "Shuma e tatimit ({currency})",
+    totalAmountLabel: "Shuma totale ({currency})",
+    totalLabel: "Totali",
+  },
+  notesLabel: "Shënime",
+  notes: "Faleminderit për porosinë tuaj.",
+  termsLabel: "Kushtet",
+  terms: "Pagesa duhet bërë në marrje.",
+};
+
+const mk: TemplateLabelPack = {
+  transaction: {
+    customer: "Фактурирај на",
+    shipping: "Испорака на",
+    customerDetails: "Податоци за клиентот",
+    documentTitle: "ПРОДАЖНА НАРАЧКА",
+    orderNumber: "Бр. на нарачка",
+    date: "Датум на нарачка",
+    reference: "Реф.",
+    expectedShipmentDate: "Очекуван датум на пратка",
+    paymentMethod: "Начин на плаќање",
+  },
+  columns: {
+    number: "#",
+    item: "Ставка",
+    custom: "Прилагодено",
+    sku: "Шифра",
+    quantity: "Кол.",
+    rate: "Цена",
+    discount: "Попуст",
+    discountPercentage: "Попуст %",
+    taxPercentage: "Данок %",
+    taxAmount: "Данок",
+    amount: "Износ",
+  },
+  customerFields: {
+    company: "Компанија",
+    name: "Име",
+    nameFallback: "Име и презиме",
+    address: "Адреса",
+    taxId: "Даночен број",
+    vatNumber: "ДДВ број",
+    phone: "Телефон",
+    email: "Е-пошта",
+  },
+  totals: {
+    subtotalLabel: "Меѓузбир",
+    discountAmountLabel: "Попуст",
+    shippingPriceLabel: "Трошок за достава",
+    vatAmountLabel: "Вкупен данок",
+    paidAmountLabel: "Платен износ",
+    balanceDueLabel: "Долг за плаќање",
+    totalLabel: "Вкупно",
+  },
+  taxSummary: {
+    title: "Резиме на данок",
+    detailsLabel: "Детали за данок",
+    taxableAmountLabel: "Оданочлив износ ({currency})",
+    taxAmountLabel: "Даночен износ ({currency})",
+    totalAmountLabel: "Вкупен износ ({currency})",
+    totalLabel: "Вкупно",
+  },
+  notesLabel: "Забелешки",
+  notes: "Ви благодариме за нарачката.",
+  termsLabel: "Услови",
+  terms: "Плаќањето доспева при прием.",
+};
+
+const sr: TemplateLabelPack = {
+  transaction: {
+    customer: "Naplata",
+    shipping: "Isporuka",
+    customerDetails: "Podaci o kupcu",
+    documentTitle: "PRODAJNI NALOG",
+    orderNumber: "Br. porudžbine",
+    date: "Datum porudžbine",
+    reference: "Ref.",
+    expectedShipmentDate: "Očekivani datum slanja",
+    paymentMethod: "Način plaćanja",
+  },
+  columns: {
+    number: "#",
+    item: "Stavka",
+    custom: "Prilagođeno",
+    sku: "Šifra",
+    quantity: "Kol.",
+    rate: "Cena",
+    discount: "Popust",
+    discountPercentage: "Popust %",
+    taxPercentage: "Porez %",
+    taxAmount: "Porez",
+    amount: "Iznos",
+  },
+  customerFields: {
+    company: "Kompanija",
+    name: "Ime",
+    nameFallback: "Ime i prezime",
+    address: "Adresa",
+    taxId: "PIB",
+    vatNumber: "PDV broj",
+    phone: "Telefon",
+    email: "E-pošta",
+  },
+  totals: {
+    subtotalLabel: "Međuzbir",
+    discountAmountLabel: "Popust",
+    shippingPriceLabel: "Trošak dostave",
+    vatAmountLabel: "Ukupan porez",
+    paidAmountLabel: "Plaćeni iznos",
+    balanceDueLabel: "Dugovanje",
+    totalLabel: "Ukupno",
+  },
+  taxSummary: {
+    title: "Pregled poreza",
+    detailsLabel: "Detalji poreza",
+    taxableAmountLabel: "Oporezivi iznos ({currency})",
+    taxAmountLabel: "Iznos poreza ({currency})",
+    totalAmountLabel: "Ukupan iznos ({currency})",
+    totalLabel: "Ukupno",
+  },
+  notesLabel: "Napomene",
+  notes: "Hvala na porudžbini.",
+  termsLabel: "Uslovi",
+  terms: "Plaćanje dospeva po prijemu.",
+};
+
+const bs: TemplateLabelPack = {
+  transaction: {
+    customer: "Naplata",
+    shipping: "Dostava",
+    customerDetails: "Podaci o kupcu",
+    documentTitle: "PRODAJNI NALOG",
+    orderNumber: "Br. narudžbe",
+    date: "Datum narudžbe",
+    reference: "Ref.",
+    expectedShipmentDate: "Očekivani datum slanja",
+    paymentMethod: "Način plaćanja",
+  },
+  columns: {
+    number: "#",
+    item: "Stavka",
+    custom: "Prilagođeno",
+    sku: "Šifra",
+    quantity: "Kol.",
+    rate: "Cijena",
+    discount: "Popust",
+    discountPercentage: "Popust %",
+    taxPercentage: "Porez %",
+    taxAmount: "Porez",
+    amount: "Iznos",
+  },
+  customerFields: {
+    company: "Kompanija",
+    name: "Ime",
+    nameFallback: "Ime i prezime",
+    address: "Adresa",
+    taxId: "ID broj",
+    vatNumber: "PDV broj",
+    phone: "Telefon",
+    email: "E-pošta",
+  },
+  totals: {
+    subtotalLabel: "Međuzbir",
+    discountAmountLabel: "Popust",
+    shippingPriceLabel: "Trošak dostave",
+    vatAmountLabel: "Ukupan porez",
+    paidAmountLabel: "Plaćeni iznos",
+    balanceDueLabel: "Dugovanje",
+    totalLabel: "Ukupno",
+  },
+  taxSummary: {
+    title: "Pregled poreza",
+    detailsLabel: "Detalji poreza",
+    taxableAmountLabel: "Oporezivi iznos ({currency})",
+    taxAmountLabel: "Iznos poreza ({currency})",
+    totalAmountLabel: "Ukupan iznos ({currency})",
+    totalLabel: "Ukupno",
+  },
+  notesLabel: "Napomene",
+  notes: "Hvala na narudžbi.",
+  termsLabel: "Uslovi",
+  terms: "Plaćanje dospijeva po prijemu.",
+};
+
+const ca: TemplateLabelPack = {
+  transaction: {
+    customer: "Facturar a",
+    shipping: "Enviar a",
+    customerDetails: "Dades del client",
+    documentTitle: "COMANDA DE VENDA",
+    orderNumber: "Núm. de comanda",
+    date: "Data de la comanda",
+    reference: "Ref.",
+    expectedShipmentDate: "Data d'enviament prevista",
+    paymentMethod: "Mètode de pagament",
+  },
+  columns: {
+    number: "#",
+    item: "Article",
+    custom: "Personalitzat",
+    sku: "Ref.",
+    quantity: "Qtat.",
+    rate: "Preu",
+    discount: "Descompte",
+    discountPercentage: "Descompte %",
+    taxPercentage: "Impost %",
+    taxAmount: "Impost",
+    amount: "Import",
+  },
+  customerFields: {
+    company: "Empresa",
+    name: "Nom",
+    nameFallback: "Nom i cognoms",
+    address: "Adreça",
+    taxId: "NIF",
+    vatNumber: "Núm. d'IVA",
+    phone: "Telèfon",
+    email: "Correu",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Descompte",
+    shippingPriceLabel: "Càrrec d'enviament",
+    vatAmountLabel: "Impostos totals",
+    paidAmountLabel: "Import pagat",
+    balanceDueLabel: "Saldo pendent",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Resum d'impostos",
+    detailsLabel: "Detalls d'impostos",
+    taxableAmountLabel: "Base imposable ({currency})",
+    taxAmountLabel: "Import de l'impost ({currency})",
+    totalAmountLabel: "Import total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notes",
+  notes: "Gràcies per la vostra comanda.",
+  termsLabel: "Termes i condicions",
+  terms: "El pagament venç a la recepció.",
+};
+
+const be: TemplateLabelPack = {
+  transaction: {
+    customer: "Плацельшчык",
+    shipping: "Дастаўка",
+    customerDetails: "Даныя кліента",
+    documentTitle: "ЗАКАЗ НА ПРОДАЖ",
+    orderNumber: "№ заказа",
+    date: "Дата заказа",
+    reference: "Рэф.",
+    expectedShipmentDate: "Чакаемая дата адпраўкі",
+    paymentMethod: "Спосаб аплаты",
+  },
+  columns: {
+    number: "#",
+    item: "Тавар",
+    custom: "Дадаткова",
+    sku: "Артыкул",
+    quantity: "Кол-ць",
+    rate: "Цана",
+    discount: "Зніжка",
+    discountPercentage: "Зніжка %",
+    taxPercentage: "Падатак %",
+    taxAmount: "Падатак",
+    amount: "Сума",
+  },
+  customerFields: {
+    company: "Кампанія",
+    name: "Імя",
+    nameFallback: "Імя і прозвішча",
+    address: "Адрас",
+    taxId: "УНП",
+    vatNumber: "НДС нумар",
+    phone: "Тэлефон",
+    email: "Эл. пошта",
+  },
+  totals: {
+    subtotalLabel: "Прамежкавы вынік",
+    discountAmountLabel: "Зніжка",
+    shippingPriceLabel: "Плата за дастаўку",
+    vatAmountLabel: "Падатак усяго",
+    paidAmountLabel: "Аплачана",
+    balanceDueLabel: "Да аплаты",
+    totalLabel: "Разам",
+  },
+  taxSummary: {
+    title: "Зводка па падатках",
+    detailsLabel: "Дэталі падатку",
+    taxableAmountLabel: "Падаткаабкладаемая сума ({currency})",
+    taxAmountLabel: "Сума падатку ({currency})",
+    totalAmountLabel: "Агульная сума ({currency})",
+    totalLabel: "Разам",
+  },
+  notesLabel: "Заўвагі",
+  notes: "Дзякуй за ваш заказ.",
+  termsLabel: "Умовы",
+  terms: "Аплата пры атрыманні.",
+};
+
+const cy: TemplateLabelPack = {
+  transaction: {
+    customer: "Anfonebu i",
+    shipping: "Anfon i",
+    customerDetails: "Manylion y cwsmer",
+    documentTitle: "GORCHYMYN GWERTHU",
+    orderNumber: "Rhif gorchymyn",
+    date: "Dyddiad y gorchymyn",
+    reference: "Cyf.",
+    expectedShipmentDate: "Dyddiad anfon disgwyliedig",
+    paymentMethod: "Dull talu",
+  },
+  columns: {
+    number: "#",
+    item: "Eitem",
+    custom: "Personol",
+    sku: "Cod",
+    quantity: "Nifer",
+    rate: "Cyfradd",
+    discount: "Disgownt",
+    discountPercentage: "Disgownt %",
+    taxPercentage: "Treth %",
+    taxAmount: "Treth",
+    amount: "Swm",
+  },
+  customerFields: {
+    company: "Cwmni",
+    name: "Enw",
+    nameFallback: "Enw cyntaf a chyfenw",
+    address: "Cyfeiriad",
+    taxId: "ID treth",
+    vatNumber: "Rhif TAW",
+    phone: "Ffôn",
+    email: "E-bost",
+  },
+  totals: {
+    subtotalLabel: "Is-gyfanswm",
+    discountAmountLabel: "Disgownt",
+    shippingPriceLabel: "Taliad cludo",
+    vatAmountLabel: "Cyfanswm treth",
+    paidAmountLabel: "Swm a dalwyd",
+    balanceDueLabel: "Balans dyledus",
+    totalLabel: "Cyfanswm",
+  },
+  taxSummary: {
+    title: "Crynodeb treth",
+    detailsLabel: "Manylion treth",
+    taxableAmountLabel: "Swm trethadwy ({currency})",
+    taxAmountLabel: "Swm treth ({currency})",
+    totalAmountLabel: "Cyfanswm ({currency})",
+    totalLabel: "Cyfanswm",
+  },
+  notesLabel: "Nodiadau",
+  notes: "Diolch am eich archeb.",
+  termsLabel: "Telerau ac Amodau",
+  terms: "Mae taliad yn ddyledus ar dderbyn.",
+};
+
+const eu: TemplateLabelPack = {
+  transaction: {
+    customer: "Fakturatu hona",
+    shipping: "Bidali hona",
+    customerDetails: "Bezeroaren xehetasunak",
+    documentTitle: "SALTZE-ESKAERA",
+    orderNumber: "Eskaera zk.",
+    date: "Eskaera-data",
+    reference: "Erref.",
+    expectedShipmentDate: "Aurreikusitako bidalketa-data",
+    paymentMethod: "Ordainketa-metodoa",
+  },
+  columns: {
+    number: "#",
+    item: "Artikulua",
+    custom: "Pertsonalizatua",
+    sku: "Kodea",
+    quantity: "Kop.",
+    rate: "Prezioa",
+    discount: "Deskontua",
+    discountPercentage: "Deskontua %",
+    taxPercentage: "Zerga %",
+    taxAmount: "Zerga",
+    amount: "Zenbatekoa",
+  },
+  customerFields: {
+    company: "Enpresa",
+    name: "Izena",
+    nameFallback: "Izena eta abizena",
+    address: "Helbidea",
+    taxId: "Zerga ID",
+    vatNumber: "BEZ zenbakia",
+    phone: "Telefonoa",
+    email: "Posta elektronikoa",
+  },
+  totals: {
+    subtotalLabel: "Azpitotala",
+    discountAmountLabel: "Deskontua",
+    shippingPriceLabel: "Bidalketa-kostua",
+    vatAmountLabel: "Zerga guztira",
+    paidAmountLabel: "Ordaindutakoa",
+    balanceDueLabel: "Ordaintzeke",
+    totalLabel: "Guztira",
+  },
+  taxSummary: {
+    title: "Zerga laburpena",
+    detailsLabel: "Zerga xehetasunak",
+    taxableAmountLabel: "Zerga-oinarria ({currency})",
+    taxAmountLabel: "Zerga-zenbatekoa ({currency})",
+    totalAmountLabel: "Zenbateko osoa ({currency})",
+    totalLabel: "Guztira",
+  },
+  notesLabel: "Oharrak",
+  notes: "Eskerrik asko zure eskaeragatik.",
+  termsLabel: "Baldintzak",
+  terms: "Ordainketa jasotzean egin behar da.",
+};
+
+const gl: TemplateLabelPack = {
+  transaction: {
+    customer: "Facturar a",
+    shipping: "Enviar a",
+    customerDetails: "Detalles do cliente",
+    documentTitle: "PEDIDO DE VENDA",
+    orderNumber: "N.º de pedido",
+    date: "Data do pedido",
+    reference: "Ref.",
+    expectedShipmentDate: "Data de envío prevista",
+    paymentMethod: "Método de pagamento",
+  },
+  columns: {
+    number: "#",
+    item: "Artigo",
+    custom: "Personalizado",
+    sku: "Ref.",
+    quantity: "Cant.",
+    rate: "Prezo",
+    discount: "Desconto",
+    discountPercentage: "Desconto %",
+    taxPercentage: "Imposto %",
+    taxAmount: "Imposto",
+    amount: "Importe",
+  },
+  customerFields: {
+    company: "Empresa",
+    name: "Nome",
+    nameFallback: "Nome e apelidos",
+    address: "Enderezo",
+    taxId: "NIF",
+    vatNumber: "N.º de IVE",
+    phone: "Teléfono",
+    email: "Correo",
+  },
+  totals: {
+    subtotalLabel: "Subtotal",
+    discountAmountLabel: "Desconto",
+    shippingPriceLabel: "Cargo de envío",
+    vatAmountLabel: "Impostos totais",
+    paidAmountLabel: "Importe pagado",
+    balanceDueLabel: "Saldo pendente",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Resumo de impostos",
+    detailsLabel: "Detalles de impostos",
+    taxableAmountLabel: "Base impoñible ({currency})",
+    taxAmountLabel: "Importe do imposto ({currency})",
+    totalAmountLabel: "Importe total ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notas",
+  notes: "Grazas polo seu pedido.",
+  termsLabel: "Termos e condicións",
+  terms: "O pagamento vence na recepción.",
+};
+
+const lb: TemplateLabelPack = {
+  transaction: {
+    customer: "Rechnungsadress",
+    shipping: "Liwweradress",
+    customerDetails: "Clientendetailer",
+    documentTitle: "VERKAFSBESTELLUNG",
+    orderNumber: "Bestellnr.",
+    date: "Bestelldatum",
+    reference: "Ref.",
+    expectedShipmentDate: "Erwaarten Versanddatum",
+    paymentMethod: "Bezuelmethod",
+  },
+  columns: {
+    number: "#",
+    item: "Artikel",
+    custom: "Personaliséiert",
+    sku: "Art.-Nr.",
+    quantity: "Quantitéit",
+    rate: "Präis",
+    discount: "Remise",
+    discountPercentage: "Remise %",
+    taxPercentage: "Steier %",
+    taxAmount: "Steier",
+    amount: "Betrag",
+  },
+  customerFields: {
+    company: "Firma",
+    name: "Numm",
+    nameFallback: "Vir- an Familljennumm",
+    address: "Adress",
+    taxId: "Steier-ID",
+    vatNumber: "TVA-Nummer",
+    phone: "Telefon",
+    email: "E-Mail",
+  },
+  totals: {
+    subtotalLabel: "Zwëschensomm",
+    discountAmountLabel: "Remise",
+    shippingPriceLabel: "Liwwerkäschten",
+    vatAmountLabel: "Steier total",
+    paidAmountLabel: "Bezuelt Betrag",
+    balanceDueLabel: "Restbetrag",
+    totalLabel: "Total",
+  },
+  taxSummary: {
+    title: "Steieriwwersiicht",
+    detailsLabel: "Steierdetailer",
+    taxableAmountLabel: "Steierpflichtigen Betrag ({currency})",
+    taxAmountLabel: "Steierbetrag ({currency})",
+    totalAmountLabel: "Totalbetrag ({currency})",
+    totalLabel: "Total",
+  },
+  notesLabel: "Notizen",
+  notes: "Merci fir Är Bestellung.",
+  termsLabel: "Konditiounen",
+  terms: "Bezuelung bei Empfang geschëldert.",
+};
+
+export const TEMPLATE_LABEL_PACKS: Record<TemplateLanguage, TemplateLabelPack> =
+  {
+    sq,
+    ar,
+    eu,
+    be,
+    bs,
+    bg,
+    ca,
+    "zh-CN": zhCN,
+    "zh-TW": zhTW,
+    hr,
+    cs,
+    da,
+    nl,
+    en,
+    "en-AU": en,
+    "en-CA": en,
+    "en-GB": en,
+    et,
+    fi,
+    fr,
+    gl,
+    de,
+    el,
+    he,
+    hi,
+    hu,
+    is: isLang,
+    id,
+    ga,
+    it,
+    ja,
+    ko,
+    lv,
+    lt,
+    lb,
+    mk,
+    ms,
+    mt,
+    no,
+    pl,
+    pt,
+    "pt-BR": ptBR,
+    "pt-PT": ptPT,
+    ro,
+    ru,
+    sr,
+    sk,
+    sl,
+    es,
+    sv,
+    ta,
+    th,
+    tr,
+    uk,
+    vi,
+    cy,
+  };
+
+export function isTemplateLanguage(value: unknown): value is TemplateLanguage {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(TEMPLATE_LABEL_PACKS, value)
+  );
+}
+
+export function normalizeTemplateLanguage(
+  value: unknown,
+  fallback: TemplateLanguage = DEFAULT_TEMPLATE_LANGUAGE,
+): TemplateLanguage {
+  return isTemplateLanguage(value) ? value : fallback;
+}
+
+export function getTemplateLabelPack(
+  language: TemplateLanguage | string | undefined | null,
+): TemplateLabelPack {
+  return TEMPLATE_LABEL_PACKS[normalizeTemplateLanguage(language)];
+}
+
+/** True if value matches a built-in notes/terms string in any language. */
+export function isBuiltInTemplateBody(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  for (const pack of Object.values(TEMPLATE_LABEL_PACKS)) {
+    if (pack.notes === trimmed || pack.terms === trimmed) return true;
+  }
+  return false;
+}
+
+export type ApplyTemplateLabelsInput = {
+  language?: TemplateLanguage | string;
+  columns: Array<{ key: string; label: string; [key: string]: unknown }>;
+  billingDetails: Array<{ key: string; label: string; [key: string]: unknown }>;
+  shippingDetails: Array<{
+    key: string;
+    label: string;
+    [key: string]: unknown;
+  }>;
+  customerBlockDetails: Array<{
+    key: string;
+    label: string;
+    [key: string]: unknown;
+  }>;
+  transactionLabels: {
+    organization: string;
+    customer: string;
+    shipping: string;
+    customerDetails: string;
+    documentTitle: string;
+    orderNumber: string;
+    date: string;
+    reference: string;
+    expectedShipmentDate: string;
+    paymentMethod: string;
+    [key: string]: string;
+  };
+  totals: {
+    subtotalLabel: string;
+    discountAmountLabel: string;
+    shippingPriceLabel: string;
+    vatAmountLabel: string;
+    paidAmountLabel: string;
+    balanceDueLabel: string;
+    totalLabel: string;
+    [key: string]: unknown;
+  };
+  taxSummary: {
+    title: string;
+    detailsLabel: string;
+    taxableAmountLabel: string;
+    taxAmountLabel: string;
+    totalAmountLabel: string;
+    totalLabel: string;
+    [key: string]: unknown;
+  };
+  notesLabel: string;
+  notes: string;
+  termsLabel: string;
+  terms: string;
+};
+
+export type TemplateDocumentType =
+  | "sales-order"
+  | "invoice"
+  | "credit-note"
+  | "packing-slip";
+
+type DocumentTypeTxnLabels = Pick<
+  TemplateLabelPack["transaction"],
+  "documentTitle" | "orderNumber" | "date"
+>;
+
+const INVOICE_TXN_EN: DocumentTypeTxnLabels = {
+  documentTitle: "INVOICE",
+  orderNumber: "Invoice#",
+  date: "Invoice Date",
+};
+
+const CREDIT_TXN_EN: DocumentTypeTxnLabels = {
+  documentTitle: "CREDIT NOTE",
+  orderNumber: "Credit Note#",
+  date: "Credit Note Date",
+};
+
+const PACKING_TXN_EN: DocumentTypeTxnLabels = {
+  documentTitle: "PACKING SLIP",
+  orderNumber: "Packing Slip#",
+  date: "Date",
+};
+
+/** Document-type title/number/date overrides (sales-order uses the pack as-is). */
+const INVOICE_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
+  en: INVOICE_TXN_EN,
+  "en-AU": INVOICE_TXN_EN,
+  "en-CA": INVOICE_TXN_EN,
+  "en-GB": INVOICE_TXN_EN,
+  de: {
+    documentTitle: "RECHNUNG",
+    orderNumber: "Rechnungsnr.",
+    date: "Rechnungsdatum",
+  },
+  fr: {
+    documentTitle: "FACTURE",
+    orderNumber: "Facture nº",
+    date: "Date de facture",
+  },
+  es: {
+    documentTitle: "FACTURA",
+    orderNumber: "Factura nº",
+    date: "Fecha de factura",
+  },
+  it: {
+    documentTitle: "FATTURA",
+    orderNumber: "Fattura nº",
+    date: "Data fattura",
+  },
+  pt: {
+    documentTitle: "FATURA",
+    orderNumber: "Fatura nº",
+    date: "Data da fatura",
+  },
+  "pt-BR": {
+    documentTitle: "FATURA",
+    orderNumber: "Fatura nº",
+    date: "Data da fatura",
+  },
+  "pt-PT": {
+    documentTitle: "FATURA",
+    orderNumber: "Fatura nº",
+    date: "Data da fatura",
+  },
+  nl: {
+    documentTitle: "FACTUUR",
+    orderNumber: "Factuurnr.",
+    date: "Factuurdatum",
+  },
+  pl: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura nr",
+    date: "Data faktury",
+  },
+  sv: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura nr",
+    date: "Fakturadatum",
+  },
+  da: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura nr.",
+    date: "Fakturadato",
+  },
+  fi: {
+    documentTitle: "LASKU",
+    orderNumber: "Lasku nº",
+    date: "Laskun päiväys",
+  },
+  no: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Fakturanr.",
+    date: "Fakturadato",
+  },
+  cs: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura č.",
+    date: "Datum faktury",
+  },
+  hu: {
+    documentTitle: "SZÁMLA",
+    orderNumber: "Számla#",
+    date: "Számla dátuma",
+  },
+  ro: {
+    documentTitle: "FACTURĂ",
+    orderNumber: "Factură nr.",
+    date: "Data facturii",
+  },
+  el: {
+    documentTitle: "ΤΙΜΟΛΟΓΙΟ",
+    orderNumber: "Τιμολόγιο#",
+    date: "Ημερομηνία τιμολογίου",
+  },
+  tr: {
+    documentTitle: "FATURA",
+    orderNumber: "Fatura#",
+    date: "Fatura tarihi",
+  },
+  ru: {
+    documentTitle: "СЧЕТ",
+    orderNumber: "Счет №",
+    date: "Дата счета",
+  },
+  uk: {
+    documentTitle: "РАХУНОК",
+    orderNumber: "Рахунок №",
+    date: "Дата рахунку",
+  },
+  ar: {
+    documentTitle: "فاتورة",
+    orderNumber: "فاتورة#",
+    date: "تاريخ الفاتورة",
+  },
+  he: {
+    documentTitle: "חשבונית",
+    orderNumber: "חשבונית#",
+    date: "תאריך חשבונית",
+  },
+  hi: {
+    documentTitle: "इनवॉइस",
+    orderNumber: "इनवॉइस#",
+    date: "इनवॉइस तिथि",
+  },
+  ta: {
+    documentTitle: "விலைப்பட்டியல்",
+    orderNumber: "விலைப்பட்டியல்#",
+    date: "விலைப்பட்டியல் தேதி",
+  },
+  th: {
+    documentTitle: "ใบแจ้งหนี้",
+    orderNumber: "ใบแจ้งหนี้#",
+    date: "วันที่ใบแจ้งหนี้",
+  },
+  vi: {
+    documentTitle: "HÓA ĐƠN",
+    orderNumber: "Hóa đơn#",
+    date: "Ngày hóa đơn",
+  },
+  id: {
+    documentTitle: "FAKTUR",
+    orderNumber: "Faktur#",
+    date: "Tanggal faktur",
+  },
+  ms: {
+    documentTitle: "INVOIS",
+    orderNumber: "Invois#",
+    date: "Tarikh invois",
+  },
+  ja: {
+    documentTitle: "請求書",
+    orderNumber: "請求書#",
+    date: "請求日",
+  },
+  ko: {
+    documentTitle: "청구서",
+    orderNumber: "청구서#",
+    date: "청구일",
+  },
+  "zh-CN": {
+    documentTitle: "发票",
+    orderNumber: "发票#",
+    date: "发票日期",
+  },
+  "zh-TW": {
+    documentTitle: "發票",
+    orderNumber: "發票#",
+    date: "發票日期",
+  },
+  bg: {
+    documentTitle: "ФАКТУРА",
+    orderNumber: "Фактура №",
+    date: "Дата на фактура",
+  },
+  hr: {
+    documentTitle: "RAČUN",
+    orderNumber: "Račun#",
+    date: "Datum računa",
+  },
+  sk: {
+    documentTitle: "FAKTÚRA",
+    orderNumber: "Faktúra č.",
+    date: "Dátum faktúry",
+  },
+  sl: {
+    documentTitle: "RAČUN",
+    orderNumber: "Račun#",
+    date: "Datum računa",
+  },
+  sr: {
+    documentTitle: "ФАКТУРА",
+    orderNumber: "Фактура#",
+    date: "Датум фактуре",
+  },
+  et: {
+    documentTitle: "ARVE",
+    orderNumber: "Arve nr",
+    date: "Arve kuupäev",
+  },
+  lv: {
+    documentTitle: "RĒĶINS",
+    orderNumber: "Rēķins nr.",
+    date: "Rēķina datums",
+  },
+  lt: {
+    documentTitle: "SĄSKAITA",
+    orderNumber: "Sąskaita nr.",
+    date: "Sąskaitos data",
+  },
+  ca: {
+    documentTitle: "FACTURA",
+    orderNumber: "Factura núm.",
+    date: "Data de la factura",
+  },
+  gl: {
+    documentTitle: "FACTURA",
+    orderNumber: "Factura nº",
+    date: "Data da factura",
+  },
+  eu: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura#",
+    date: "Faktura data",
+  },
+  sq: {
+    documentTitle: "FATURE",
+    orderNumber: "Faturë#",
+    date: "Data e faturës",
+  },
+  be: {
+    documentTitle: "РАХУНАК",
+    orderNumber: "Рахунак №",
+    date: "Дата рахунка",
+  },
+  bs: {
+    documentTitle: "FAKTURA",
+    orderNumber: "Faktura#",
+    date: "Datum fakture",
+  },
+  mk: {
+    documentTitle: "ФАКТУРА",
+    orderNumber: "Фактура#",
+    date: "Датум на фактура",
+  },
+  is: {
+    documentTitle: "REIKNINGUR",
+    orderNumber: "Reikningur#",
+    date: "Reikningsdagur",
+  },
+  ga: {
+    documentTitle: "SONRASC",
+    orderNumber: "Sonrasc#",
+    date: "Dáta an tsonraisc",
+  },
+  cy: {
+    documentTitle: "ANFONEB",
+    orderNumber: "Anfoneb#",
+    date: "Dyddiad anfoneb",
+  },
+  mt: {
+    documentTitle: "FATTURA",
+    orderNumber: "Fattura#",
+    date: "Data tal-fattura",
+  },
+  lb: {
+    documentTitle: "RECHNUNG",
+    orderNumber: "Rechnungsnr.",
+    date: "Rechnungsdatum",
+  },
+};
+
+const CREDIT_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
+  en: CREDIT_TXN_EN,
+  "en-AU": CREDIT_TXN_EN,
+  "en-CA": CREDIT_TXN_EN,
+  "en-GB": CREDIT_TXN_EN,
+  de: {
+    documentTitle: "GUTSCHRIFT",
+    orderNumber: "Gutschriftnr.",
+    date: "Gutschriftdatum",
+  },
+  fr: {
+    documentTitle: "AVOIR",
+    orderNumber: "Avoir nº",
+    date: "Date d'avoir",
+  },
+  es: {
+    documentTitle: "NOTA DE CRÉDITO",
+    orderNumber: "Nota de crédito nº",
+    date: "Fecha de nota de crédito",
+  },
+  it: {
+    documentTitle: "NOTA DI CREDITO",
+    orderNumber: "Nota di credito nº",
+    date: "Data nota di credito",
+  },
+  nl: {
+    documentTitle: "CREDITNOTA",
+    orderNumber: "Creditnota nr.",
+    date: "Creditnotadatum",
+  },
+  ja: {
+    documentTitle: "クレジットノート",
+    orderNumber: "クレジットノート#",
+    date: "発行日",
+  },
+  "zh-CN": {
+    documentTitle: "贷项通知单",
+    orderNumber: "贷项通知单#",
+    date: "日期",
+  },
+};
+
+const PACKING_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
+  en: PACKING_TXN_EN,
+  "en-AU": PACKING_TXN_EN,
+  "en-CA": PACKING_TXN_EN,
+  "en-GB": PACKING_TXN_EN,
+  de: {
+    documentTitle: "LIEFERSCHEIN",
+    orderNumber: "Lieferscheinnr.",
+    date: "Datum",
+  },
+  fr: {
+    documentTitle: "BON DE LIVRAISON",
+    orderNumber: "Bon de livraison nº",
+    date: "Date",
+  },
+  es: {
+    documentTitle: "ALBARÁN",
+    orderNumber: "Albarán nº",
+    date: "Fecha",
+  },
+  it: {
+    documentTitle: "DOCUMENTO DI TRASPORTO",
+    orderNumber: "DDT nº",
+    date: "Data",
+  },
+  nl: {
+    documentTitle: "PAKBON",
+    orderNumber: "Pakbon nr.",
+    date: "Datum",
+  },
+  ja: {
+    documentTitle: "納品書",
+    orderNumber: "納品書#",
+    date: "日付",
+  },
+  "zh-CN": {
+    documentTitle: "装箱单",
+    orderNumber: "装箱单#",
+    date: "日期",
+  },
+};
+
+function resolveDocumentTypeTransaction(
+  pack: TemplateLabelPack,
+  language: TemplateLanguage,
+  documentType: string | undefined,
+): TemplateLabelPack["transaction"] {
+  if (!documentType || documentType === "sales-order") {
+    return pack.transaction;
+  }
+
+  const table =
+    documentType === "invoice"
+      ? INVOICE_TRANSACTION_LABELS
+      : documentType === "credit-note"
+        ? CREDIT_TRANSACTION_LABELS
+        : documentType === "packing-slip"
+          ? PACKING_TRANSACTION_LABELS
+          : null;
+  if (!table) return pack.transaction;
+
+  const base = language.split("-")[0] || language;
+  const fallback =
+    documentType === "invoice"
+      ? INVOICE_TXN_EN
+      : documentType === "credit-note"
+        ? CREDIT_TXN_EN
+        : PACKING_TXN_EN;
+  const override = table[language] ?? table[base] ?? fallback;
+  return {
+    ...pack.transaction,
+    ...override,
+  };
+}
+
+/**
+ * Returns label fields translated for the given language.
+ * Does not mutate visibility/toggles; only wording.
+ */
+export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
+  settings: T,
+  language: TemplateLanguage,
+  options?: {
+    translateBodyText?:
+      | boolean
+      | { notes?: boolean; terms?: boolean };
+    organizationName?: string;
+    /** Invoice / credit note / packing slip — keeps correct document titles. */
+    documentType?: TemplateDocumentType | string;
+  },
+): T {
+  const pack = getTemplateLabelPack(language);
+  const transaction = resolveDocumentTypeTransaction(
+    pack,
+    language,
+    options?.documentType,
+  );
+  const bodyOption = options?.translateBodyText;
+  const translateNotes =
+    typeof bodyOption === "object"
+      ? bodyOption.notes !== false
+      : bodyOption !== false;
+  const translateTerms =
+    typeof bodyOption === "object"
+      ? bodyOption.terms !== false
+      : bodyOption !== false;
+  const organization =
+    options?.organizationName ?? settings.transactionLabels.organization ?? "";
+
+  const fieldLabelFor = (key: string, current: string) => {
+    switch (key) {
+      case "company":
+        return pack.customerFields.company;
+      case "name":
+        return pack.customerFields.name;
+      case "address":
+        return pack.customerFields.address;
+      case "taxId":
+        return pack.customerFields.taxId;
+      case "vatNumber":
+        return pack.customerFields.vatNumber;
+      case "phone":
+        return pack.customerFields.phone;
+      case "email":
+        return pack.customerFields.email;
+      default:
+        return current;
+    }
+  };
+
+  const columns = settings.columns.map((column) => {
+    const translated =
+      pack.columns[column.key as keyof TemplateLabelPack["columns"]];
+    return translated ? { ...column, label: translated } : column;
+  });
+
+  return {
+    ...settings,
+    language,
+    transactionLabels: {
+      ...settings.transactionLabels,
+      ...transaction,
+      organization,
+    },
+    columns,
+    billingDetails: settings.billingDetails.map((field) => ({
+      ...field,
+      label: fieldLabelFor(field.key, field.label),
+    })),
+    shippingDetails: settings.shippingDetails.map((field) => ({
+      ...field,
+      label: fieldLabelFor(field.key, field.label),
+    })),
+    customerBlockDetails: settings.customerBlockDetails.map((field) => ({
+      ...field,
+      label: fieldLabelFor(field.key, field.label),
+    })),
+    totals: {
+      ...settings.totals,
+      ...pack.totals,
+    },
+    taxSummary: {
+      ...settings.taxSummary,
+      ...pack.taxSummary,
+    },
+    notesLabel: pack.notesLabel,
+    termsLabel: pack.termsLabel,
+    notes: translateNotes ? pack.notes : settings.notes,
+    terms: translateTerms ? pack.terms : settings.terms,
+  };
+}

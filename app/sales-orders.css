@@ -1,0 +1,46 @@
+/* Keep Polaris "N selected" bar; hide its empty promoted-actions slot. */
+.sales-orders-page .Polaris-BulkActions__BulkActionsPromotedActionsWrapper {
+  display: none !important;
+}
+
+.sales-orders-page .Polaris-BulkActions__BulkActionsSelectAllWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-300, 12px);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sales-orders-bulk-buttons {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* Polaris IndexFilters — keep search/filter toolbar flush with the table card */
+.sales-orders-page .Polaris-IndexFilters__IndexFiltersWrapper {
+  border-block-end: var(--p-border-width-025) solid var(--p-color-border-secondary);
+}
+
+.sales-orders-page .Polaris-Filters__Container {
+  background: var(--p-color-bg-surface);
+}
+
+.sales-orders-page .Polaris-TextField__Input {
+  min-height: var(--p-height-800, 32px);
+}
+
+/* Remove blue focus ring on Sales Order # click (mouse); keep keyboard focus-visible */
+.sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus,
+.sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus-visible,
+.sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.sales-orders-page .Polaris-IndexTable__TableRow--hovered,
+.sales-orders-page .Polaris-IndexTable__TableRow:focus,
+.sales-orders-page .Polaris-IndexTable__TableRow:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}

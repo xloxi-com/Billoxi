@@ -1,0 +1,80 @@
+import type { ActionFunctionArgs, HeadersFunction } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+
+import {
+  buildSalesOrderPdfFile,
+  buildSalesOrdersPdfZip,
+} from "../sales-order-bulk-pdf.server";
+import { adminAuthenticationContext } from "../shopify-context.server";
+import { resolveSalesOrderTemplateId } from "../sales-order-document";
+import { loadSelectedTemplateForShop } from "../shop-settings.server";
+
+export async function action({ request, context }: ActionFunctionArgs) {
+  const { admin, session } = context.get(adminAuthenticationContext);
+  const formData = await request.formData();
+  const orderIds = formData
+    .getAll("orderIds")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+  const shopSelectedTemplateId = await loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const templateId = resolveSalesOrderTemplateId(
+    shopSelectedTemplateId || String(formData.get("template") || ""),
+  );
+  const intent = String(formData.get("intent") || "download");
+
+  try {
+    if (orderIds.length === 1) {
+      const { pdf, fileName } = await buildSalesOrderPdfFile({
+        admin,
+        shop: session.shop,
+        orderId: orderIds[0]!,
+        templateId,
+      });
+
+      return new Response(Buffer.from(pdf), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `${intent === "print" ? "inline" : "attachment"}; filename="${fileName}"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const { zip, fileName } = await buildSalesOrdersPdfZip({
+      admin,
+      shop: session.shop,
+      orderIds,
+      templateId,
+    });
+
+    return new Response(Buffer.from(zip), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (error instanceof Response) {
+      const message = await error.text();
+      return Response.json(
+        { ok: false, error: message || "Download failed" },
+        { status: error.status || 500 },
+      );
+    }
+    console.error("Bulk sales-order PDF zip failed:", error);
+    return Response.json(
+      { ok: false, error: "Failed to build PDF zip" },
+      { status: 500 },
+    );
+  }
+}
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

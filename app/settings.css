@@ -1,0 +1,76 @@
+.settings-page {
+  min-width: 0;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--p-space-400, 16px);
+  align-items: start;
+}
+
+.settings-sidebar {
+  min-width: 0;
+  position: sticky;
+  top: var(--p-space-400, 16px);
+}
+
+.settings-content {
+  min-width: 0;
+}
+
+.settings-custom-field {
+  padding: var(--p-space-200, 8px);
+  border-block-end: var(--p-border-width-025, 1px) solid
+    var(--p-color-border, #e1e3e5);
+  background: transparent;
+  transition: background-color 120ms ease, opacity 120ms ease;
+}
+
+.settings-custom-field--last {
+  border-block-end: none;
+}
+
+.settings-custom-field--dragging {
+  opacity: 0.55;
+}
+
+.settings-custom-field--drop-target {
+  background: var(--p-color-bg-surface-selected, #f1f1f1);
+}
+
+.settings__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--p-border-radius-100, 6px);
+  background: transparent;
+  color: inherit;
+  cursor: grab;
+  user-select: none;
+}
+
+.settings__drag-handle:hover,
+.settings__drag-handle:focus-visible {
+  background: var(--p-color-bg-fill-transparent-hover, #f1f1f1);
+  outline: none;
+}
+
+.settings__drag-handle:active {
+  cursor: grabbing;
+}
+
+@media (max-width: 768px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-sidebar {
+    position: static;
+  }
+}

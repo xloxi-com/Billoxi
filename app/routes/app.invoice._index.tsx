@@ -1,0 +1,87 @@
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
+import { useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+
+import { adminAuthenticationContext } from "../shopify-context.server";
+import {
+  DEFAULT_INVOICE_TEMPLATE_ID,
+  findTemplatePreset,
+  resolveSalesOrderTemplateId,
+} from "../sales-order-document";
+import {
+  loadSalesOrdersPage,
+  parseSalesOrdersSearchParams,
+} from "../sales-orders.server";
+import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { INVOICED_VIEW_INDEX } from "../sales-orders";
+import SalesOrdersListPage, {
+  action,
+  headers as salesOrdersHeaders,
+} from "./app.sales-order._index";
+
+export { action };
+
+function resolveInvoiceTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
+    return value;
+  }
+  return DEFAULT_INVOICE_TEMPLATE_ID;
+}
+
+/**
+ * Invoice list — same Sales Orders table UI, but only orders that were
+ * converted to invoice (OrderInvoiceStatus).
+ */
+export async function loader({ request, context }: LoaderFunctionArgs) {
+  const { admin, session } = context.get(adminAuthenticationContext);
+  const url = new URL(request.url);
+  const invoicedView =
+    INVOICED_VIEW_INDEX >= 0 ? String(INVOICED_VIEW_INDEX) : "4";
+  url.searchParams.set("view", invoicedView);
+
+  const params = parseSalesOrdersSearchParams(url);
+  params.selectedView =
+    INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : params.selectedView;
+
+  const shopSelectedTemplateId = await loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const selectedTemplateId = resolveSalesOrderTemplateId(
+    shopSelectedTemplateId,
+  );
+  const shopSelectedInvoiceTemplateId = await loadSelectedTemplateForShop(
+    session.shop,
+    "invoice",
+  );
+  const page = await loadSalesOrdersPage(
+    admin,
+    session.shop,
+    params,
+    selectedTemplateId,
+  );
+
+  return {
+    ...page,
+    selectedTemplateId,
+    hasSelectedTemplate: Boolean(shopSelectedTemplateId),
+    listMode: "invoice" as const,
+    pageHeading: "Invoice",
+    invoiceTemplateId: resolveInvoiceTemplateId(shopSelectedInvoiceTemplateId),
+  };
+}
+
+export default SalesOrdersListPage;
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => {
+  const headers = salesOrdersHeaders(headersArgs);
+  headers.set("Cache-Control", "private, max-age=0, stale-while-revalidate=30");
+  return headers;
+};
