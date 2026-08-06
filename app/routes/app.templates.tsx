@@ -20,18 +20,20 @@ import {
   type TemplateEditorSettings,
 } from "../sales-order-document";
 import { sampleSalesOrderForShop } from "../sales-order-sample";
-import {
-  loadDocumentTemplateSettings,
-  loadSalesOrderTemplateSettings,
-  resetAllTemplatesToCleanDefaults,
-} from "../sales-order-document.server";
 import { requireAdminAuth } from "../shopify-context.server";
 import {
+  loadDocumentTemplateSettings,
+  resetAllTemplatesToCleanDefaults,
+} from "../sales-order-document.server";
+import {
+  loadNumberSeriesForShop,
   loadSelectedTemplatesForShop,
+  loadStoreDetailsForShop,
   saveSelectedTemplateForShop,
 } from "../shop-settings.server";
 import type { StoreDetails } from "../store-details";
 import { fetchShopCurrencyCode } from "../store-details.server";
+import prisma from "../db.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { templatePreviewLogoDataUrl } from "../template-preview-logo";
 import "../templates.css";
@@ -169,14 +171,47 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const salesOrderTemplates = templates["sales-order"];
   const invoiceTemplates = templates.invoice;
 
-  const [shopCurrencyCode, selectedTemplates, ...previews] = await Promise.all([
-    fetchShopCurrencyCode(admin),
+  // One Shopify + settings round-trip shared by all ~30 template previews.
+  const [
+    shopCurrencyCode,
+    selectedTemplates,
+    storeDetails,
+    numberSeries,
+    customizations,
+  ] = await Promise.all([
+    fetchShopCurrencyCode(admin, session.shop),
     loadSelectedTemplatesForShop(session.shop),
+    loadStoreDetailsForShop(session.shop, admin),
+    loadNumberSeriesForShop(session.shop),
+    prisma.templateCustomization.findMany({
+      where: {
+        shop: session.shop,
+        documentType: { in: ["sales-order", "invoice"] },
+      },
+      select: { documentType: true, templateId: true, settings: true },
+    }),
+  ]);
+
+  const customizationByKey = new Map(
+    customizations.map((row) => [
+      `${row.documentType}:${row.templateId}`,
+      row.settings,
+    ]),
+  );
+
+  const previews = await Promise.all([
     ...salesOrderTemplates.map(async (template) => {
-      const loaded = await loadSalesOrderTemplateSettings(
+      const loaded = await loadDocumentTemplateSettings(
         session.shop,
+        "sales-order",
         template.id,
         admin,
+        {
+          storeDetails,
+          numberSeries: numberSeries["sales-order"],
+          customizationSettings:
+            customizationByKey.get(`sales-order:${template.id}`) ?? null,
+        },
       );
       return [
         template.id,
@@ -192,6 +227,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         "invoice",
         template.id,
         admin,
+        {
+          storeDetails,
+          numberSeries: numberSeries.invoice,
+          customizationSettings:
+            customizationByKey.get(`invoice:${template.id}`) ?? null,
+        },
       );
       return [
         template.id,
@@ -211,6 +252,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       SalesOrderPreviewBundle
     >,
   };
+}
+
+export function shouldRevalidate({
+  formMethod,
+}: {
+  formMethod?: string | null;
+}) {
+  // Gallery only needs to refetch after select-template / reset-all actions.
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  return false;
 }
 
 export async function action({ request }: ActionFunctionArgs) {

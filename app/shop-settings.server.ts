@@ -109,12 +109,12 @@ export async function loadStoreDetailsForShop(
 ): Promise<StoreDetails> {
   const [rows, shopDefaults] = await Promise.all([
     prisma.$queryRaw<ShopSettingsRow[]>`
-      SELECT id, shop, "storeDetails"
+      SELECT "storeDetails"
       FROM "ShopSettings"
       WHERE shop = ${shop}
       LIMIT 1
     `,
-    fetchShopStoreDefaults(admin),
+    fetchShopStoreDefaults(admin, shop),
   ]);
 
   const raw = parseStoreDetailsJson(rows[0]?.storeDetails);
@@ -195,10 +195,16 @@ export async function resetStoreDetailsFromShopify(
   shop: string,
   admin: { graphql: (query: string) => Promise<Response> },
 ): Promise<StoreDetails> {
-  const [shopDefaults, current] = await Promise.all([
-    fetchShopStoreDefaults(admin),
-    loadStoreDetailsForShop(shop, admin),
+  const [shopDefaults, rows] = await Promise.all([
+    fetchShopStoreDefaults(admin, shop),
+    prisma.$queryRaw<ShopSettingsRow[]>`
+      SELECT "storeDetails"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `,
   ]);
+  const current = normalizeStoreDetails(parseStoreDetailsJson(rows[0]?.storeDetails));
   const next: StoreDetails = {
     ...shopDefaults,
     customFields: current.customFields,

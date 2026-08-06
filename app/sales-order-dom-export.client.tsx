@@ -6,10 +6,6 @@ import {
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
-import {
-  downloadSalesOrderDomVectorPdf,
-  printSalesOrderDomVectorPdf,
-} from "./sales-order-pdf";
 import type { StoreDetails } from "./store-details";
 import "./template-editor.css";
 import "./sales-order-document.css";
@@ -170,6 +166,9 @@ export async function downloadSalesOrderDomPdfFromList(args: {
     args.templateId,
     documentKind,
     async (paper, payload) => {
+      const { downloadSalesOrderDomVectorPdf } = await import(
+        "./sales-order-pdf"
+      );
       await downloadSalesOrderDomVectorPdf(
         paper,
         {
@@ -197,6 +196,7 @@ export async function printSalesOrderDomPdfFromList(args: {
     args.templateId,
     documentKind,
     async (paper, payload) => {
+      const { printSalesOrderDomVectorPdf } = await import("./sales-order-pdf");
       await printSalesOrderDomVectorPdf(paper, {
         paperSize: payload.settings.paperSize,
         orientation: payload.settings.orientation,

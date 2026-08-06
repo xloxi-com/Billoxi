@@ -399,18 +399,18 @@ export async function backfillSalesOrderDocumentNumbers(
   let lastNumber: string | null = null;
   const assignedOrderGids: string[] = [];
 
+  const existingRows = await prisma.salesOrderDocumentNumber.findMany({
+    where: {
+      shop,
+      templateId,
+      orderGid: { in: orderGids },
+    },
+    select: { orderGid: true },
+  });
+  const existingGids = new Set(existingRows.map((row) => row.orderGid));
+
   for (const orderGid of orderGids) {
-    const existing = await prisma.salesOrderDocumentNumber.findUnique({
-      where: {
-        shop_templateId_orderGid: {
-          shop,
-          templateId,
-          orderGid,
-        },
-      },
-      select: { documentNumber: true },
-    });
-    if (existing) {
+    if (existingGids.has(orderGid)) {
       skipped += 1;
       continue;
     }

@@ -43,15 +43,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const orderGid = toOrderGid(decodeURIComponent(orderId));
 
   if (isInvoice) {
-    const shopSelectedInvoiceTemplateId = await loadSelectedTemplateForShop(
-      session.shop,
-      "invoice",
-    );
+    const [shopSelectedInvoiceTemplateId, shopSelectedSalesOrderTemplateId] =
+      await Promise.all([
+        loadSelectedTemplateForShop(session.shop, "invoice"),
+        loadSelectedTemplateForShop(session.shop, "sales-order"),
+      ]);
     const templateId = resolveInvoiceTemplateId(
       shopSelectedInvoiceTemplateId || url.searchParams.get("template"),
     );
     const salesOrderTemplateId = resolveSalesOrderTemplateId(
-      await loadSelectedTemplateForShop(session.shop, "sales-order"),
+      shopSelectedSalesOrderTemplateId,
     );
 
     const [order, template] = await Promise.all([
@@ -66,16 +67,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       );
     }
 
-    const [invoiceMeta, ensured, salesOrderSettings] = await Promise.all([
-      getInvoicedMetaByOrderGids(session.shop, [order.id]),
-      ensureInvoiceDocumentNumbers(session.shop, [order.id]),
-      loadSalesOrderTemplateSettings(
-        session.shop,
-        salesOrderTemplateId,
-        admin,
-      ),
+    const invoiceMeta = await getInvoicedMetaByOrderGids(session.shop, [
+      order.id,
     ]);
-
     const currentMeta = invoiceMeta.get(order.id);
     if (!currentMeta) {
       return Response.json(
@@ -83,6 +77,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         { status: 404 },
       );
     }
+
+    const [ensured, salesOrderSettings] = await Promise.all([
+      currentMeta.documentNumber
+        ? Promise.resolve(new Map<string, string>())
+        : ensureInvoiceDocumentNumbers(session.shop, [order.id]),
+      loadSalesOrderTemplateSettings(
+        session.shop,
+        salesOrderTemplateId,
+        admin,
+      ),
+    ]);
 
     const documentNumber =
       currentMeta.documentNumber ||

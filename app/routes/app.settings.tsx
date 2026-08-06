@@ -119,26 +119,28 @@ function stopInputShortcutPropagation(
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
-  const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
-    await loadSelectedTemplateForShop(session.shop, "sales-order"),
-  );
   const [
+    selectedSalesOrderTemplateIdRaw,
     storeDetails,
     smtpSettings,
     numberSeries,
-    lastAllocatedSequence,
-    lastInvoiceSequence,
-    invoiceDigitWidth,
     numberBackfillUndo,
   ] = await Promise.all([
+    loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
     loadNumberSeriesForShop(session.shop),
-    getLastAllocatedSequence(session.shop, selectedSalesOrderTemplateId),
-    getLastInvoiceAllocatedSequence(session.shop),
-    getInvoiceNumberDigitWidth(session.shop),
     getNumberBackfillUndoStatus(session.shop),
   ]);
+  const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
+    selectedSalesOrderTemplateIdRaw,
+  );
+  const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
+    await Promise.all([
+      getLastAllocatedSequence(session.shop, selectedSalesOrderTemplateId),
+      getLastInvoiceAllocatedSequence(session.shop),
+      getInvoiceNumberDigitWidth(session.shop),
+    ]);
   const lastAllocatedByModule: Record<NumberSeriesModuleId, number | null> = {
     "sales-order": lastAllocatedSequence,
     invoice: lastInvoiceSequence,
@@ -154,6 +156,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     invoiceDigitWidth,
     numberBackfillUndo,
   };
+}
+
+export function shouldRevalidate({
+  formMethod,
+}: {
+  formMethod?: string | null;
+}) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  return false;
 }
 
 export async function action({ request }: ActionFunctionArgs) {

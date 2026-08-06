@@ -132,10 +132,6 @@ type CacheEntry = {
 };
 
 const listCache = new Map<string, CacheEntry>();
-const availabilityCache = new Map<
-  string,
-  { expires: number; views: number[] }
->();
 
 const SALES_ORDERS_QUERY = `#graphql
   query SalesOrders(
@@ -289,23 +285,41 @@ async function loadOrdersByGids(
   if (gids.length === 0) return [];
 
   const byId = new Map<string, RawSalesOrder>();
+  const chunks: string[][] = [];
   for (let i = 0; i < gids.length; i += INVOICE_NODES_CHUNK) {
-    const chunk = gids.slice(i, i + INVOICE_NODES_CHUNK);
-    const response = await admin.graphql(SALES_ORDERS_BY_IDS_QUERY, {
-      variables: { ids: chunk },
-    });
-    const result = (await response.json()) as OrdersByIdsResponse;
-    if (result.errors?.length && !result.data?.nodes) {
-      throw new Response(
-        result.errors.map((error) => error.message).join(", ") ||
-          "Shopify orders could not be loaded.",
-        { status: 502 },
-      );
-    }
-    for (const node of result.data?.nodes ?? []) {
-      if (node?.id) byId.set(node.id, node);
+    chunks.push(gids.slice(i, i + INVOICE_NODES_CHUNK));
+  }
+
+  const CHUNK_CONCURRENCY = 3;
+  let nextChunk = 0;
+  async function worker() {
+    while (nextChunk < chunks.length) {
+      const index = nextChunk;
+      nextChunk += 1;
+      const chunk = chunks[index]!;
+      const response = await admin.graphql(SALES_ORDERS_BY_IDS_QUERY, {
+        variables: { ids: chunk },
+      });
+      const result = (await response.json()) as OrdersByIdsResponse;
+      if (result.errors?.length && !result.data?.nodes) {
+        throw new Response(
+          result.errors.map((error) => error.message).join(", ") ||
+            "Shopify orders could not be loaded.",
+          { status: 502 },
+        );
+      }
+      for (const node of result.data?.nodes ?? []) {
+        if (node?.id) byId.set(node.id, node);
+      }
     }
   }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(CHUNK_CONCURRENCY, chunks.length) },
+      () => worker(),
+    ),
+  );
 
   return gids
     .map((gid) => byId.get(gid))
@@ -873,9 +887,11 @@ export async function loadSalesOrdersPage(
     if (invoicedGids.length === 0) return emptyPage();
 
     const gidsToFetch = invoicedGids.slice(0, MAX_INVOICED_FETCH);
-    let orders = await loadOrdersByGids(admin, gidsToFetch);
-
-    const metaForSort = await getInvoicedMetaByOrderGids(shop, gidsToFetch);
+    const [ordersRaw, metaForSort] = await Promise.all([
+      loadOrdersByGids(admin, gidsToFetch),
+      getInvoicedMetaByOrderGids(shop, gidsToFetch),
+    ]);
+    let orders = ordersRaw;
     // Date column / default sort: editable invoice date (invoicedAt).
     const invoiceCreatedAtByGid = new Map<string, number>();
     for (const [gid, meta] of metaForSort) {
@@ -990,11 +1006,9 @@ export async function loadSalesOrdersPage(
 export function invalidateSalesOrdersCache(shop?: string) {
   if (!shop) {
     listCache.clear();
-    availabilityCache.clear();
     return;
   }
   for (const key of listCache.keys()) {
     if (key.startsWith(`${shop}|`)) listCache.delete(key);
   }
-  availabilityCache.delete(shop);
 }

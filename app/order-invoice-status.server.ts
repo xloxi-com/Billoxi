@@ -58,20 +58,30 @@ async function getLastInvoiceSequence(
   series?: NumberSeriesEntry,
 ): Promise<number | null> {
   const entry = series ? invoiceSeriesEntry(series) : null;
-  const rows = await prisma.$queryRaw<
-    Array<{ sequence: number | null; documentNumber: string | null }>
-  >`
-    SELECT sequence, "documentNumber"
+  // Prefer indexed MAX(sequence) instead of loading every invoice row.
+  const maxRows = await prisma.$queryRaw<Array<{ maxSeq: number | null }>>`
+    SELECT MAX(sequence) AS "maxSeq"
     FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
   `;
+  let max =
+    typeof maxRows[0]?.maxSeq === "number" && Number.isFinite(maxRows[0].maxSeq)
+      ? maxRows[0].maxSeq
+      : null;
 
-  let max: number | null = null;
-  for (const row of rows) {
-    if (typeof row.sequence === "number" && Number.isFinite(row.sequence)) {
-      max = max == null ? row.sequence : Math.max(max, row.sequence);
-    }
-    if (entry && row.documentNumber) {
+  // Legacy / manual rows may lack sequence — parse only those document numbers.
+  if (entry) {
+    const orphanRows = await prisma.$queryRaw<
+      Array<{ documentNumber: string | null }>
+    >`
+      SELECT "documentNumber"
+      FROM "OrderInvoiceStatus"
+      WHERE shop = ${shop}
+        AND sequence IS NULL
+        AND "documentNumber" IS NOT NULL
+    `;
+    for (const row of orphanRows) {
+      if (!row.documentNumber) continue;
       const parsed = parseNumberSeriesSequence(row.documentNumber, entry);
       if (parsed != null) {
         max = max == null ? parsed : Math.max(max, parsed);
@@ -94,15 +104,23 @@ export async function getLastInvoiceAllocatedSequence(
 async function getMaxInvoiceDigitWidth(
   shop: string,
   entry: NumberSeriesEntry,
+  lastSequence?: number | null,
 ): Promise<number> {
-  const rows = await prisma.$queryRaw<Array<{ documentNumber: string | null }>>`
+  let width = Math.max(entry.startingNumber.replace(/\D/g, "").length, 1);
+  if (typeof lastSequence === "number" && Number.isFinite(lastSequence)) {
+    width = Math.max(width, String(Math.floor(lastSequence)).length);
+  }
+  // Orphan / manual numbers without sequence may use a wider digit pad.
+  const orphanRows = await prisma.$queryRaw<
+    Array<{ documentNumber: string | null }>
+  >`
     SELECT "documentNumber"
     FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
+      AND sequence IS NULL
       AND "documentNumber" IS NOT NULL
   `;
-  let width = Math.max(entry.startingNumber.replace(/\D/g, "").length, 1);
-  for (const row of rows) {
+  for (const row of orphanRows) {
     if (!row.documentNumber) continue;
     const parsed = parseNumberSeriesDigits(row.documentNumber, entry);
     if (parsed) width = Math.max(width, parsed.digitWidth);
@@ -115,10 +133,8 @@ async function allocateNextInvoiceNumber(
   series: NumberSeriesEntry,
 ): Promise<{ sequence: number; documentNumber: string }> {
   const entry = invoiceSeriesEntry(series);
-  const [last, digitWidth] = await Promise.all([
-    getLastInvoiceSequence(shop, entry),
-    getMaxInvoiceDigitWidth(shop, entry),
-  ]);
+  const last = await getLastInvoiceSequence(shop, entry);
+  const digitWidth = await getMaxInvoiceDigitWidth(shop, entry, last);
   const sequence = resolveNumberSeriesNextSequence(entry, last);
   const paddedEntry = {
     ...entry,
@@ -146,7 +162,8 @@ export async function getInvoiceNumberDigitWidth(
   const series = invoiceSeriesEntry(
     await loadNumberSeriesEntryForShop(shop, "invoice"),
   );
-  return getMaxInvoiceDigitWidth(shop, series);
+  const last = await getLastInvoiceSequence(shop, series);
+  return getMaxInvoiceDigitWidth(shop, series, last);
 }
 
 /** Batch lookup: which order GIDs are marked invoiced for this shop. */
@@ -251,9 +268,67 @@ export async function ensureInvoiceDocumentNumbers(
     return aAt - bAt;
   });
 
-  for (const orderGid of missing) {
-    const assigned = await assignInvoiceNumberToOrder(shop, orderGid, series);
-    if (assigned) numbers.set(orderGid, assigned);
+  // Resolve next sequence once, then assign locally — avoids N full-table scans.
+  if (missing.length > 0) {
+    const entry = invoiceSeriesEntry(series);
+    const last = await getLastInvoiceSequence(shop, entry);
+    const digitWidth = await getMaxInvoiceDigitWidth(shop, entry, last);
+    let nextSequence = resolveNumberSeriesNextSequence(entry, last);
+    const paddedEntry = {
+      ...entry,
+      startingNumber: widenStartingNumberPad(entry.startingNumber, digitWidth),
+    };
+
+    for (const orderGid of missing) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const sequence = nextSequence;
+        const documentNumber = formatNumberSeriesValue(paddedEntry, sequence);
+        try {
+          const updated = await prisma.$executeRaw`
+            UPDATE "OrderInvoiceStatus"
+            SET
+              sequence = ${sequence},
+              "documentNumber" = ${documentNumber},
+              "updatedAt" = CURRENT_TIMESTAMP
+            WHERE shop = ${shop}
+              AND "orderGid" = ${orderGid}
+              AND "documentNumber" IS NULL
+          `;
+          if (Number(updated) > 0) {
+            numbers.set(orderGid, documentNumber);
+            nextSequence += 1;
+            break;
+          }
+
+          const existing = await prisma.$queryRaw<
+            Array<{ documentNumber: string | null }>
+          >`
+            SELECT "documentNumber"
+            FROM "OrderInvoiceStatus"
+            WHERE shop = ${shop}
+              AND "orderGid" = ${orderGid}
+            LIMIT 1
+          `;
+          if (existing[0]?.documentNumber) {
+            numbers.set(orderGid, existing[0].documentNumber);
+          }
+          break;
+        } catch (error) {
+          const isUnique =
+            (error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2002") ||
+            (typeof error === "object" &&
+              error &&
+              "code" in error &&
+              (error as { code?: string }).code === "23505");
+          if (isUnique) {
+            nextSequence += 1;
+            continue;
+          }
+          throw error;
+        }
+      }
+    }
   }
 
   return numbers;

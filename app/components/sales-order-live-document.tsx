@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import {
   formatOrderDate,
   formatStoreAddressLines,
@@ -123,7 +123,10 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   /** Template gallery/editor only — never on real sales-order documents. */
   showLogoPlaceholder?: boolean;
 }) {
-  const columns = settings.columns.filter((column) => column.enabled);
+  const columns = useMemo(
+    () => settings.columns.filter((column) => column.enabled),
+    [settings.columns],
+  );
   const totalWidth =
     columns.reduce((total, column) => total + Math.max(column.width, 1), 0) || 1;
   const organizationName =
@@ -142,17 +145,25 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const taxSummaryConfig = settings.taxSummary;
   // Treat missing/undefined as on (defaults); only explicit false hides it.
   const taxSummaryEnabled = taxSummaryConfig?.enabled !== false;
-  const rawTaxSummary =
-    (order.taxSummary?.length ?? 0) > 0
-      ? order.taxSummary
-      : buildTaxSummaryFromLineItems(order.lineItems);
-  const taxSummary = reconcileTaxSummaryToOrderTotal(
-    rawTaxSummary,
-    order.total,
-    order.tax,
+  const taxSummary = useMemo(() => {
+    const rawTaxSummary =
+      (order.taxSummary?.length ?? 0) > 0
+        ? order.taxSummary
+        : buildTaxSummaryFromLineItems(order.lineItems);
+    return reconcileTaxSummaryToOrderTotal(
+      rawTaxSummary,
+      order.total,
+      order.tax,
+    );
+  }, [order.lineItems, order.tax, order.taxSummary, order.total]);
+  const taxSummaryRows = useMemo(
+    () => taxSummaryDisplayRows(taxSummary),
+    [taxSummary],
   );
-  const taxSummaryRows = taxSummaryDisplayRows(taxSummary);
-  const taxTotals = taxSummaryTotals(taxSummary, order.total);
+  const taxTotals = useMemo(
+    () => taxSummaryTotals(taxSummary, order.total),
+    [order.total, taxSummary],
+  );
   const moneySymbol = currencySymbol(order.currencyCode);
   const taxDetailsLabel = resolveTaxSummaryLabel(
     taxSummaryConfig?.detailsLabel || "Tax Details",

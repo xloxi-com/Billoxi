@@ -47,10 +47,6 @@ import {
   toOrderGid,
 } from "../sales-order-document";
 import {
-  downloadSalesOrderDomVectorPdf,
-  printSalesOrderDomVectorPdf,
-} from "../sales-order-pdf";
-import {
   loadSelectedTemplateForShop,
   saveNumberSeriesEntryMode,
   loadNumberSeriesEntryForShop,
@@ -160,10 +156,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const documentMode = resolveDocumentMode(request.url);
   const isInvoice = documentMode === "invoice";
   const url = new URL(request.url);
-  const shopSelectedTemplateId = await loadSelectedTemplateForShop(
-    session.shop,
-    isInvoice ? "invoice" : "sales-order",
-  );
+
+  const [shopSelectedTemplateId, shopSelectedSalesOrderTemplateId] =
+    await Promise.all([
+      loadSelectedTemplateForShop(
+        session.shop,
+        isInvoice ? "invoice" : "sales-order",
+      ),
+      isInvoice
+        ? loadSelectedTemplateForShop(session.shop, "sales-order")
+        : Promise.resolve(null),
+    ]);
+
   // Shop Active template wins over a stale ?template= query (e.g. after
   // switching Classic on Templates while an old Studio URL is still open).
   const templateId = isInvoice
@@ -177,9 +181,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Sidebar list still uses sales-order template ids for SO document numbers.
   const salesOrderTemplateId = isInvoice
-    ? resolveSalesOrderTemplateId(
-        await loadSelectedTemplateForShop(session.shop, "sales-order"),
-      )
+    ? resolveSalesOrderTemplateId(shopSelectedSalesOrderTemplateId)
     : templateId;
 
   const [order, template, salesOrders, numberSeries] = await Promise.all([
@@ -219,10 +221,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       salesOrders.map((item) => item.id),
     );
     sidebarOrders = salesOrders.filter((item) => invoiceMeta.has(item.id));
-    const ensured = await ensureInvoiceDocumentNumbers(session.shop, [
-      order.id,
-    ]);
     const currentMeta = invoiceMeta.get(order.id);
+    const ensured =
+      currentMeta && !currentMeta.documentNumber
+        ? await ensureInvoiceDocumentNumbers(session.shop, [order.id])
+        : new Map<string, string>();
     documentNumber =
       currentMeta?.documentNumber ||
       ensured.get(order.id) ||
@@ -860,6 +863,9 @@ export default function SalesOrderDocumentPage() {
 
     setIsPrinting(true);
     try {
+      const { printSalesOrderDomVectorPdf } = await import(
+        "../sales-order-pdf"
+      );
       await printSalesOrderDomVectorPdf(paper, {
         paperSize: data.settings.paperSize,
         orientation: data.settings.orientation,
@@ -884,6 +890,9 @@ export default function SalesOrderDocumentPage() {
 
     setIsDownloading(true);
     try {
+      const { downloadSalesOrderDomVectorPdf } = await import(
+        "../sales-order-pdf"
+      );
       await downloadSalesOrderDomVectorPdf(
         paper,
         {

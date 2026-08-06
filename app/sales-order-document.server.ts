@@ -36,7 +36,6 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
     where: { shop },
   });
 
-  let seeded = 0;
   const seedPresets = [
     ...SALES_ORDER_TEMPLATE_PRESETS.map((preset) => ({
       documentType: "sales-order" as const,
@@ -48,20 +47,19 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
     })),
   ];
 
-  for (const { documentType, preset } of seedPresets) {
-    const settings = defaultTemplateSettings(preset.name, preset.id);
-    await prisma.templateCustomization.create({
-      data: {
-        shop,
-        documentType,
-        templateId: preset.id,
-        settings: settings as unknown as Prisma.InputJsonValue,
-      },
-    });
-    seeded += 1;
-  }
+  await prisma.templateCustomization.createMany({
+    data: seedPresets.map(({ documentType, preset }) => ({
+      shop,
+      documentType,
+      templateId: preset.id,
+      settings: defaultTemplateSettings(
+        preset.name,
+        preset.id,
+      ) as unknown as Prisma.InputJsonValue,
+    })),
+  });
 
-  return { deleted: deleted.count, seeded };
+  return { deleted: deleted.count, seeded: seedPresets.length };
 }
 
 function moneyAmount(value: { amount?: string } | null | undefined) {
@@ -150,6 +148,12 @@ export async function loadDocumentTemplateSettings(
   documentType: "sales-order" | "invoice",
   templateId: string,
   admin: { graphql: (query: string) => Promise<Response> },
+  preload?: {
+    storeDetails?: StoreDetails;
+    numberSeries?: import("./number-series").NumberSeriesEntry;
+    /** When set (including null), skips the customization DB lookup. */
+    customizationSettings?: unknown | null;
+  },
 ): Promise<{
   templateId: string;
   templateName: string;
@@ -163,18 +167,33 @@ export async function loadDocumentTemplateSettings(
   const templateName = salesOrderTemplateName(resolvedId);
   const seriesId: NumberSeriesModuleId =
     documentType === "invoice" ? "invoice" : "sales-order";
+
+  const hasCustomizationPreload =
+    preload != null && "customizationSettings" in preload;
+
   const [customization, storeDetails, numberSeries] = await Promise.all([
-    prisma.templateCustomization.findUnique({
-      where: {
-        shop_documentType_templateId: {
-          shop,
-          documentType,
-          templateId: resolvedId,
-        },
-      },
-    }),
-    loadStoreDetailsForShop(shop, admin),
-    loadNumberSeriesEntryForShop(shop, seriesId),
+    hasCustomizationPreload
+      ? Promise.resolve(
+          preload!.customizationSettings != null
+            ? { settings: preload!.customizationSettings }
+            : null,
+        )
+      : prisma.templateCustomization.findUnique({
+          where: {
+            shop_documentType_templateId: {
+              shop,
+              documentType,
+              templateId: resolvedId,
+            },
+          },
+          select: { settings: true },
+        }),
+    preload?.storeDetails
+      ? Promise.resolve(preload.storeDetails)
+      : loadStoreDetailsForShop(shop, admin),
+    preload?.numberSeries
+      ? Promise.resolve(preload.numberSeries)
+      : loadNumberSeriesEntryForShop(shop, seriesId),
   ]);
 
   const settings = mergeTemplateSettings(
@@ -473,8 +492,9 @@ export async function fetchSalesOrderDocument(
   },
   orderGid: string,
 ): Promise<SalesOrderDocumentData | null> {
-  const response = await admin.graphql(
-    `#graphql
+  const [response, expectedShipmentDate] = await Promise.all([
+    admin.graphql(
+      `#graphql
       query SalesOrderDocument($id: ID!) {
         order(id: $id) {
           id
@@ -571,8 +591,10 @@ export async function fetchSalesOrderDocument(
           }
         }
       }`,
-    { variables: { id: orderGid } },
-  );
+      { variables: { id: orderGid } },
+    ),
+    fetchExpectedShipmentDate(admin, orderGid),
+  ]);
 
   const payload = await response.json();
   if (payload?.errors?.length) {
@@ -583,8 +605,6 @@ export async function fetchSalesOrderDocument(
   }
   const order = payload?.data?.order as OrderNode | null | undefined;
   if (!order) return null;
-
-  const expectedShipmentDate = await fetchExpectedShipmentDate(admin, orderGid);
 
   const currencyCode =
     order.currentTotalPriceSet?.shopMoney?.currencyCode ?? "USD";

@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import JSZip from "jszip";
 
 import {
   resolveSalesOrderTemplateId,
@@ -18,6 +17,7 @@ import {
 } from "./sales-order-pdf";
 
 const MAX_BULK_PDFS = 50;
+const BULK_PDF_CONCURRENCY = 4;
 let serverFontsPrimed = false;
 
 async function ensureServerPdfFonts() {
@@ -52,6 +52,27 @@ function uniqueFileName(base: string, used: Set<string>) {
   return candidate;
 }
 
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, Math.max(items.length, 1)) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await worker(items[index]!, index);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return results;
+}
+
 export async function buildSalesOrderPdfFile(args: {
   admin: {
     graphql: (
@@ -69,13 +90,10 @@ export async function buildSalesOrderPdfFile(args: {
   }
 
   const templateId = resolveSalesOrderTemplateId(args.templateId ?? null);
-  const template = await loadSalesOrderTemplateSettings(
-    args.shop,
-    templateId,
-    args.admin,
-  );
-
-  await ensureServerPdfFonts();
+  const [template] = await Promise.all([
+    loadSalesOrderTemplateSettings(args.shop, templateId, args.admin),
+    ensureServerPdfFonts(),
+  ]);
 
   const orderGid = toOrderGid(orderId);
   const order = await fetchSalesOrderDocument(args.admin, orderGid);
@@ -114,7 +132,9 @@ export async function buildSalesOrdersPdfZip(args: {
   orderIds: string[];
   templateId?: string | null;
 }): Promise<{ zip: Uint8Array; fileName: string; count: number }> {
-  const orderIds = [...new Set(args.orderIds.map((id) => id.trim()).filter(Boolean))];
+  const orderIds = [
+    ...new Set(args.orderIds.map((id) => id.trim()).filter(Boolean)),
+  ];
   if (orderIds.length === 0) {
     throw new Response("No orders selected", { status: 400 });
   }
@@ -122,18 +142,44 @@ export async function buildSalesOrdersPdfZip(args: {
     throw new Response(`Select up to ${MAX_BULK_PDFS} orders`, { status: 400 });
   }
 
+  const templateId = resolveSalesOrderTemplateId(args.templateId ?? null);
+  const [template, JSZip] = await Promise.all([
+    loadSalesOrderTemplateSettings(args.shop, templateId, args.admin),
+    import("jszip").then((mod) => mod.default),
+    ensureServerPdfFonts(),
+  ]);
+
+  const built = await mapPool(orderIds, BULK_PDF_CONCURRENCY, async (orderId) => {
+    const orderGid = toOrderGid(orderId);
+    const order = await fetchSalesOrderDocument(args.admin, orderGid);
+    if (!order) return null;
+
+    const documentNumber = await allocateSalesOrderDocumentNumber(
+      args.shop,
+      template.templateId,
+      order.id,
+      template.settings.numbering,
+    );
+
+    const pdf = await buildSalesOrderPdfBytes({
+      order: { ...order, documentNumber },
+      settings: template.settings,
+      storeDetails: template.storeDetails,
+      templateId: template.templateId,
+    });
+
+    return {
+      pdf,
+      fileName: salesOrderPdfFileName(documentNumber || order.name),
+    };
+  });
+
   const zip = new JSZip();
   const usedNames = new Set<string>();
   let count = 0;
-
-  for (const orderId of orderIds) {
-    const { pdf, fileName } = await buildSalesOrderPdfFile({
-      admin: args.admin,
-      shop: args.shop,
-      orderId,
-      templateId: args.templateId,
-    });
-    zip.file(uniqueFileName(fileName, usedNames), pdf);
+  for (const entry of built) {
+    if (!entry) continue;
+    zip.file(uniqueFileName(entry.fileName, usedNames), entry.pdf);
     count += 1;
   }
 
@@ -143,6 +189,7 @@ export async function buildSalesOrdersPdfZip(args: {
 
   const zipBytes = await zip.generateAsync({
     type: "uint8array",
+    streamFiles: true,
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });

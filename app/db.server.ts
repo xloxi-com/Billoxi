@@ -14,17 +14,14 @@ function clientHasInvoiceModel(client: PrismaClient) {
     "object";
 }
 
-if (process.env.NODE_ENV !== "production") {
-  // After `prisma generate`, recreate the cached client so new models are available.
-  if (global.prismaGlobal && !clientHasInvoiceModel(global.prismaGlobal)) {
-    void global.prismaGlobal.$disconnect().catch(() => undefined);
-    global.prismaGlobal = undefined;
-  }
-  if (!global.prismaGlobal) {
-    global.prismaGlobal = createPrismaClient();
-  }
+// After `prisma generate`, recreate the cached client so new models are available.
+if (global.prismaGlobal && !clientHasInvoiceModel(global.prismaGlobal)) {
+  void global.prismaGlobal.$disconnect().catch(() => undefined);
+  global.prismaGlobal = undefined;
 }
 
 const prisma = global.prismaGlobal ?? createPrismaClient();
+// Always reuse across HMR / warm serverless invocations.
+global.prismaGlobal = prisma;
 
 export default prisma;

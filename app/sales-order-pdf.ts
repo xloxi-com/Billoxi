@@ -1,5 +1,3 @@
-import { jsPDF } from "jspdf";
-
 import {
   formatOrderDate,
   formatStoreAddressLines,
@@ -28,6 +26,19 @@ import {
   type TemplateEditorSettings,
 } from "./sales-order-document";
 import type { StoreDetails } from "./store-details";
+
+type JsPdfCtor = typeof import("jspdf").jsPDF;
+type JsPdf = InstanceType<JsPdfCtor>;
+
+let jsPdfCtorPromise: Promise<JsPdfCtor> | null = null;
+
+/** Lazy-load jsPDF so list/detail routes don't pay for it until PDF actions run. */
+async function loadJsPdf(): Promise<JsPdfCtor> {
+  if (!jsPdfCtorPromise) {
+    jsPdfCtorPromise = import("jspdf").then((mod) => mod.jsPDF);
+  }
+  return jsPdfCtorPromise;
+}
 
 type PdfArgs = {
   order: SalesOrderDocumentData;
@@ -145,7 +156,7 @@ async function ensureDomMeasureFont(): Promise<void> {
 }
 
 function registerPdfFonts(
-  pdf: jsPDF,
+  pdf: JsPdf,
   fonts: { regular: string; bold: string },
 ) {
   pdf.addFileToVFS("NotoSans-Regular.ttf", fonts.regular);
@@ -555,7 +566,8 @@ async function buildSalesOrderVectorPdf({
         ? "a5"
         : "a4";
 
-  const pdf = new jsPDF({
+  const JsPDF = await loadJsPdf();
+  const pdf = new JsPDF({
     orientation,
     unit: "mm",
     format,
@@ -2533,7 +2545,8 @@ export async function buildSalesOrderTemplatePdfFromElement(
       },
     });
 
-    const pdf = new jsPDF({
+    const JsPDF = await loadJsPdf();
+    const pdf = new JsPDF({
       orientation: settings.orientation === "landscape" ? "l" : "p",
       unit: "mm",
       format: jsPdfFormat(settings.paperSize),
@@ -3627,7 +3640,8 @@ export async function buildSalesOrderDomVectorPdfFromElement(
     const pageHeight = size.height;
     const { ops, contentHeightMm } = collectDomVectorOps(clone, pageWidth);
 
-    const pdf = new jsPDF({
+    const JsPDF = await loadJsPdf();
+    const pdf = new JsPDF({
       orientation: settings.orientation === "landscape" ? "l" : "p",
       unit: "mm",
       format: jsPdfFormat(settings.paperSize),

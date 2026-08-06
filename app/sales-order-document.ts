@@ -358,6 +358,7 @@ export type CustomerOrderListItem = {
   currencyCode: string;
   paymentStatus: string | null;
   invoiced: boolean;
+  packingSlip?: boolean;
 };
 
 export type SalesOrderDocumentData = {

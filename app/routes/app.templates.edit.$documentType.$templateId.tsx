@@ -1630,7 +1630,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         orderBy: { sequence: "desc" },
         select: { sequence: true },
       }),
-      fetchShopCurrencyCode(admin),
+      fetchShopCurrencyCode(admin, session.shop),
       loadNumberSeriesEntryForShop(
         session.shop,
         params.documentType === "invoice" ? "invoice" : "sales-order",

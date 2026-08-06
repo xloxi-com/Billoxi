@@ -50,16 +50,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
   params.selectedView =
     INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : params.selectedView;
 
-  const shopSelectedTemplateId = await loadSelectedTemplateForShop(
-    session.shop,
-    "sales-order",
-  );
+  const [
+    shopSelectedTemplateId,
+    shopSelectedInvoiceTemplateId,
+  ] = await Promise.all([
+    loadSelectedTemplateForShop(session.shop, "sales-order"),
+    loadSelectedTemplateForShop(session.shop, "invoice"),
+  ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
-  );
-  const shopSelectedInvoiceTemplateId = await loadSelectedTemplateForShop(
-    session.shop,
-    "invoice",
   );
   const page = await loadSalesOrdersPage(
     admin,
@@ -78,7 +77,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
-export const shouldRevalidate = () => true;
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+}: {
+  formMethod?: string | null;
+  currentUrl: URL;
+  nextUrl: URL;
+}) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (currentUrl.search !== nextUrl.search) return true;
+  return false;
+}
 
 export default SalesOrdersListPage;
 

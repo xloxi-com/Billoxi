@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
  * Renders children at natural paper size, then uniformly scales down to fit
@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
  * The paper is positioned absolutely while measuring so a full 210mm sheet
  * cannot expand the parent (which made template cards blow up on refresh).
  */
-export function PaperScaleFrame({
+export const PaperScaleFrame = memo(function PaperScaleFrame({
   children,
   className,
   fit = "width",
@@ -121,4 +121,4 @@ export function PaperScaleFrame({
       </div>
     </div>
   );
-}
+});

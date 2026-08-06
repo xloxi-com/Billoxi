@@ -52,10 +52,6 @@ import {
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 import { INVOICED_VIEW_INDEX, SALES_ORDER_VIEWS } from "../sales-orders";
-import {
-  downloadSalesOrderDomPdfFromList,
-  printSalesOrderDomPdfFromList,
-} from "../sales-order-dom-export.client";
 import "../sales-orders.css";
 
 function getSelectedTemplateId(fallback?: string | null) {
@@ -180,13 +176,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    listMode: "sales-order" as const,
+    listMode: "sales-order" as "sales-order" | "invoice",
     pageHeading: "Sales Orders",
     invoiceTemplateId: null as string | null,
   };
 };
 
-export const shouldRevalidate = () => true;
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+}: {
+  formMethod?: string | null;
+  currentUrl: URL;
+  nextUrl: URL;
+}) {
+  // Mutations (convert / delete / reload-list) must refresh the table.
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  // Filter / sort / pagination / search changes refetch.
+  if (currentUrl.search !== nextUrl.search) return true;
+  return false;
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await requireAdminAuth(request);
@@ -480,6 +490,9 @@ export default function SalesOrderPage() {
       if (isBusy) return;
       setQuickActionOrderId(orderId);
       try {
+        const { downloadSalesOrderDomPdfFromList } = await import(
+          "../sales-order-dom-export.client"
+        );
         await downloadSalesOrderDomPdfFromList({
           orderId,
           templateId: activeTemplateId(),
@@ -508,6 +521,9 @@ export default function SalesOrderPage() {
       if (isBusy) return;
       setQuickActionOrderId(orderId);
       try {
+        const { printSalesOrderDomPdfFromList } = await import(
+          "../sales-order-dom-export.client"
+        );
         await printSalesOrderDomPdfFromList({
           orderId,
           templateId: activeTemplateId(),

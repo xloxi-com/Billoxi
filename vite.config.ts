@@ -58,6 +58,15 @@ export default defineConfig({
   },
   build: {
     assetsInlineLimit: 0,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/jspdf")) return "jspdf";
+          if (id.includes("node_modules/html2canvas")) return "html2canvas";
+          if (id.includes("node_modules/jszip")) return "jszip";
+        },
+      },
+    },
   },
   optimizeDeps: {
     include: [
@@ -67,5 +76,6 @@ export default defineConfig({
       "react-router",
       "@shopify/app-bridge-react",
     ],
+    exclude: ["jspdf", "html2canvas", "jszip"],
   },
 }) satisfies UserConfig;
