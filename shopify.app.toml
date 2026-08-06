@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "565c4664a7b842ddeabe5a2dbea1b308"
-application_url = "https://billoxi-app.xloxi.com"
+application_url = "https://billoxi-app.vercel.app"
 embedded = true
 name = "Billoxi"
 
@@ -36,9 +36,9 @@ api_version = "2026-07"
 
 [auth]
 redirect_urls = [
-  "https://billoxi-app.xloxi.com/auth/callback",
-  "https://billoxi-app.xloxi.com/auth/shop",
-  "https://billoxi-app.xloxi.com/api/auth"
+  "https://billoxi-app.vercel.app/auth/callback",
+  "https://billoxi-app.vercel.app/auth/shop",
+  "https://billoxi-app.vercel.app/api/auth"
 ]
 
 [build]
