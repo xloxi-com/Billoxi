@@ -1,7 +1,7 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   fetchSalesOrderDocument,
   loadDocumentTemplateSettings,
@@ -31,8 +31,8 @@ function resolveInvoiceTemplateId(value: string | null | undefined) {
  * JSON payload for client-side DOM vector PDF (same pipeline as document Download).
  * GET /app/sales-order/export/:orderId?template=...&document=sales-order|invoice
  */
-export async function loader({ request, params, context }: LoaderFunctionArgs) {
-  const { session, admin } = context.get(adminAuthenticationContext);
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const { session, admin } = await requireAdminAuth(request);
   const orderId = params.orderId;
   if (!orderId) {
     return Response.json({ ok: false, error: "Order not found" }, { status: 404 });

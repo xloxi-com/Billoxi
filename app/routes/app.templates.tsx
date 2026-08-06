@@ -25,7 +25,7 @@ import {
   loadSalesOrderTemplateSettings,
   resetAllTemplatesToCleanDefaults,
 } from "../sales-order-document.server";
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   loadSelectedTemplatesForShop,
   saveSelectedTemplateForShop,
@@ -164,8 +164,8 @@ const isDocumentType = (value: string | null): value is DocumentType => {
 const selectionKey = (documentType: DocumentType) =>
   `invoice-app:selected-template:${documentType}`;
 
-export async function loader({ context }: LoaderFunctionArgs) {
-  const { session, admin } = context.get(adminAuthenticationContext);
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { session, admin } = await requireAdminAuth(request);
   const salesOrderTemplates = templates["sales-order"];
   const invoiceTemplates = templates.invoice;
 
@@ -213,8 +213,8 @@ export async function loader({ context }: LoaderFunctionArgs) {
   };
 }
 
-export async function action({ request, context }: ActionFunctionArgs) {
-  const { session } = context.get(adminAuthenticationContext);
+export async function action({ request }: ActionFunctionArgs) {
+  const { session } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 

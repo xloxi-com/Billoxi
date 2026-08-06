@@ -35,7 +35,7 @@ import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
 import { EmailIcon, ImportIcon, PrintIcon } from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   DEFAULT_SALES_ORDER_TEMPLATE_ID,
   SALES_ORDER_TEMPLATE_STORAGE_KEY,
@@ -159,8 +159,8 @@ const BULK_CONFIRM_COPY: Record<
   },
 };
 
-export const loader = async ({ request, context }: LoaderFunctionArgs) => {
-  const { admin, session } = context.get(adminAuthenticationContext);
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { admin, session } = await requireAdminAuth(request);
   const url = new URL(request.url);
   const params = parseSalesOrdersSearchParams(url);
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(
@@ -188,8 +188,8 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
 
 export const shouldRevalidate = () => true;
 
-export const action = async ({ request, context }: ActionFunctionArgs) => {
-  const { session } = context.get(adminAuthenticationContext);
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 

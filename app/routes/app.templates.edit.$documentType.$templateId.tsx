@@ -58,7 +58,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import type { Prisma } from "@prisma/client";
 
 import prisma from "../db.server";
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatStoreAddressLines,
   type StoreDetails,
@@ -1602,13 +1602,13 @@ function getTemplate(documentType: string | undefined, templateId: string | unde
   return template?.documentType === documentType ? template : null;
 }
 
-export async function loader({ params, context }: LoaderFunctionArgs) {
+export async function loader({ request, params }: LoaderFunctionArgs) {
   const template = getTemplate(params.documentType, params.templateId);
   if (!template || !params.documentType || !params.templateId) {
     throw new Response("Template not found", { status: 404 });
   }
 
-  const { session, admin } = context.get(adminAuthenticationContext);
+  const { session, admin } = await requireAdminAuth(request);
   const [customization, customFieldSources, storeDetails, lastAllocated, shopCurrencyCode, numberSeries] =
     await Promise.all([
       prisma.templateCustomization.findUnique({
@@ -1662,14 +1662,14 @@ export async function loader({ params, context }: LoaderFunctionArgs) {
   };
 }
 
-export async function action({ request, params, context }: ActionFunctionArgs) {
+export async function action({ request, params }: ActionFunctionArgs) {
   const template = getTemplate(params.documentType, params.templateId);
   if (!template || !params.documentType || !params.templateId) {
     throw new Response("Template not found", { status: 404 });
   }
 
   const formData = await request.formData();
-  const { session } = context.get(adminAuthenticationContext);
+  const { session } = await requireAdminAuth(request);
 
   const rawSettings = formData.get("settings");
   if (typeof rawSettings !== "string") {

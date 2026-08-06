@@ -25,7 +25,7 @@ import {
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   fetchSalesOrderDocument,
   fetchSalesOrderList,
@@ -150,8 +150,8 @@ function formatMoney(amount: string, currencyCode: string) {
   }
 }
 
-export async function loader({ request, params, context }: LoaderFunctionArgs) {
-  const { session, admin } = context.get(adminAuthenticationContext);
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const { session, admin } = await requireAdminAuth(request);
   const orderId = params.orderId;
   if (!orderId) {
     throw new Response("Order not found", { status: 404 });
@@ -304,8 +304,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   };
 }
 
-export async function action({ request, params, context }: ActionFunctionArgs) {
-  const { session } = context.get(adminAuthenticationContext);
+export async function action({ request, params }: ActionFunctionArgs) {
+  const { session } = await requireAdminAuth(request);
   const orderId = params.orderId;
   if (!orderId) {
     return Response.json({ ok: false, error: "Order not found" }, { status: 404 });

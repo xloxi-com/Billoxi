@@ -1,9 +1,10 @@
-import { createContext } from "react-router";
-
 import { authenticate } from "./shopify.server";
 
 export type AdminAuthentication = Awaited<
   ReturnType<typeof authenticate.admin>
 >;
 
-export const adminAuthenticationContext = createContext<AdminAuthentication>();
+/** Authenticate an embedded admin request (official Shopify pattern). */
+export async function requireAdminAuth(request: Request) {
+  return authenticate.admin(request);
+}

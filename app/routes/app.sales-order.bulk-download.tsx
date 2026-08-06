@@ -5,12 +5,12 @@ import {
   buildSalesOrderPdfFile,
   buildSalesOrdersPdfZip,
 } from "../sales-order-bulk-pdf.server";
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-document";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 
-export async function action({ request, context }: ActionFunctionArgs) {
-  const { admin, session } = context.get(adminAuthenticationContext);
+export async function action({ request }: ActionFunctionArgs) {
+  const { admin, session } = await requireAdminAuth(request);
   const formData = await request.formData();
   const orderIds = formData
     .getAll("orderIds")

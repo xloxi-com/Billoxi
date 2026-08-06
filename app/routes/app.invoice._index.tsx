@@ -5,7 +5,7 @@ import type {
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   DEFAULT_INVOICE_TEMPLATE_ID,
   findTemplatePreset,
@@ -35,8 +35,8 @@ function resolveInvoiceTemplateId(value: string | null | undefined) {
  * Invoice list — same Sales Orders table UI, but only orders that were
  * converted to invoice (OrderInvoiceStatus).
  */
-export async function loader({ request, context }: LoaderFunctionArgs) {
-  const { admin, session } = context.get(adminAuthenticationContext);
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { admin, session } = await requireAdminAuth(request);
   const url = new URL(request.url);
   // Invoice list defaults to newest created invoice first.
   if (!url.searchParams.get("sort")) {

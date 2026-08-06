@@ -8,7 +8,7 @@ import { useFetcher, useLoaderData, useRouteError, useSearchParams } from "react
 import { SaveBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
-import { adminAuthenticationContext } from "../shopify-context.server";
+import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatNumberSeriesNextPreview,
   formatNumberSeriesValue,
@@ -117,8 +117,8 @@ function stopInputShortcutPropagation(
   }
 }
 
-export async function loader({ context }: LoaderFunctionArgs) {
-  const { session, admin } = context.get(adminAuthenticationContext);
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { session, admin } = await requireAdminAuth(request);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
     await loadSelectedTemplateForShop(session.shop, "sales-order"),
   );
@@ -156,8 +156,8 @@ export async function loader({ context }: LoaderFunctionArgs) {
   };
 }
 
-export async function action({ request, context }: ActionFunctionArgs) {
-  const { session, admin } = context.get(adminAuthenticationContext);
+export async function action({ request }: ActionFunctionArgs) {
+  const { session, admin } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
