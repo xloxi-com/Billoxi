@@ -263,6 +263,7 @@ type OrderNode = {
   currentTotalPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalReceivedSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalOutstandingSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  totalRefundedSet?: { shopMoney?: { amount: string; currencyCode: string } };
   taxLines?: Array<{
     title?: string | null;
     rate?: number | null;
@@ -522,6 +523,7 @@ export async function fetchSalesOrderDocument(
           currentTotalPriceSet { shopMoney { amount currencyCode } }
           totalReceivedSet { shopMoney { amount currencyCode } }
           totalOutstandingSet { shopMoney { amount currencyCode } }
+          totalRefundedSet { shopMoney { amount currencyCode } }
           taxLines {
             title
             rate
@@ -757,7 +759,9 @@ export async function fetchSalesOrderDocument(
       moneyAmount(order.totalReceivedSet?.shopMoney),
       moneyAmount(order.totalOutstandingSet?.shopMoney),
       order.displayFinancialStatus,
+      moneyAmount(order.totalRefundedSet?.shopMoney),
     ),
+    financialStatus: order.displayFinancialStatus ?? null,
     currencyCode,
     taxSummary: reconcileTaxSummaryToOrderTotal(
       orderTaxSummary.length > 0

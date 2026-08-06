@@ -1,0 +1,36 @@
+---
+description: Prevent repeating Shopify toast notices from fetcher/effects
+alwaysApply: true
+---
+
+# Toast / notice — show once only
+
+Never let success/error toasts "jump" repeatedly after one user action.
+
+## Required pattern for `useFetcher` result toasts
+
+When showing `shopify.toast` from a `useEffect` that watches `fetcher.data`:
+
+1. Keep a `useRef` of the last handled `fetcher.data` object.
+2. Bail out if `handledRef.current === fetcher.data` (same response must not toast again).
+3. Set the ref **before** toast / revalidate side effects.
+4. Do **not** put changing selection counts or other unstable values in that effect’s deps if they would re-fire the toast while `fetcher.data` is still the old success payload.
+
+```tsx
+const handledFetcherDataRef = useRef<unknown>(null);
+
+useEffect(() => {
+  if (fetcher.state !== "idle" || !fetcher.data) return;
+  if (handledFetcherDataRef.current === fetcher.data) return;
+  handledFetcherDataRef.current = fetcher.data;
+
+  // toast once, then clearSelection / revalidate
+}, [fetcher.state, fetcher.data, /* stable callbacks only */]);
+```
+
+## Also avoid
+
+- Calling `toast.show` inside effects that re-run on every revalidate/poll while action result data is still mounted.
+- Duplicate toasts from both an action callback and a fetcher effect for the same submit.
+
+Existing correct examples: `app/routes/app.settings.tsx`, `app/routes/app.templates.edit.$documentType.$templateId.tsx`, `app/routes/app.sales-order._index.tsx`.

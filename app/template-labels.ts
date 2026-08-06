@@ -109,6 +109,8 @@ export type TemplateLabelPack = {
     paidAmountLabel: string;
     balanceDueLabel: string;
     totalLabel: string;
+    itemsInTotalLabel: string;
+    refundedAmountLabel?: string;
   };
   taxSummary: {
     title: string;
@@ -167,6 +169,8 @@ const en: TemplateLabelPack = {
     paidAmountLabel: "Paid Amount",
     balanceDueLabel: "Balance Due",
     totalLabel: "Total",
+    itemsInTotalLabel: "Items in Total",
+    refundedAmountLabel: "Refunded Amount",
   },
   taxSummary: {
     title: "Tax Summary",
@@ -225,6 +229,7 @@ const de: TemplateLabelPack = {
     paidAmountLabel: "Bezahlt",
     balanceDueLabel: "Offener Betrag",
     totalLabel: "Gesamt",
+    itemsInTotalLabel: "Artikel gesamt",
   },
   taxSummary: {
     title: "Steuerübersicht",
@@ -283,6 +288,7 @@ const fr: TemplateLabelPack = {
     paidAmountLabel: "Montant payé",
     balanceDueLabel: "Solde dû",
     totalLabel: "Total",
+    itemsInTotalLabel: "Articles au total",
   },
   taxSummary: {
     title: "Récapitulatif des taxes",
@@ -341,6 +347,7 @@ const es: TemplateLabelPack = {
     paidAmountLabel: "Importe pagado",
     balanceDueLabel: "Saldo pendiente",
     totalLabel: "Total",
+    itemsInTotalLabel: "Artículos en total",
   },
   taxSummary: {
     title: "Resumen de impuestos",
@@ -399,6 +406,7 @@ const it: TemplateLabelPack = {
     paidAmountLabel: "Importo pagato",
     balanceDueLabel: "Saldo dovuto",
     totalLabel: "Totale",
+    itemsInTotalLabel: "Articoli totali",
   },
   taxSummary: {
     title: "Riepilogo imposte",
@@ -457,6 +465,7 @@ const pt: TemplateLabelPack = {
     paidAmountLabel: "Valor pago",
     balanceDueLabel: "Saldo devido",
     totalLabel: "Total",
+    itemsInTotalLabel: "Itens no total",
   },
   taxSummary: {
     title: "Resumo de impostos",
@@ -515,6 +524,7 @@ const nl: TemplateLabelPack = {
     paidAmountLabel: "Betaald bedrag",
     balanceDueLabel: "Openstaand saldo",
     totalLabel: "Totaal",
+    itemsInTotalLabel: "Items totaal",
   },
   taxSummary: {
     title: "Belastingoverzicht",
@@ -573,6 +583,7 @@ const pl: TemplateLabelPack = {
     paidAmountLabel: "Zapłacono",
     balanceDueLabel: "Do zapłaty",
     totalLabel: "Razem",
+    itemsInTotalLabel: "Pozycje łącznie",
   },
   taxSummary: {
     title: "Podsumowanie podatku",
@@ -631,6 +642,7 @@ const sv: TemplateLabelPack = {
     paidAmountLabel: "Betalt belopp",
     balanceDueLabel: "Att betala",
     totalLabel: "Totalt",
+    itemsInTotalLabel: "Antal artiklar",
   },
   taxSummary: {
     title: "Momssammanfattning",
@@ -689,6 +701,7 @@ const da: TemplateLabelPack = {
     paidAmountLabel: "Betalt beløb",
     balanceDueLabel: "Skyldigt beløb",
     totalLabel: "Total",
+    itemsInTotalLabel: "Varer i alt",
   },
   taxSummary: {
     title: "Momsoversigt",
@@ -747,6 +760,7 @@ const fi: TemplateLabelPack = {
     paidAmountLabel: "Maksettu summa",
     balanceDueLabel: "Maksettavaa",
     totalLabel: "Yhteensä",
+    itemsInTotalLabel: "Tuotteita yhteensä",
   },
   taxSummary: {
     title: "Veroyhteenveto",
@@ -805,6 +819,7 @@ const no: TemplateLabelPack = {
     paidAmountLabel: "Betalt beløp",
     balanceDueLabel: "Utestående",
     totalLabel: "Totalt",
+    itemsInTotalLabel: "Varer totalt",
   },
   taxSummary: {
     title: "MVA-oversikt",
@@ -863,6 +878,7 @@ const cs: TemplateLabelPack = {
     paidAmountLabel: "Zaplaceno",
     balanceDueLabel: "Zbývá uhradit",
     totalLabel: "Celkem",
+    itemsInTotalLabel: "Položek celkem",
   },
   taxSummary: {
     title: "Přehled DPH",
@@ -921,6 +937,7 @@ const hu: TemplateLabelPack = {
     paidAmountLabel: "Fizetett összeg",
     balanceDueLabel: "Fizetendő egyenleg",
     totalLabel: "Összesen",
+    itemsInTotalLabel: "Tételek összesen",
   },
   taxSummary: {
     title: "ÁFA-összesítő",
@@ -979,6 +996,7 @@ const ro: TemplateLabelPack = {
     paidAmountLabel: "Sumă plătită",
     balanceDueLabel: "Sold restant",
     totalLabel: "Total",
+    itemsInTotalLabel: "Articole în total",
   },
   taxSummary: {
     title: "Rezumat TVA",
@@ -1037,6 +1055,7 @@ const el: TemplateLabelPack = {
     paidAmountLabel: "Πληρωμένο ποσό",
     balanceDueLabel: "Υπόλοιπο",
     totalLabel: "Σύνολο",
+    itemsInTotalLabel: "Σύνολο ειδών",
   },
   taxSummary: {
     title: "Περίληψη φόρου",
@@ -1095,6 +1114,7 @@ const tr: TemplateLabelPack = {
     paidAmountLabel: "Ödenen tutar",
     balanceDueLabel: "Kalan bakiye",
     totalLabel: "Toplam",
+    itemsInTotalLabel: "Toplam ürün",
   },
   taxSummary: {
     title: "Vergi özeti",
@@ -1153,6 +1173,7 @@ const ru: TemplateLabelPack = {
     paidAmountLabel: "Оплачено",
     balanceDueLabel: "К оплате",
     totalLabel: "Итого",
+    itemsInTotalLabel: "Всего позиций",
   },
   taxSummary: {
     title: "Сводка по налогам",
@@ -1211,6 +1232,7 @@ const uk: TemplateLabelPack = {
     paidAmountLabel: "Сплачено",
     balanceDueLabel: "До сплати",
     totalLabel: "Разом",
+    itemsInTotalLabel: "Всього позицій",
   },
   taxSummary: {
     title: "Підсумок податків",
@@ -1269,6 +1291,7 @@ const ar: TemplateLabelPack = {
     paidAmountLabel: "المبلغ المدفوع",
     balanceDueLabel: "الرصيد المستحق",
     totalLabel: "الإجمالي",
+    itemsInTotalLabel: "إجمالي العناصر",
   },
   taxSummary: {
     title: "ملخص الضريبة",
@@ -1327,6 +1350,7 @@ const he: TemplateLabelPack = {
     paidAmountLabel: "סכום ששולם",
     balanceDueLabel: "יתרה לתשלום",
     totalLabel: "סה\"כ",
+    itemsInTotalLabel: "פריטים בסך הכל",
   },
   taxSummary: {
     title: "סיכום מס",
@@ -1385,6 +1409,7 @@ const hi: TemplateLabelPack = {
     paidAmountLabel: "भुगतान राशि",
     balanceDueLabel: "बकाया राशि",
     totalLabel: "कुल",
+    itemsInTotalLabel: "कुल वस्तुएँ",
   },
   taxSummary: {
     title: "कर सारांश",
@@ -1443,6 +1468,8 @@ const ta: TemplateLabelPack = {
     paidAmountLabel: "செலுத்திய தொகை",
     balanceDueLabel: "நிலுவைத் தொகை",
     totalLabel: "மொத்தம்",
+    itemsInTotalLabel: "மொத்த பொருட்கள்",
+    refundedAmountLabel: "திருப்பிச் செலுத்திய தொகை",
   },
   taxSummary: {
     title: "வரி சுருக்கம்",
@@ -1501,6 +1528,7 @@ const th: TemplateLabelPack = {
     paidAmountLabel: "จำนวนที่ชำระ",
     balanceDueLabel: "ยอดคงเหลือ",
     totalLabel: "ยอดรวม",
+    itemsInTotalLabel: "รายการทั้งหมด",
   },
   taxSummary: {
     title: "สรุปภาษี",
@@ -1559,6 +1587,7 @@ const vi: TemplateLabelPack = {
     paidAmountLabel: "Đã thanh toán",
     balanceDueLabel: "Còn lại",
     totalLabel: "Tổng cộng",
+    itemsInTotalLabel: "Tổng số mặt hàng",
   },
   taxSummary: {
     title: "Tóm tắt thuế",
@@ -1617,6 +1646,7 @@ const id: TemplateLabelPack = {
     paidAmountLabel: "Jumlah dibayar",
     balanceDueLabel: "Saldo terutang",
     totalLabel: "Total",
+    itemsInTotalLabel: "Total item",
   },
   taxSummary: {
     title: "Ringkasan pajak",
@@ -1675,6 +1705,7 @@ const ms: TemplateLabelPack = {
     paidAmountLabel: "Jumlah dibayar",
     balanceDueLabel: "Baki hutang",
     totalLabel: "Jumlah",
+    itemsInTotalLabel: "Jumlah item",
   },
   taxSummary: {
     title: "Ringkasan cukai",
@@ -1733,6 +1764,7 @@ const ja: TemplateLabelPack = {
     paidAmountLabel: "支払済額",
     balanceDueLabel: "未払残高",
     totalLabel: "合計",
+    itemsInTotalLabel: "合計数量",
   },
   taxSummary: {
     title: "税サマリー",
@@ -1791,6 +1823,7 @@ const ko: TemplateLabelPack = {
     paidAmountLabel: "결제 금액",
     balanceDueLabel: "미결제 잔액",
     totalLabel: "합계",
+    itemsInTotalLabel: "총 품목",
   },
   taxSummary: {
     title: "세금 요약",
@@ -1849,6 +1882,7 @@ const zhCN: TemplateLabelPack = {
     paidAmountLabel: "已付金额",
     balanceDueLabel: "应付余额",
     totalLabel: "合计",
+    itemsInTotalLabel: "商品总数",
   },
   taxSummary: {
     title: "税费摘要",
@@ -1907,6 +1941,7 @@ const zhTW: TemplateLabelPack = {
     paidAmountLabel: "已付金額",
     balanceDueLabel: "應付餘額",
     totalLabel: "合計",
+    itemsInTotalLabel: "商品總數",
   },
   taxSummary: {
     title: "稅費摘要",
@@ -1978,6 +2013,7 @@ const ptPT: TemplateLabelPack = {
     paidAmountLabel: "Valor pago",
     balanceDueLabel: "Saldo em dívida",
     totalLabel: "Total",
+    itemsInTotalLabel: "Itens no total",
   },
   taxSummary: {
     title: "Resumo de impostos",
@@ -2036,6 +2072,7 @@ const bg: TemplateLabelPack = {
     paidAmountLabel: "Платена сума",
     balanceDueLabel: "Дължима сума",
     totalLabel: "Общо",
+    itemsInTotalLabel: "Общо артикули",
   },
   taxSummary: {
     title: "Обобщение на данъка",
@@ -2094,6 +2131,7 @@ const hr: TemplateLabelPack = {
     paidAmountLabel: "Plaćeni iznos",
     balanceDueLabel: "Dugovanje",
     totalLabel: "Ukupno",
+    itemsInTotalLabel: "Ukupno stavki",
   },
   taxSummary: {
     title: "Sažetak poreza",
@@ -2152,6 +2190,7 @@ const sk: TemplateLabelPack = {
     paidAmountLabel: "Zaplatené",
     balanceDueLabel: "Zostáva uhradiť",
     totalLabel: "Spolu",
+    itemsInTotalLabel: "Položiek celkom",
   },
   taxSummary: {
     title: "Prehľad DPH",
@@ -2210,6 +2249,7 @@ const sl: TemplateLabelPack = {
     paidAmountLabel: "Plačani znesek",
     balanceDueLabel: "Preostalo za plačilo",
     totalLabel: "Skupaj",
+    itemsInTotalLabel: "Skupaj artiklov",
   },
   taxSummary: {
     title: "Povzetek davka",
@@ -2268,6 +2308,7 @@ const lt: TemplateLabelPack = {
     paidAmountLabel: "Sumokėta",
     balanceDueLabel: "Mokėtina suma",
     totalLabel: "Iš viso",
+    itemsInTotalLabel: "Iš viso prekių",
   },
   taxSummary: {
     title: "Mokesčių santrauka",
@@ -2326,6 +2367,7 @@ const et: TemplateLabelPack = {
     paidAmountLabel: "Makstud summa",
     balanceDueLabel: "Tasumata jääk",
     totalLabel: "Kokku",
+    itemsInTotalLabel: "Kaupu kokku",
   },
   taxSummary: {
     title: "Maksude kokkuvõte",
@@ -2384,6 +2426,7 @@ const lv: TemplateLabelPack = {
     paidAmountLabel: "Samaksātā summa",
     balanceDueLabel: "Atlikums",
     totalLabel: "Kopā",
+    itemsInTotalLabel: "Kopā preces",
   },
   taxSummary: {
     title: "Nodokļu kopsavilkums",
@@ -2442,6 +2485,7 @@ const ga: TemplateLabelPack = {
     paidAmountLabel: "Méid íoctha",
     balanceDueLabel: "Iarmhéid dlite",
     totalLabel: "Iomlán",
+    itemsInTotalLabel: "Míreanna iomlán",
   },
   taxSummary: {
     title: "Achoimre cánach",
@@ -2500,6 +2544,7 @@ const mt: TemplateLabelPack = {
     paidAmountLabel: "Ammont imħallas",
     balanceDueLabel: "Bilanċ dovut",
     totalLabel: "Total",
+    itemsInTotalLabel: "Oġġetti totali",
   },
   taxSummary: {
     title: "Sommarju tat-taxxa",
@@ -2558,6 +2603,7 @@ const isLang: TemplateLabelPack = {
     paidAmountLabel: "Greidd upphæð",
     balanceDueLabel: "Ógreitt",
     totalLabel: "Samtals",
+    itemsInTotalLabel: "Vörur samtals",
   },
   taxSummary: {
     title: "Skattayfirlit",
@@ -2616,6 +2662,7 @@ const sq: TemplateLabelPack = {
     paidAmountLabel: "Shuma e paguar",
     balanceDueLabel: "Gjendja e detyrimit",
     totalLabel: "Totali",
+    itemsInTotalLabel: "Artikuj në total",
   },
   taxSummary: {
     title: "Përmbledhja e tatimit",
@@ -2674,6 +2721,7 @@ const mk: TemplateLabelPack = {
     paidAmountLabel: "Платен износ",
     balanceDueLabel: "Долг за плаќање",
     totalLabel: "Вкупно",
+    itemsInTotalLabel: "Вкупно ставки",
   },
   taxSummary: {
     title: "Резиме на данок",
@@ -2732,6 +2780,7 @@ const sr: TemplateLabelPack = {
     paidAmountLabel: "Plaćeni iznos",
     balanceDueLabel: "Dugovanje",
     totalLabel: "Ukupno",
+    itemsInTotalLabel: "Ukupno stavki",
   },
   taxSummary: {
     title: "Pregled poreza",
@@ -2790,6 +2839,7 @@ const bs: TemplateLabelPack = {
     paidAmountLabel: "Plaćeni iznos",
     balanceDueLabel: "Dugovanje",
     totalLabel: "Ukupno",
+    itemsInTotalLabel: "Ukupno stavki",
   },
   taxSummary: {
     title: "Pregled poreza",
@@ -2848,6 +2898,7 @@ const ca: TemplateLabelPack = {
     paidAmountLabel: "Import pagat",
     balanceDueLabel: "Saldo pendent",
     totalLabel: "Total",
+    itemsInTotalLabel: "Articles en total",
   },
   taxSummary: {
     title: "Resum d'impostos",
@@ -2906,6 +2957,7 @@ const be: TemplateLabelPack = {
     paidAmountLabel: "Аплачана",
     balanceDueLabel: "Да аплаты",
     totalLabel: "Разам",
+    itemsInTotalLabel: "Усяго пазіцый",
   },
   taxSummary: {
     title: "Зводка па падатках",
@@ -2964,6 +3016,7 @@ const cy: TemplateLabelPack = {
     paidAmountLabel: "Swm a dalwyd",
     balanceDueLabel: "Balans dyledus",
     totalLabel: "Cyfanswm",
+    itemsInTotalLabel: "Eitemau yn gyfanswm",
   },
   taxSummary: {
     title: "Crynodeb treth",
@@ -3022,6 +3075,7 @@ const eu: TemplateLabelPack = {
     paidAmountLabel: "Ordaindutakoa",
     balanceDueLabel: "Ordaintzeke",
     totalLabel: "Guztira",
+    itemsInTotalLabel: "Guztira elementuak",
   },
   taxSummary: {
     title: "Zerga laburpena",
@@ -3080,6 +3134,7 @@ const gl: TemplateLabelPack = {
     paidAmountLabel: "Importe pagado",
     balanceDueLabel: "Saldo pendente",
     totalLabel: "Total",
+    itemsInTotalLabel: "Artigos en total",
   },
   taxSummary: {
     title: "Resumo de impostos",
@@ -3138,6 +3193,7 @@ const lb: TemplateLabelPack = {
     paidAmountLabel: "Bezuelt Betrag",
     balanceDueLabel: "Restbetrag",
     totalLabel: "Total",
+    itemsInTotalLabel: "Total Artikelen",
   },
   taxSummary: {
     title: "Steieriwwersiicht",

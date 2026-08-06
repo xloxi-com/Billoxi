@@ -204,6 +204,51 @@ const SALES_ORDERS_QUERY = `#graphql
   }
 `;
 
+const SALES_ORDERS_BY_IDS_QUERY = `#graphql
+  query SalesOrdersByIds($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Order {
+        id
+        name
+        createdAt
+        email
+        customer {
+          displayName
+          defaultAddress {
+            company
+          }
+        }
+        billingAddress {
+          company
+        }
+        shippingAddress {
+          company
+        }
+        displayFinancialStatus
+        displayFulfillmentStatus
+        currentTotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalReceivedSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalOutstandingSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+      }
+    }
+  }
+`;
+
 const CUSTOMERS_SEARCH_QUERY = `#graphql
   query SalesOrdersCustomerSearch($query: String!, $first: Int!) {
     customers(first: $first, query: $query) {
@@ -213,6 +258,9 @@ const CUSTOMERS_SEARCH_QUERY = `#graphql
     }
   }
 `;
+
+const INVOICE_NODES_CHUNK = 50;
+const MAX_INVOICED_FETCH = 250;
 
 function escapeSearchTerm(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -224,6 +272,133 @@ function quoteSearchTerm(value: string) {
 
 function orderGidToNumericId(gid: string) {
   return gid.includes("/") ? gid.split("/").pop() || "" : gid;
+}
+
+type OrdersByIdsResponse = {
+  data?: {
+    nodes?: Array<RawSalesOrder | null>;
+  };
+  errors?: Array<{ message: string }>;
+};
+
+/** Fetch orders by GID via `nodes(ids:)` — reliable vs search `id: OR id:`. */
+async function loadOrdersByGids(
+  admin: AdminGraphql,
+  gids: string[],
+): Promise<RawSalesOrder[]> {
+  if (gids.length === 0) return [];
+
+  const byId = new Map<string, RawSalesOrder>();
+  for (let i = 0; i < gids.length; i += INVOICE_NODES_CHUNK) {
+    const chunk = gids.slice(i, i + INVOICE_NODES_CHUNK);
+    const response = await admin.graphql(SALES_ORDERS_BY_IDS_QUERY, {
+      variables: { ids: chunk },
+    });
+    const result = (await response.json()) as OrdersByIdsResponse;
+    if (result.errors?.length && !result.data?.nodes) {
+      throw new Response(
+        result.errors.map((error) => error.message).join(", ") ||
+          "Shopify orders could not be loaded.",
+        { status: 502 },
+      );
+    }
+    for (const node of result.data?.nodes ?? []) {
+      if (node?.id) byId.set(node.id, node);
+    }
+  }
+
+  return gids
+    .map((gid) => byId.get(gid))
+    .filter((order): order is RawSalesOrder => Boolean(order));
+}
+
+function paginateItems<T extends { id: string }>(
+  items: T[],
+  after: string | null,
+  before: string | null,
+): {
+  pageItems: T[];
+  pageInfo: SalesOrdersPage["pageInfo"];
+} {
+  let start = 0;
+  let end = items.length;
+
+  if (after) {
+    const idx = items.findIndex((item) => item.id === after);
+    start = idx >= 0 ? idx + 1 : 0;
+  }
+  if (before) {
+    const idx = items.findIndex((item) => item.id === before);
+    end = idx >= 0 ? idx : items.length;
+  }
+
+  const window = items.slice(start, end);
+  let pageItems: T[];
+  let pageStart: number;
+
+  if (before && !after) {
+    pageItems = window.slice(-PAGE_SIZE);
+    pageStart = start + Math.max(0, window.length - PAGE_SIZE);
+  } else {
+    pageItems = window.slice(0, PAGE_SIZE);
+    pageStart = start;
+  }
+
+  return {
+    pageItems,
+    pageInfo: {
+      hasNextPage: pageStart + pageItems.length < items.length,
+      hasPreviousPage: pageStart > 0,
+      startCursor: pageItems[0]?.id ?? null,
+      endCursor: pageItems[pageItems.length - 1]?.id ?? null,
+    },
+  };
+}
+
+function sortRawOrders(
+  orders: RawSalesOrder[],
+  sortSelected: SortSelected,
+  invoicedAtByGid: Map<string, number>,
+): RawSalesOrder[] {
+  const sorted = [...orders];
+  const reverse = SORT_OPTIONS[sortSelected].reverse;
+
+  sorted.sort((a, b) => {
+    switch (sortSelected) {
+      case "order asc":
+      case "order desc": {
+        const aName = Number((a.name || "").replace(/\D/g, "")) || 0;
+        const bName = Number((b.name || "").replace(/\D/g, "")) || 0;
+        return (aName - bName) * (reverse ? -1 : 1);
+      }
+      case "customer asc":
+      case "customer desc": {
+        const aName = (a.customer?.displayName || "").toLowerCase();
+        const bName = (b.customer?.displayName || "").toLowerCase();
+        return aName.localeCompare(bName) * (reverse ? -1 : 1);
+      }
+      case "total asc":
+      case "total desc": {
+        const aTotal = Number(a.currentTotalPriceSet.shopMoney.amount) || 0;
+        const bTotal = Number(b.currentTotalPriceSet.shopMoney.amount) || 0;
+        return (aTotal - bTotal) * (reverse ? -1 : 1);
+      }
+      case "date asc":
+      case "date desc":
+      default: {
+        const aInv = invoicedAtByGid.get(a.id);
+        const bInv = invoicedAtByGid.get(b.id);
+        if (aInv != null && bInv != null && aInv !== bInv) {
+          return (aInv - bInv) * (sortSelected === "date asc" ? 1 : -1);
+        }
+        const aTime = new Date(a.createdAt).getTime() || 0;
+        const bTime = new Date(b.createdAt).getTime() || 0;
+        return (aTime - bTime) * (sortSelected === "date asc" ? 1 : -1);
+      }
+    }
+  });
+
+  return sorted;
 }
 
 /** Look up sales-order document numbers (SO-0001) that match the search term. */
@@ -490,14 +665,21 @@ function toRow(
   packingSlip = false,
   invoicedAt: Date | null = null,
   invoiceNumber = "",
+  /** Invoice list: show editable invoice date (invoicedAt). */
+  useInvoiceDate = false,
+  _invoiceCreatedAt: Date | null = null,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
+  const displayDateIso =
+    useInvoiceDate && invoicedAt
+      ? invoicedAt.toISOString()
+      : order.createdAt;
   return {
     id: order.id,
     name: order.name,
     salesOrderNumber: salesOrderNumber?.trim() || "",
-    date: formatDate(order.createdAt),
+    date: formatDate(displayDateIso),
     createdAt: order.createdAt,
     company: resolveCompany(order),
     customer: order.customer?.displayName || "Guest customer",
@@ -590,47 +772,21 @@ export async function loadSalesOrdersPage(
     sortSelected: params.sortSelected,
   });
 
-  let shopifyViewQuery: string = isInvoicedView ? "" : viewQuery;
-  if (isInvoicedView) {
-    const invoicedGids = await getAllInvoicedOrderGids(shop);
-    if (invoicedGids.length === 0) return emptyPage();
-    shopifyViewQuery = invoicedGids
-      .map((gid) => {
-        const numericId = orderGidToNumericId(gid);
-        return numericId ? `id:${numericId}` : "";
-      })
-      .filter(Boolean)
-      .join(" OR ");
-  }
-
-  const textSearch = params.query.trim()
-    ? await buildSalesOrdersTextSearch(admin, shop, templateId, params.query)
-    : "";
-
-  const orderQuery = [
-    textSearch,
-    shopifyViewQuery,
-    params.paymentStatus ? `financial_status:${params.paymentStatus}` : "",
-    params.fulfillmentStatus
-      ? `fulfillment_status:${params.fulfillmentStatus}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  const cacheKey = [
+  const cacheKeyBase = [
     shop,
     templateId,
     params.after ?? "",
     params.before ?? "",
-    isInvoicedView ? INVOICED_VIEW_QUERY : "",
-    orderQuery,
+    isInvoicedView ? INVOICED_VIEW_QUERY : viewQuery,
+    params.query,
+    params.paymentStatus,
+    params.fulfillmentStatus,
     params.sortSelected,
   ].join("|");
 
   const now = Date.now();
   if (!params.bypassCache) {
-    const cached = listCache.get(cacheKey);
+    const cached = listCache.get(cacheKeyBase);
     if (cached && cached.expires > now) {
       return {
         ...cached.data,
@@ -639,6 +795,165 @@ export async function loadSalesOrdersPage(
       };
     }
   }
+
+  const buildPage = async (
+    nodes: RawSalesOrder[],
+    pageInfo: SalesOrdersPage["pageInfo"],
+    forceInvoiced: boolean,
+  ): Promise<SalesOrdersPage> => {
+    const orderGids = nodes.map((order) => order.id);
+    const [documentNumbers, invoicedMeta, packingSlipGids] =
+      orderGids.length === 0
+        ? [
+            new Map<string, string>(),
+            new Map<
+              string,
+              {
+                invoicedAt: Date;
+                createdAt: Date;
+                updatedAt: Date;
+                documentNumber: string | null;
+                sequence: number | null;
+                customerNote: string | null;
+                terms: string | null;
+              }
+            >(),
+            new Set<string>(),
+          ]
+        : await Promise.all([
+            getSalesOrderDocumentNumbersByOrderGids(
+              shop,
+              templateId,
+              orderGids,
+            ),
+            getInvoicedMetaByOrderGids(shop, orderGids),
+            getPackingSlipOrderGids(shop, orderGids),
+          ]);
+
+    const invoicedGidsNeedingNumbers = orderGids.filter((gid) => {
+      const meta = invoicedMeta.get(gid);
+      return Boolean(meta) && !meta?.documentNumber;
+    });
+    const ensuredInvoiceNumbers =
+      invoicedGidsNeedingNumbers.length > 0
+        ? await ensureInvoiceDocumentNumbers(shop, invoicedGidsNeedingNumbers)
+        : new Map<string, string>();
+
+    return {
+      orders: nodes.map((order) => {
+        const meta = invoicedMeta.get(order.id) ?? null;
+        const invoiceNumber =
+          meta?.documentNumber ||
+          ensuredInvoiceNumbers.get(order.id) ||
+          "";
+        return toRow(
+          order,
+          documentNumbers.get(order.id) ?? null,
+          forceInvoiced || Boolean(meta),
+          packingSlipGids.has(order.id),
+          meta?.invoicedAt ?? null,
+          invoiceNumber,
+          forceInvoiced,
+          meta?.createdAt ?? meta?.invoicedAt ?? null,
+        );
+      }),
+      pageInfo,
+      query: params.query,
+      selectedView,
+      availableViews,
+      paymentStatus: params.paymentStatus,
+      fulfillmentStatus: params.fulfillmentStatus,
+      sortSelected: params.sortSelected,
+    };
+  };
+
+  // Invoice list: fetch by GID via nodes() — Shopify search `id: OR id:` drops rows.
+  if (isInvoicedView) {
+    const invoicedGids = await getAllInvoicedOrderGids(shop);
+    if (invoicedGids.length === 0) return emptyPage();
+
+    const gidsToFetch = invoicedGids.slice(0, MAX_INVOICED_FETCH);
+    let orders = await loadOrdersByGids(admin, gidsToFetch);
+
+    const metaForSort = await getInvoicedMetaByOrderGids(shop, gidsToFetch);
+    // Date column / default sort: editable invoice date (invoicedAt).
+    const invoiceCreatedAtByGid = new Map<string, number>();
+    for (const [gid, meta] of metaForSort) {
+      const invoiceDate = meta.invoicedAt?.getTime() ?? meta.createdAt?.getTime();
+      if (invoiceDate != null) invoiceCreatedAtByGid.set(gid, invoiceDate);
+    }
+
+    if (params.paymentStatus) {
+      const wanted = params.paymentStatus.toUpperCase();
+      orders = orders.filter(
+        (order) =>
+          (order.displayFinancialStatus || "").toUpperCase() === wanted,
+      );
+    }
+    if (params.fulfillmentStatus) {
+      const wanted = params.fulfillmentStatus.toUpperCase();
+      orders = orders.filter(
+        (order) =>
+          (order.displayFulfillmentStatus || "").toUpperCase() === wanted,
+      );
+    }
+    if (params.query.trim()) {
+      const q = params.query.trim().toLowerCase();
+      const qCompact = q.replace(/\s+/g, "");
+      const soGids = new Set(
+        await findOrderGidsBySalesOrderNumber(shop, templateId, params.query),
+      );
+      orders = orders.filter((order) => {
+        if (soGids.has(order.id)) return true;
+        const meta = metaForSort.get(order.id);
+        const invoiceNumber = (meta?.documentNumber || "").toLowerCase();
+        const haystack = [
+          order.name,
+          order.email,
+          order.customer?.displayName,
+          resolveCompany(order),
+          invoiceNumber,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return (
+          haystack.includes(q) ||
+          invoiceNumber.replace(/\s+/g, "").includes(qCompact)
+        );
+      });
+    }
+
+    const sortSelected =
+      params.sortSelected in SORT_OPTIONS
+        ? params.sortSelected
+        : ("date desc" as SortSelected);
+    orders = sortRawOrders(orders, sortSelected, invoiceCreatedAtByGid);
+    const { pageItems, pageInfo } = paginateItems(
+      orders,
+      params.after,
+      params.before,
+    );
+    const data = await buildPage(pageItems, pageInfo, true);
+    listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
+    pruneCache(now);
+    return data;
+  }
+
+  const textSearch = params.query.trim()
+    ? await buildSalesOrdersTextSearch(admin, shop, templateId, params.query)
+    : "";
+
+  const orderQuery = [
+    textSearch,
+    viewQuery,
+    params.paymentStatus ? `financial_status:${params.paymentStatus}` : "",
+    params.fulfillmentStatus
+      ? `fulfillment_status:${params.fulfillmentStatus}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const isPreviousPage = Boolean(params.before);
   const response = await admin.graphql(SALES_ORDERS_QUERY, {
@@ -662,63 +977,12 @@ export async function loadSalesOrdersPage(
     throw new Response(message, { status: 502 });
   }
 
-  const nodes = result.data.orders.nodes;
-  const orderGids = nodes.map((order) => order.id);
-  const [documentNumbers, invoicedMeta, packingSlipGids] =
-    orderGids.length === 0
-      ? [
-          new Map<string, string>(),
-          new Map<
-            string,
-            { invoicedAt: Date; documentNumber: string | null; sequence: number | null }
-          >(),
-          new Set<string>(),
-        ]
-      : await Promise.all([
-          getSalesOrderDocumentNumbersByOrderGids(
-            shop,
-            templateId,
-            orderGids,
-          ),
-          getInvoicedMetaByOrderGids(shop, orderGids),
-          getPackingSlipOrderGids(shop, orderGids),
-        ]);
-
-  const invoicedGidsNeedingNumbers = orderGids.filter((gid) => {
-    const meta = invoicedMeta.get(gid);
-    return Boolean(meta) && !meta?.documentNumber;
-  });
-  const ensuredInvoiceNumbers =
-    invoicedGidsNeedingNumbers.length > 0
-      ? await ensureInvoiceDocumentNumbers(shop, invoicedGidsNeedingNumbers)
-      : new Map<string, string>();
-
-  const data: SalesOrdersPage = {
-    orders: nodes.map((order) => {
-      const meta = invoicedMeta.get(order.id) ?? null;
-      const invoiceNumber =
-        meta?.documentNumber ||
-        ensuredInvoiceNumbers.get(order.id) ||
-        "";
-      return toRow(
-        order,
-        documentNumbers.get(order.id) ?? null,
-        isInvoicedView ? true : Boolean(meta),
-        packingSlipGids.has(order.id),
-        meta?.invoicedAt ?? null,
-        invoiceNumber,
-      );
-    }),
-    pageInfo: result.data.orders.pageInfo,
-    query: params.query,
-    selectedView,
-    availableViews,
-    paymentStatus: params.paymentStatus,
-    fulfillmentStatus: params.fulfillmentStatus,
-    sortSelected: params.sortSelected,
-  };
-
-  listCache.set(cacheKey, { expires: now + CACHE_TTL_MS, data });
+  const data = await buildPage(
+    result.data.orders.nodes,
+    result.data.orders.pageInfo,
+    false,
+  );
+  listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
   pruneCache(now);
   return data;
 }

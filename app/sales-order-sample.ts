@@ -97,6 +97,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
   total: "662.75",
   paidAmount: "662.75",
   balanceDue: "0.00",
+  refundedAmount: "0.00",
   currencyCode: "USD",
   taxSummary: [
     {

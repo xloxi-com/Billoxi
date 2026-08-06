@@ -110,13 +110,21 @@ export async function validateStartingNumber(
   return null;
 }
 
-/** Keep the counter in sync when the merchant raises the starting number. */
+/** Keep the counter in sync when the merchant raises the starting / next number. */
 export async function syncNumberCounter(
   shop: string,
   templateId: string,
   numbering: TemplateEditorSettings["numbering"],
+  nextSequence?: number | null,
 ) {
   const { prefix, padLength, startAt } = numberingMeta(numbering);
+  const last = await getLastAllocatedSequence(shop, templateId);
+  const minNext = last == null ? startAt : last + 1;
+  const requested =
+    typeof nextSequence === "number" && Number.isFinite(nextSequence)
+      ? Math.max(minNext, Math.floor(nextSequence))
+      : null;
+
   const counter = await prisma.salesOrderNumberCounter.findUnique({
     where: { shop_templateId: { shop, templateId } },
   });
@@ -126,7 +134,7 @@ export async function syncNumberCounter(
       data: {
         shop,
         templateId,
-        nextValue: startAt,
+        nextValue: requested ?? startAt,
         prefix,
         padLength,
       },
@@ -139,7 +147,11 @@ export async function syncNumberCounter(
     prefix?: string;
     padLength?: number;
   } = {};
-  if (startAt > counter.nextValue) updates.nextValue = startAt;
+  if (requested != null) {
+    updates.nextValue = requested;
+  } else if (startAt > counter.nextValue) {
+    updates.nextValue = startAt;
+  }
   if (counter.prefix !== prefix) updates.prefix = prefix;
   if (counter.padLength !== padLength) updates.padLength = padLength;
   if (Object.keys(updates).length === 0) return;

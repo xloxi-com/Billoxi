@@ -18,7 +18,9 @@ import {
   Modal,
   RadioButton,
   Text,
+  TextField,
   BlockStack,
+  Box,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
@@ -57,6 +59,7 @@ import {
   ensureInvoiceDocumentNumbers,
   getInvoicedMetaByOrderGids,
   markOrderInvoiced,
+  unmarkOrdersInvoiced,
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
 import { markOrderPackingSlip } from "../order-packing-slip-status.server";
@@ -248,12 +251,17 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
       );
     }
 
-    sidebarOrders = sidebarOrders.map((item) => ({
-      ...item,
-      documentNumber:
-        invoiceMeta.get(item.id)?.documentNumber ||
-        (item.id === order.id ? documentNumber : item.documentNumber),
-    }));
+    sidebarOrders = sidebarOrders.map((item) => {
+      const meta = invoiceMeta.get(item.id);
+      return {
+        ...item,
+        documentNumber:
+          meta?.documentNumber ||
+          (item.id === order.id ? documentNumber : item.documentNumber),
+        // Sidebar date follows editable invoice date.
+        createdAt: meta?.invoicedAt?.toISOString() || item.createdAt,
+      };
+    });
   } else {
     documentNumber = await allocateSalesOrderDocumentNumber(
       session.shop,
@@ -344,6 +352,16 @@ export async function action({ request, params, context }: ActionFunctionArgs) {
     return Response.json({
       ok: true,
       document: "packing-slip" as const,
+    });
+  }
+
+  if (intent === "delete-invoice") {
+    const deleted = await unmarkOrdersInvoiced(session.shop, [orderGid]);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-invoice" as const,
     });
   }
 
@@ -496,6 +514,7 @@ export default function SalesOrderDocumentPage() {
     "continue-auto" | "manual" | "once"
   >("once");
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
+  const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
   const numberPrefHandledRef = useRef(false);
   const originalInvoiceNumber = data.order.documentNumber || "";
 
@@ -575,17 +594,13 @@ export default function SalesOrderDocumentPage() {
       editTerms !== savedTerms);
 
   const maybePromptNumberPref = useCallback(() => {
-    if (
-      invoiceEntryMode !== "auto" ||
-      numberPrefHandledRef.current ||
-      numberPrefOpen
-    ) {
+    if (numberPrefHandledRef.current || numberPrefOpen) {
       return false;
     }
     if (editInvoiceNumber.trim() === originalInvoiceNumber.trim()) {
       return false;
     }
-    setNumberPrefChoice("once");
+    setNumberPrefChoice(invoiceEntryMode === "manual" ? "manual" : "once");
     setNumberPrefOpen(true);
     return true;
   }, [
@@ -597,6 +612,8 @@ export default function SalesOrderDocumentPage() {
 
   const handleInvoiceNumberInput = useCallback((event: Event) => {
     setEditInvoiceNumber(fieldValue(event));
+    // Allow the 3 preference options again after another number edit.
+    numberPrefHandledRef.current = false;
   }, []);
 
   const handleInvoiceNumberBlur = useCallback(() => {
@@ -615,28 +632,63 @@ export default function SalesOrderDocumentPage() {
 
   const confirmNumberPref = useCallback(() => {
     if (numberPrefChoice === "continue-auto") {
+      if (invoiceEntryMode !== "auto") {
+        const formData = new FormData();
+        formData.set(
+          "intent",
+          isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
+        );
+        formData.set("entryMode", "auto");
+        convertFetcher.submit(formData, { method: "post" });
+        setInvoiceEntryMode("auto");
+      }
       closeNumberPrefModal(true);
       return;
     }
 
     if (numberPrefChoice === "manual") {
+      if (!editInvoiceNumber.trim()) {
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(
+            isInvoice
+              ? "Enter an invoice number"
+              : "Enter a sales order number",
+            { isError: true },
+          );
+        }
+        return;
+      }
+      if (invoiceEntryMode !== "manual") {
+        const formData = new FormData();
+        formData.set(
+          "intent",
+          isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
+        );
+        formData.set("entryMode", "manual");
+        convertFetcher.submit(formData, { method: "post" });
+        setInvoiceEntryMode("manual");
+      }
+      closeNumberPrefModal(false);
+      return;
+    }
+
+    // once: keep this edited number, stay on / switch to auto for future documents
+    if (invoiceEntryMode !== "auto") {
       const formData = new FormData();
       formData.set(
         "intent",
         isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
       );
-      formData.set("entryMode", "manual");
+      formData.set("entryMode", "auto");
       convertFetcher.submit(formData, { method: "post" });
-      setInvoiceEntryMode("manual");
-      closeNumberPrefModal(false);
-      return;
+      setInvoiceEntryMode("auto");
     }
-
-    // once: keep this edited number, stay on auto for future documents
     closeNumberPrefModal(false);
   }, [
     closeNumberPrefModal,
     convertFetcher,
+    editInvoiceNumber,
+    invoiceEntryMode,
     isInvoice,
     numberPrefChoice,
   ]);
@@ -651,6 +703,7 @@ export default function SalesOrderDocumentPage() {
     );
     setEditTerms(data.invoiceTerms ?? data.settings.terms ?? "");
     numberPrefHandledRef.current = false;
+    setNumberPrefOpen(false);
     setInvoiceEditOpen(false);
   }, [
     data.invoiceCustomerNote,
@@ -661,6 +714,12 @@ export default function SalesOrderDocumentPage() {
     data.settings.notes,
     data.settings.terms,
   ]);
+
+  const requestCloseInvoiceEdit = useCallback(() => {
+    // Click-outside / dismiss: if number changed, show the 3 preference options first.
+    if (maybePromptNumberPref()) return;
+    closeInvoiceEdit();
+  }, [closeInvoiceEdit, maybePromptNumberPref]);
 
   const openInvoiceEdit = useCallback(() => {
     setEditInvoiceNumber(data.order.documentNumber || "");
@@ -993,6 +1052,12 @@ export default function SalesOrderDocumentPage() {
     );
   }, [convertFetcher, isCancelledOrder, isConverting]);
 
+  const handleDeleteInvoice = useCallback(() => {
+    if (!isInvoice || isConverting) return;
+    setDeleteInvoiceOpen(false);
+    convertFetcher.submit({ intent: "delete-invoice" }, { method: "post" });
+  }, [convertFetcher, isConverting, isInvoice]);
+
   useEffect(() => {
     if (convertFetcher.state !== "idle" || !convertFetcher.data) return;
     if (handledConvertDataRef.current === convertFetcher.data) return;
@@ -1018,6 +1083,10 @@ export default function SalesOrderDocumentPage() {
       } else if (result.document === "update-sales-order") {
         shopify.toast.show("Sales order details saved");
         setInvoiceEditOpen(false);
+      } else if (result.document === "delete-invoice") {
+        shopify.toast.show("Invoice deleted");
+        navigate(listPath);
+        return;
       } else if (result.document === "document-entry-mode") {
         const isSo = result.moduleId === "sales-order";
         shopify.toast.show(
@@ -1043,7 +1112,13 @@ export default function SalesOrderDocumentPage() {
     ) {
       revalidator.revalidate();
     }
-  }, [convertFetcher.data, convertFetcher.state, revalidator]);
+  }, [
+    convertFetcher.data,
+    convertFetcher.state,
+    listPath,
+    navigate,
+    revalidator,
+  ]);
 
   return (
     <s-page
@@ -1131,6 +1206,22 @@ export default function SalesOrderDocumentPage() {
       >
         {isPrinting ? "Preparing…" : "Print"}
       </s-button>
+      {isInvoice ? (
+        <s-button
+          slot="secondary-actions"
+          icon="delete"
+          tone="critical"
+          loading={
+            (isConverting &&
+              convertFetcher.formData?.get("intent") === "delete-invoice") ||
+            undefined
+          }
+          disabled={isConverting || undefined}
+          onClick={() => setDeleteInvoiceOpen(true)}
+        >
+          Delete
+        </s-button>
+      ) : null}
 
       <div className="sales-order-document-page">
         <s-grid
@@ -1298,8 +1389,34 @@ export default function SalesOrderDocumentPage() {
       </div>
       <AppProvider i18n={enTranslations}>
         <Modal
+          open={deleteInvoiceOpen}
+          onClose={() => setDeleteInvoiceOpen(false)}
+          title="Delete invoice?"
+          primaryAction={{
+            content: "Delete",
+            destructive: true,
+            onAction: handleDeleteInvoice,
+            loading:
+              isConverting &&
+              convertFetcher.formData?.get("intent") === "delete-invoice",
+          }}
+          secondaryActions={[
+            {
+              content: "Cancel",
+              onAction: () => setDeleteInvoiceOpen(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <Text as="p">
+              Are you sure you want to delete this invoice? The sales order will
+              stay; only the invoice record is removed.
+            </Text>
+          </Modal.Section>
+        </Modal>
+        <Modal
           open={invoiceEditOpen && !numberPrefOpen}
-          onClose={closeInvoiceEdit}
+          onClose={requestCloseInvoiceEdit}
           title={isInvoice ? "Edit invoice" : "Edit sales order"}
           primaryAction={{
             content: "Save",
@@ -1358,6 +1475,11 @@ export default function SalesOrderDocumentPage() {
                 rows={3}
                 onInput={(event: Event) => setEditTerms(fieldValue(event))}
               />
+              <s-banner tone="info" heading="Important">
+                Items, prices, discounts, tax, and totals cannot be edited here.
+                Update them in the Shopify order — changes sync to this{" "}
+                {isInvoice ? "invoice" : "sales order"} automatically.
+              </s-banner>
               {invoiceEntryMode === "manual" ? (
                 <Text as="p" tone="subdued">
                   {isInvoice ? "Invoice" : "Sales order"} numbers are set to
@@ -1378,6 +1500,8 @@ export default function SalesOrderDocumentPage() {
           primaryAction={{
             content: "Save",
             onAction: confirmNumberPref,
+            disabled:
+              numberPrefChoice === "manual" && !editInvoiceNumber.trim(),
           }}
           secondaryActions={[
             {
@@ -1416,6 +1540,25 @@ export default function SalesOrderDocumentPage() {
                   name="document-number-pref"
                   onChange={() => setNumberPrefChoice("manual")}
                 />
+                {numberPrefChoice === "manual" ? (
+                  <Box paddingInlineStart="600">
+                    <TextField
+                      label={
+                        isInvoice ? "Invoice number" : "Sales order number"
+                      }
+                      labelHidden
+                      value={editInvoiceNumber}
+                      onChange={setEditInvoiceNumber}
+                      placeholder={
+                        isInvoice
+                          ? "e.g. INV-0004"
+                          : "e.g. SO-0004"
+                      }
+                      autoComplete="off"
+                      autoFocus
+                    />
+                  </Box>
+                ) : null}
                 <RadioButton
                   label={
                     isInvoice

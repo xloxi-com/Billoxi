@@ -5,16 +5,25 @@ import prisma from "./db.server";
 import {
   formatNumberSeriesValue,
   normalizeNumberSeriesEntry,
+  parseNumberSeriesDigits,
+  parseNumberSeriesSequence,
   resolveNumberSeriesNextSequence,
+  widenStartingNumberPad,
   type NumberSeriesEntry,
 } from "./number-series";
-import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
+import {
+  loadNumberSeriesEntryForShop,
+  loadNumberSeriesForShop,
+  saveNumberSeriesForShop,
+} from "./shop-settings.server";
 
 type OrderGidRow = { orderGid: string };
 type OrderInvoiceAtRow = { orderGid: string; invoicedAt: Date };
 type OrderInvoiceNumberRow = {
   orderGid: string;
   invoicedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
   documentNumber: string | null;
   sequence: number | null;
   customerNote: string | null;
@@ -23,6 +32,8 @@ type OrderInvoiceNumberRow = {
 
 export type InvoicedOrderMeta = {
   invoicedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
   documentNumber: string | null;
   sequence: number | null;
   customerNote: string | null;
@@ -42,16 +53,61 @@ function invoiceSeriesEntry(entry: NumberSeriesEntry): NumberSeriesEntry {
   });
 }
 
-async function getLastInvoiceSequence(shop: string): Promise<number | null> {
-  const rows = await prisma.$queryRaw<Array<{ sequence: number | null }>>`
-    SELECT sequence
+async function getLastInvoiceSequence(
+  shop: string,
+  series?: NumberSeriesEntry,
+): Promise<number | null> {
+  const entry = series ? invoiceSeriesEntry(series) : null;
+  const rows = await prisma.$queryRaw<
+    Array<{ sequence: number | null; documentNumber: string | null }>
+  >`
+    SELECT sequence, "documentNumber"
     FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
-      AND sequence IS NOT NULL
-    ORDER BY sequence DESC
-    LIMIT 1
   `;
-  return rows[0]?.sequence ?? null;
+
+  let max: number | null = null;
+  for (const row of rows) {
+    if (typeof row.sequence === "number" && Number.isFinite(row.sequence)) {
+      max = max == null ? row.sequence : Math.max(max, row.sequence);
+    }
+    if (entry && row.documentNumber) {
+      const parsed = parseNumberSeriesSequence(row.documentNumber, entry);
+      if (parsed != null) {
+        max = max == null ? parsed : Math.max(max, parsed);
+      }
+    }
+  }
+  return max;
+}
+
+/** Public: last allocated invoice sequence for Settings next-number preview. */
+export async function getLastInvoiceAllocatedSequence(
+  shop: string,
+): Promise<number | null> {
+  const series = invoiceSeriesEntry(
+    await loadNumberSeriesEntryForShop(shop, "invoice"),
+  );
+  return getLastInvoiceSequence(shop, series);
+}
+
+async function getMaxInvoiceDigitWidth(
+  shop: string,
+  entry: NumberSeriesEntry,
+): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ documentNumber: string | null }>>`
+    SELECT "documentNumber"
+    FROM "OrderInvoiceStatus"
+    WHERE shop = ${shop}
+      AND "documentNumber" IS NOT NULL
+  `;
+  let width = Math.max(entry.startingNumber.replace(/\D/g, "").length, 1);
+  for (const row of rows) {
+    if (!row.documentNumber) continue;
+    const parsed = parseNumberSeriesDigits(row.documentNumber, entry);
+    if (parsed) width = Math.max(width, parsed.digitWidth);
+  }
+  return width;
 }
 
 async function allocateNextInvoiceNumber(
@@ -59,12 +115,38 @@ async function allocateNextInvoiceNumber(
   series: NumberSeriesEntry,
 ): Promise<{ sequence: number; documentNumber: string }> {
   const entry = invoiceSeriesEntry(series);
-  const last = await getLastInvoiceSequence(shop);
+  const [last, digitWidth] = await Promise.all([
+    getLastInvoiceSequence(shop, entry),
+    getMaxInvoiceDigitWidth(shop, entry),
+  ]);
   const sequence = resolveNumberSeriesNextSequence(entry, last);
+  const paddedEntry = {
+    ...entry,
+    startingNumber: widenStartingNumberPad(entry.startingNumber, digitWidth),
+  };
   return {
     sequence,
-    documentNumber: formatNumberSeriesValue(entry, sequence),
+    documentNumber: formatNumberSeriesValue(paddedEntry, sequence),
   };
+}
+
+/** Next invoice number that would be assigned (does not write). */
+export async function peekNextInvoiceDocumentNumber(
+  shop: string,
+): Promise<string> {
+  const series = await loadNumberSeriesEntryForShop(shop, "invoice");
+  const { documentNumber } = await allocateNextInvoiceNumber(shop, series);
+  return documentNumber;
+}
+
+/** Max digit width used by existing invoice numbers (for Settings preview pad). */
+export async function getInvoiceNumberDigitWidth(
+  shop: string,
+): Promise<number> {
+  const series = invoiceSeriesEntry(
+    await loadNumberSeriesEntryForShop(shop, "invoice"),
+  );
+  return getMaxInvoiceDigitWidth(shop, series);
 }
 
 /** Batch lookup: which order GIDs are marked invoiced for this shop. */
@@ -99,7 +181,7 @@ export async function getInvoicedMetaByOrderGids(
 
   // Prefer raw SQL so this works even if the Prisma client is temporarily stale.
   const rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
-    SELECT "orderGid", "invoicedAt", "documentNumber", sequence, "customerNote", terms
+    SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
     FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
       AND "orderGid" IN (${Prisma.join(orderGids)})
@@ -107,6 +189,8 @@ export async function getInvoicedMetaByOrderGids(
   for (const row of rows) {
     invoiced.set(row.orderGid, {
       invoicedAt: row.invoicedAt,
+      createdAt: row.createdAt ?? row.invoicedAt,
+      updatedAt: row.updatedAt ?? row.invoicedAt,
       documentNumber: row.documentNumber,
       sequence: row.sequence,
       customerNote: row.customerNote,
@@ -116,7 +200,7 @@ export async function getInvoicedMetaByOrderGids(
   return invoiced;
 }
 
-/** All order GIDs marked invoiced for this shop. */
+/** All order GIDs marked invoiced for this shop (newest created first). */
 export async function getAllInvoicedOrderGids(
   shop: string,
 ): Promise<string[]> {
@@ -124,7 +208,7 @@ export async function getAllInvoicedOrderGids(
     const rows = await prisma.orderInvoiceStatus.findMany({
       where: { shop },
       select: { orderGid: true },
-      orderBy: { invoicedAt: "desc" },
+      orderBy: { createdAt: "desc" },
     });
     return rows.map((row) => row.orderGid);
   }
@@ -133,7 +217,7 @@ export async function getAllInvoicedOrderGids(
     SELECT "orderGid"
     FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
-    ORDER BY "invoicedAt" DESC
+    ORDER BY "createdAt" DESC
   `;
   return rows.map((row) => row.orderGid);
 }
@@ -372,10 +456,29 @@ export async function updateInvoiceDocumentDetails(
   }
 
   try {
+    const series = invoiceSeriesEntry(
+      await loadNumberSeriesEntryForShop(shop, "invoice"),
+    );
+    const parsed = parseNumberSeriesDigits(documentNumber, series);
+    const sequence = parsed?.sequence ?? null;
+
+    // Clear sequence on any other row that already owns this number, so the
+    // unique (shop, sequence) constraint allows reassigning after a manual edit.
+    if (sequence != null) {
+      await prisma.$executeRaw`
+        UPDATE "OrderInvoiceStatus"
+        SET sequence = NULL, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE shop = ${shop}
+          AND sequence = ${sequence}
+          AND "orderGid" <> ${orderGid}
+      `;
+    }
+
     await prisma.$executeRaw`
       UPDATE "OrderInvoiceStatus"
       SET
         "documentNumber" = ${documentNumber},
+        sequence = ${sequence},
         "invoicedAt" = ${invoicedAt},
         "customerNote" = ${customerNote || null},
         terms = ${terms || null},
@@ -383,6 +486,25 @@ export async function updateInvoiceDocumentDetails(
       WHERE shop = ${shop}
         AND "orderGid" = ${orderGid}
     `;
+
+    // Keep auto-generate continuing after this number (INV-000100 → next INV-000101).
+    if (parsed) {
+      const allSeries = await loadNumberSeriesForShop(shop);
+      const current = allSeries.invoice;
+      const widened = widenStartingNumberPad(
+        current.startingNumber,
+        parsed.digitWidth,
+      );
+      if (widened !== current.startingNumber) {
+        await saveNumberSeriesForShop(shop, {
+          ...allSeries,
+          invoice: {
+            ...current,
+            startingNumber: widened,
+          },
+        });
+      }
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update invoice";

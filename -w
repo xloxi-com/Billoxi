@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><link rel="preconnect" href="https://cdn.shopify.com/"/><link rel="stylesheet" href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css"/><link data-react-router-critical-css="" rel="stylesheet" href="/@react-router/critical.css?pathname=/"/></head><body><div class="_index_1hqgz_1"><div class="_content_1hqgz_43"><h1 class="_heading_1hqgz_21">A short heading about [your app]</h1><p class="_text_1hqgz_23">A tagline about [your app] that describes your value proposition.</p><form method="post" action="/auth/login" class="_form_1hqgz_53" data-discover="true"><label class="_label_1hqgz_69"><span>Shop domain</span><input class="_input_1hqgz_85" type="text" name="shop"/><span>e.g: my-shop-domain.myshopify.com</span></label><button class="_button_1hqgz_93" type="submit">Log in</button></form><ul class="_list_1hqgz_101"><li><strong>Product feature</strong>. Some detail about your feature and its benefit to your customer.</li><li><strong>Product feature</strong>. Some detail about your feature and its benefit to your customer.</li><li><strong>Product feature</strong>. Some detail about your feature and its benefit to your customer.</li></ul></div></div><script>((storageKey2, restoreKey) => {
+    if (!window.history.state || !window.history.state.key) {
+      let key = Math.random().toString(32).slice(2);
+      window.history.replaceState({ key }, "");
+    }
+    try {
+      let positions = JSON.parse(sessionStorage.getItem(storageKey2) || "{}");
+      let storedY = positions[restoreKey || window.history.state.key];
+      if (typeof storedY === "number") {
+        window.scrollTo(0, storedY);
+      }
+    } catch (error) {
+      console.error(error);
+      sessionStorage.removeItem(storageKey2);
+    }
+  })("react-router-scroll-positions", null)</script><link rel="modulepreload" href="/node_modules/@react-router/dev/dist/config/defaults/entry.client.tsx"/><link rel="modulepreload" href="/app/root.tsx"/><link rel="modulepreload" href="/app/routes/_index/route.tsx"/><script>window.__reactRouterContext = {"basename":"/","future":{"unstable_optimizeDeps":false,"v8_passThroughRequests":true,"v8_trailingSlashAwareDataRequests":true,"unstable_previewServerPrerendering":false,"v8_middleware":true,"v8_splitRouteModules":true,"v8_viteEnvironmentApi":true},"routeDiscovery":{"mode":"lazy","manifestPath":"/__manifest"},"ssr":true,"isSpaMode":false,"criticalCss":{"rel":"stylesheet","href":"/@react-router/critical.css?pathname=/"}};window.__reactRouterContext.stream = new ReadableStream({start(controller){window.__reactRouterContext.streamController = controller;}}).pipeThrough(new TextEncoderStream());</script><script type="module" async="">import "/@id/__x00__virtual:react-router/inject-hmr-runtime";;
+import * as route0 from "/app/root.tsx";
+import * as route1 from "/app/routes/_index/route.tsx";
+  window.__reactRouterManifest = {
+  "version": "0.9384611326087364",
+  "url": "/@id/__x00__virtual:react-router/browser-manifest",
+  "hmr": {
+    "runtime": "/@id/__x00__virtual:react-router/inject-hmr-runtime"
+  },
+  "entry": {
+    "module": "/node_modules/@react-router/dev/dist/config/defaults/entry.client.tsx",
+    "imports": []
+  },
+  "routes": {
+    "root": {
+      "id": "root",
+      "path": "",
+      "module": "/app/root.tsx",
+      "hasAction": false,
+      "hasLoader": false,
+      "hasClientAction": false,
+      "hasClientLoader": false,
+      "hasClientMiddleware": false,
+      "hasDefaultExport": true,
+      "hasErrorBoundary": false,
+      "imports": []
+    },
+    "routes/_index": {
+      "id": "routes/_index",
+      "parentId": "root",
+      "index": true,
+      "module": "/app/routes/_index/route.tsx",
+      "hasAction": false,
+      "hasLoader": true,
+      "hasClientAction": false,
+      "hasClientLoader": false,
+      "hasClientMiddleware": false,
+      "hasDefaultExport": true,
+      "hasErrorBoundary": false,
+      "imports": []
+    }
+  }
+};
+  window.__reactRouterRouteModules = {"root":route0,"routes/_index":route1};
+
+import("/node_modules/@react-router/dev/dist/config/defaults/entry.client.tsx");</script></body></html><!--$--><script>window.__reactRouterContext.streamController.enqueue("[{\"_1\":2,\"_3\":-5,\"_4\":-5},\"loaderData\",{\"_5\":6},\"actionData\",\"errors\",\"routes/_index\",{\"_7\":8},\"showForm\",true]\n");</script><!--$--><script>window.__reactRouterContext.streamController.close();</script><!--/$--><!--/$-->

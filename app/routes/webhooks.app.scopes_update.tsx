@@ -1,8 +1,10 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { assertValidShopifyWebhookHmac } from "../webhook-hmac.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+    await assertValidShopifyWebhookHmac(request);
     const { payload, session, topic, shop } = await authenticate.webhook(request);
     console.log(`Received ${topic} webhook for ${shop}`);
 

@@ -710,6 +710,13 @@
   line-height: 1.4;
 }
 
+.live-document__items-in-total {
+  margin-top: 0.65em;
+  color: var(--doc-text-color, #303030);
+  font-size: var(--doc-table-body-size, 12px);
+  line-height: 1.5;
+}
+
 .live-document__tax-summary {
   width: 100%;
   margin-top: 0;

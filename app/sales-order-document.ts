@@ -186,6 +186,8 @@ export type TemplateEditorSettings = {
   totals: {
     showSubtotal: boolean;
     subtotalLabel: string;
+    showQuantity: boolean;
+    itemsInTotalLabel: string;
     showTaxLines: boolean;
     showDiscountAmount: boolean;
     discountAmountLabel: string;
@@ -197,6 +199,7 @@ export type TemplateEditorSettings = {
     paidAmountLabel: string;
     showBalanceDue: boolean;
     balanceDueLabel: string;
+    refundedAmountLabel: string;
     paymentStatusStyle: PaymentStatusStyle;
     /** @deprecated Prefer showDiscountAmount */
     showDiscount?: boolean;
@@ -434,6 +437,10 @@ export type SalesOrderDocumentData = {
   paidAmount: string;
   /** Remaining balance due. */
   balanceDue: string;
+  /** Amount refunded to the customer (from Shopify totalRefundedSet). */
+  refundedAmount: string;
+  /** Shopify financial status, e.g. PAID, REFUNDED. */
+  financialStatus?: string | null;
   currencyCode: string;
   /** Grouped tax rows for the optional tax summary table. */
   taxSummary: Array<{
@@ -1893,8 +1900,42 @@ export function hasNonZeroAmount(value: string | number | null | undefined) {
   return Number.isFinite(amount) && Math.abs(amount) >= 0.005;
 }
 
+export function normalizeFinancialStatus(value: string | null | undefined) {
+  return (value || "").toUpperCase();
+}
+
+/** Hide Paid Amount on fully refunded/voided orders. */
+export function shouldShowDocumentPaidAmount(
+  order: Pick<SalesOrderDocumentData, "paidAmount" | "financialStatus">,
+  enabled: boolean,
+) {
+  if (!enabled) return false;
+  const status = normalizeFinancialStatus(order.financialStatus);
+  if (status === "REFUNDED" || status === "VOIDED") return false;
+  return hasNonZeroAmount(order.paidAmount);
+}
+
+/** Show Balance Due; on fully refunded orders use invoice total (not $0). */
+export function shouldShowDocumentBalanceDue(
+  order: Pick<SalesOrderDocumentData, "balanceDue" | "financialStatus">,
+  enabled: boolean,
+) {
+  if (!enabled) return false;
+  const status = normalizeFinancialStatus(order.financialStatus);
+  if (status === "REFUNDED") return true;
+  return hasNonZeroAmount(order.balanceDue);
+}
+
+export function shouldShowDocumentRefundedAmount(
+  order: Pick<SalesOrderDocumentData, "refundedAmount" | "financialStatus">,
+) {
+  const status = normalizeFinancialStatus(order.financialStatus);
+  if (status !== "REFUNDED" && status !== "PARTIALLY_REFUNDED") return false;
+  return hasNonZeroAmount(order.refundedAmount);
+}
+
 /**
- * Keep Paid Amount + Balance Due consistent with document Total.
+ * Keep Paid / Balance / Refunded rows consistent with document Total.
  * Shopify outstanding/received can drift by cents from currentTotalPriceSet.
  */
 export function reconcilePaymentAmounts(
@@ -1902,12 +1943,54 @@ export function reconcilePaymentAmounts(
   paid: string,
   outstanding: string,
   financialStatus?: string | null,
-): { paidAmount: string; balanceDue: string } {
+  refunded?: string,
+): {
+  paidAmount: string;
+  balanceDue: string;
+  refundedAmount: string;
+} {
   const totalN = Math.round((parseAmountNumber(total) || 0) * 100) / 100;
   let paidN = Math.round((parseAmountNumber(paid) || 0) * 100) / 100;
   const outstandingN =
     Math.round((parseAmountNumber(outstanding) || 0) * 100) / 100;
-  const status = (financialStatus || "").toUpperCase();
+  let refundedN = Math.round((parseAmountNumber(refunded) || 0) * 100) / 100;
+  const status = normalizeFinancialStatus(financialStatus);
+
+  if (status === "REFUNDED") {
+    if (refundedN <= 0 && totalN > 0) refundedN = totalN;
+    return {
+      paidAmount: "0.00",
+      // Invoice total — not $0 (refund recorded separately on Refunded Amount).
+      balanceDue: totalN.toFixed(2),
+      refundedAmount: refundedN.toFixed(2),
+    };
+  }
+
+  if (status === "VOIDED") {
+    return {
+      paidAmount: "0.00",
+      balanceDue: "0.00",
+      refundedAmount: "0.00",
+    };
+  }
+
+  if (status === "PARTIALLY_REFUNDED" && refundedN > 0) {
+    if (paidN > refundedN) {
+      paidN = Math.round((paidN - refundedN) * 100) / 100;
+    } else if (paidN <= 0 && totalN > 0) {
+      paidN = Math.max(0, Math.round((totalN - refundedN) * 100) / 100);
+    }
+    let balanceN =
+      outstandingN >= 0
+        ? Math.round(outstandingN * 100) / 100
+        : Math.round((totalN - paidN) * 100) / 100;
+    if (balanceN < 0) balanceN = 0;
+    return {
+      paidAmount: paidN.toFixed(2),
+      balanceDue: balanceN.toFixed(2),
+      refundedAmount: refundedN.toFixed(2),
+    };
+  }
 
   if (
     (status === "PAID" || status === "PARTIALLY_REFUNDED") &&
@@ -1938,12 +2021,23 @@ export function reconcilePaymentAmounts(
   return {
     paidAmount: paidN.toFixed(2),
     balanceDue: balanceN.toFixed(2),
+    refundedAmount: "0.00",
   };
 }
 
 /** Qty always as 2 European decimals, e.g. 10 → 10,00 */
 export function formatQuantityDisplay(value: string | number | null | undefined) {
   return formatAmountDisplay(value);
+}
+
+export function computeTotalItemQuantity(
+  lineItems: SalesOrderDocumentData["lineItems"],
+) {
+  const total = lineItems.reduce(
+    (sum, item) => sum + (parseAmountNumber(item.quantity) || 0),
+    0,
+  );
+  return formatQuantityDisplay(total);
 }
 
 /**
@@ -2234,6 +2328,12 @@ export function mergeTotalsSettings(
     ...merged,
     showSubtotal: merged.showSubtotal !== false,
     subtotalLabel: merged.subtotalLabel || defaults.subtotalLabel,
+    showQuantity: input.showQuantity === true,
+    itemsInTotalLabel:
+      typeof input.itemsInTotalLabel === "string" &&
+      input.itemsInTotalLabel.trim() !== ""
+        ? input.itemsInTotalLabel
+        : defaults.itemsInTotalLabel,
     showTaxLines:
       typeof input.showTaxLines === "boolean"
         ? input.showTaxLines
@@ -2254,6 +2354,8 @@ export function mergeTotalsSettings(
         ? input.showBalanceDue
         : defaults.showBalanceDue,
     balanceDueLabel: merged.balanceDueLabel || defaults.balanceDueLabel,
+    refundedAmountLabel:
+      merged.refundedAmountLabel || defaults.refundedAmountLabel,
     paymentStatusStyle: normalizePaymentStatusStyle(
       input.paymentStatusStyle,
       defaults.paymentStatusStyle ?? "inTotals",
@@ -2422,6 +2524,8 @@ export function defaultTemplateSettings(
     totals: {
       showSubtotal: true,
       subtotalLabel: "Sub Total",
+      showQuantity: false,
+      itemsInTotalLabel: "Items in Total",
       // Invoice: tax line details + tax summary table off by default.
       // Sales-order premium: tax line details on.
       showTaxLines: isPremium && !isInvoice,
@@ -2438,6 +2542,7 @@ export function defaultTemplateSettings(
           ? true
           : preset.showBalanceDue === true,
       balanceDueLabel: "Balance Due",
+      refundedAmountLabel: "Refunded Amount",
       paymentStatusStyle: preset.paymentStatusStyle,
       totalLabel: "Total",
     },

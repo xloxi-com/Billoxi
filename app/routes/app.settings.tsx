@@ -10,16 +10,22 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { adminAuthenticationContext } from "../shopify-context.server";
 import {
-  formatNumberSeriesPreview,
+  formatNumberSeriesNextPreview,
   formatNumberSeriesValue,
   normalizeNumberSeries,
   NUMBER_SERIES_MODULES,
   numberingFromSeries,
+  parseNumberSeriesDigits,
   resolveNumberSeriesNextSequence,
+  widenStartingNumberPad,
   type NumberSeriesEntry,
   type NumberSeriesMap,
   type NumberSeriesModuleId,
 } from "../number-series";
+import {
+  getInvoiceNumberDigitWidth,
+  getLastInvoiceAllocatedSequence,
+} from "../order-invoice-status.server";
 import {
   normalizeSmtpSettings,
   type SmtpEncryption,
@@ -121,19 +127,31 @@ export async function loader({ context }: LoaderFunctionArgs) {
     smtpSettings,
     numberSeries,
     lastAllocatedSequence,
+    lastInvoiceSequence,
+    invoiceDigitWidth,
     numberBackfillUndo,
   ] = await Promise.all([
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
     loadNumberSeriesForShop(session.shop),
     getLastAllocatedSequence(session.shop, selectedSalesOrderTemplateId),
+    getLastInvoiceAllocatedSequence(session.shop),
+    getInvoiceNumberDigitWidth(session.shop),
     getNumberBackfillUndoStatus(session.shop),
   ]);
+  const lastAllocatedByModule: Record<NumberSeriesModuleId, number | null> = {
+    "sales-order": lastAllocatedSequence,
+    invoice: lastInvoiceSequence,
+    "credit-note": null,
+    "packing-slip": null,
+  };
   return {
     storeDetails,
     smtpSettings,
     numberSeries,
     lastAllocatedSequence,
+    lastAllocatedByModule,
+    invoiceDigitWidth,
     numberBackfillUndo,
   };
 }
@@ -222,11 +240,30 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     const saved = await saveNumberSeriesForShop(session.shop, numberSeries);
-    await syncNumberCounter(session.shop, selectedTemplateId, numbering);
+    await syncNumberCounter(
+      session.shop,
+      selectedTemplateId,
+      numbering,
+      saved["sales-order"].nextSequence,
+    );
+    const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
+      await Promise.all([
+        getLastAllocatedSequence(session.shop, selectedTemplateId),
+        getLastInvoiceAllocatedSequence(session.shop),
+        getInvoiceNumberDigitWidth(session.shop),
+      ]);
     return {
       saved: true,
       section: "number-series" as const,
       numberSeries: saved,
+      lastAllocatedSequence,
+      lastAllocatedByModule: {
+        "sales-order": lastAllocatedSequence,
+        invoice: lastInvoiceSequence,
+        "credit-note": null,
+        "packing-slip": null,
+      } satisfies Record<NumberSeriesModuleId, number | null>,
+      invoiceDigitWidth,
     };
   }
 
@@ -365,6 +402,15 @@ export default function SettingsPage() {
   const [lastAllocatedSequence, setLastAllocatedSequence] = useState<
     number | null
   >(data.lastAllocatedSequence);
+  const [lastAllocatedByModule, setLastAllocatedByModule] = useState<
+    Record<NumberSeriesModuleId, number | null>
+  >(data.lastAllocatedByModule);
+  const [invoiceDigitWidth, setInvoiceDigitWidth] = useState(
+    data.invoiceDigitWidth,
+  );
+  const [previewDrafts, setPreviewDrafts] = useState<
+    Partial<Record<NumberSeriesModuleId, string>>
+  >({});
   const [backfillUndo, setBackfillUndo] = useState<{
     assignedCount: number;
     assignedAt: string;
@@ -408,10 +454,18 @@ export default function SettingsPage() {
     setNumberSeries(data.numberSeries);
     setSavedNumberSeries(data.numberSeries);
     setLastAllocatedSequence(data.lastAllocatedSequence);
+    setLastAllocatedByModule(data.lastAllocatedByModule);
+    setInvoiceDigitWidth(data.invoiceDigitWidth);
     setBackfillUndo(data.numberBackfillUndo);
     setIsNumberSeriesDirty(false);
     setIsEditingSeries(false);
-  }, [data.numberSeries, data.lastAllocatedSequence, data.numberBackfillUndo]);
+  }, [
+    data.numberSeries,
+    data.lastAllocatedSequence,
+    data.lastAllocatedByModule,
+    data.invoiceDigitWidth,
+    data.numberBackfillUndo,
+  ]);
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
@@ -424,7 +478,12 @@ export default function SettingsPage() {
         (typeof fetcher.data.lastAllocatedSequence === "number" ||
           fetcher.data.lastAllocatedSequence === null)
       ) {
-        setLastAllocatedSequence(fetcher.data.lastAllocatedSequence);
+        const nextLast = fetcher.data.lastAllocatedSequence;
+        setLastAllocatedSequence(nextLast);
+        setLastAllocatedByModule((current) => ({
+          ...current,
+          "sales-order": nextLast,
+        }));
       }
       const assigned =
         "assigned" in fetcher.data ? Number(fetcher.data.assigned) : 0;
@@ -453,7 +512,12 @@ export default function SettingsPage() {
           (typeof fetcher.data.lastAllocatedSequence === "number" ||
             fetcher.data.lastAllocatedSequence === null)
         ) {
-          setLastAllocatedSequence(fetcher.data.lastAllocatedSequence);
+          const nextLast = fetcher.data.lastAllocatedSequence;
+          setLastAllocatedSequence(nextLast);
+          setLastAllocatedByModule((current) => ({
+            ...current,
+            "sales-order": nextLast,
+          }));
         }
         setBackfillUndo(null);
         if (typeof shopify !== "undefined" && shopify.toast) {
@@ -508,6 +572,31 @@ export default function SettingsPage() {
       setSavedNumberSeries(fetcher.data.numberSeries);
       setIsNumberSeriesDirty(false);
       setIsEditingSeries(false);
+      setPreviewDrafts({});
+      if (
+        "lastAllocatedByModule" in fetcher.data &&
+        fetcher.data.lastAllocatedByModule
+      ) {
+        setLastAllocatedByModule(
+          fetcher.data.lastAllocatedByModule as Record<
+            NumberSeriesModuleId,
+            number | null
+          >,
+        );
+      }
+      if (
+        "lastAllocatedSequence" in fetcher.data &&
+        (typeof fetcher.data.lastAllocatedSequence === "number" ||
+          fetcher.data.lastAllocatedSequence === null)
+      ) {
+        setLastAllocatedSequence(fetcher.data.lastAllocatedSequence);
+      }
+      if (
+        "invoiceDigitWidth" in fetcher.data &&
+        typeof fetcher.data.invoiceDigitWidth === "number"
+      ) {
+        setInvoiceDigitWidth(fetcher.data.invoiceDigitWidth);
+      }
     }
 
     if (typeof shopify !== "undefined" && shopify.toast) {
@@ -557,6 +646,49 @@ export default function SettingsPage() {
       },
     }));
     setIsNumberSeriesDirty(true);
+  };
+
+  const applyPreviewDraft = (moduleId: NumberSeriesModuleId, raw: string) => {
+    setPreviewDrafts((current) => ({ ...current, [moduleId]: raw }));
+    setIsNumberSeriesDirty(true);
+    const entry = numberSeries[moduleId];
+    const parsed =
+      parseNumberSeriesDigits(raw.trim(), entry) ||
+      parseNumberSeriesDigits(
+        `${entry.prefix}${raw.trim()}${entry.suffix ?? ""}`,
+        entry,
+      );
+    if (!parsed) return;
+
+    const last = lastAllocatedByModule[moduleId] ?? null;
+    const startAt = Number.parseInt(entry.startingNumber, 10);
+    const start = Number.isFinite(startAt) && startAt >= 0 ? startAt : 1;
+    const minNext = last == null ? start : last + 1;
+    const nextSequence = Math.max(minNext, parsed.sequence);
+    const width = Math.max(
+      parsed.digitWidth,
+      moduleId === "invoice" ? invoiceDigitWidth : 0,
+      entry.startingNumber.length,
+    );
+    const startingNumber = widenStartingNumberPad(entry.startingNumber, width);
+    if (moduleId === "invoice") {
+      setInvoiceDigitWidth((prev) => Math.max(prev, width));
+    }
+    setNumberSeries((current) => ({
+      ...current,
+      [moduleId]: {
+        ...current[moduleId],
+        nextSequence,
+        startingNumber,
+      },
+    }));
+  };
+
+  const commitPreviewDraft = (moduleId: NumberSeriesModuleId) => {
+    setPreviewDrafts((current) => ({
+      ...current,
+      [moduleId]: previewForModule(moduleId),
+    }));
   };
 
   const updateCustomField = (
@@ -650,6 +782,8 @@ export default function SettingsPage() {
       setNumberSeries(savedNumberSeries);
       setIsNumberSeriesDirty(false);
       setIsEditingSeries(false);
+      setPreviewDrafts({});
+      setInvoiceDigitWidth(data.invoiceDigitWidth);
       return;
     }
     setStoreDetails(savedStoreDetails);
@@ -685,6 +819,31 @@ export default function SettingsPage() {
       lastAllocatedSequence,
     ),
   );
+
+  const previewForModule = (moduleId: NumberSeriesModuleId) => {
+    const entry = numberSeries[moduleId];
+    const last = lastAllocatedByModule[moduleId] ?? null;
+    if (moduleId === "invoice") {
+      const padded = {
+        ...entry,
+        startingNumber: widenStartingNumberPad(
+          entry.startingNumber,
+          Math.max(invoiceDigitWidth, entry.startingNumber.length),
+        ),
+      };
+      return formatNumberSeriesNextPreview(padded, last);
+    }
+    return formatNumberSeriesNextPreview(entry, last);
+  };
+
+  const beginEditingSeries = () => {
+    const drafts: Partial<Record<NumberSeriesModuleId, string>> = {};
+    for (const module of NUMBER_SERIES_MODULES) {
+      drafts[module.id] = previewForModule(module.id);
+    }
+    setPreviewDrafts(drafts);
+    setIsEditingSeries(true);
+  };
 
   return (
     <>
@@ -996,6 +1155,8 @@ export default function SettingsPage() {
                             setNumberSeries(savedNumberSeries);
                             setIsNumberSeriesDirty(false);
                             setIsEditingSeries(false);
+                            setPreviewDrafts({});
+                            setInvoiceDigitWidth(data.invoiceDigitWidth);
                           }}
                           disabled={isSaving || undefined}
                         >
@@ -1005,7 +1166,7 @@ export default function SettingsPage() {
                         <s-button
                           variant="secondary"
                           icon="edit"
-                          onClick={() => setIsEditingSeries(true)}
+                          onClick={beginEditingSeries}
                         >
                           Edit
                         </s-button>
@@ -1072,9 +1233,30 @@ export default function SettingsPage() {
                                   )}
                                 </s-table-cell>
                                 <s-table-cell>
-                                  <s-text type="strong">
-                                    {formatNumberSeriesPreview(entry)}
-                                  </s-text>
+                                  {isEditingSeries ? (
+                                    <s-text-field
+                                      label="Preview / next number"
+                                      labelAccessibilityVisibility="exclusive"
+                                      value={
+                                        previewDrafts[module.id] ??
+                                        previewForModule(module.id)
+                                      }
+                                      onInput={(event) =>
+                                        applyPreviewDraft(
+                                          module.id,
+                                          fieldValue(event),
+                                        )
+                                      }
+                                      onBlur={() =>
+                                        commitPreviewDraft(module.id)
+                                      }
+                                      autocomplete="off"
+                                    />
+                                  ) : (
+                                    <s-text type="strong">
+                                      {previewForModule(module.id)}
+                                    </s-text>
+                                  )}
                                 </s-table-cell>
                               </s-table-row>
                             );

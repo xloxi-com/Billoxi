@@ -9,8 +9,12 @@ import {
   formatSalesOrderDocumentNumber,
   formatTaxLineLabel,
   formatQuantityDisplay,
+  computeTotalItemQuantity,
   formatAmountDisplay,
   hasNonZeroAmount,
+  shouldShowDocumentPaidAmount,
+  shouldShowDocumentBalanceDue,
+  shouldShowDocumentRefundedAmount,
   lineItemImageSizeMm,
   normalizePaymentStatusStyle,
   paperMarginMm,
@@ -1358,6 +1362,15 @@ async function buildSalesOrderVectorPdf({
     y += itemRowH;
   });
 
+  if (settings.totals.showQuantity) {
+    y += emMm(sizeBody, 0.35);
+    setFont("normal", sizeTable);
+    pdf.setTextColor(...textRgb);
+    const itemsInTotalText = `${settings.totals.itemsInTotalLabel}: ${computeTotalItemQuantity(order.lineItems)}`;
+    pdf.text(itemsInTotalText, margin.left, y + bodyLineH * 0.7);
+    y += bodyLineH + emMm(sizeBody, 0.25);
+  }
+
   // Totals — keep the whole block on one page (no mid-row splits)
   y += contentWidth * 0.02 + emMm(sizeBody, 0.2);
   const totalsW = contentWidth * 0.43;
@@ -1418,13 +1431,19 @@ async function buildSalesOrderVectorPdf({
     settings.totals.paymentStatusStyle,
   );
   const paymentStatusCells = [
-    settings.totals.showPaidAmount && hasNonZeroAmount(order.paidAmount)
+    shouldShowDocumentPaidAmount(order, settings.totals.showPaidAmount)
       ? {
           label: settings.totals.paidAmountLabel,
           value: `${prefix}${formatAmountDisplay(order.paidAmount)}`,
         }
       : null,
-    settings.totals.showBalanceDue && hasNonZeroAmount(order.balanceDue)
+    shouldShowDocumentRefundedAmount(order)
+      ? {
+          label: settings.totals.refundedAmountLabel,
+          value: `${prefix}${formatAmountDisplay(order.refundedAmount)}`,
+        }
+      : null,
+    shouldShowDocumentBalanceDue(order, settings.totals.showBalanceDue)
       ? {
           label: settings.totals.balanceDueLabel,
           value: `${prefix}${formatAmountDisplay(order.balanceDue)}`,

@@ -186,6 +186,8 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   };
 };
 
+export const shouldRevalidate = () => true;
+
 export const action = async ({ request, context }: ActionFunctionArgs) => {
   const { session } = context.get(adminAuthenticationContext);
   const formData = await request.formData();
@@ -194,9 +196,15 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
   if (
     intent !== "convert-to-invoice" &&
     intent !== "convert-to-packing-slip" &&
-    intent !== "delete-invoice"
+    intent !== "delete-invoice" &&
+    intent !== "reload-list"
   ) {
     return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
+  }
+
+  if (intent === "reload-list") {
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({ ok: true, document: "reload" as const });
   }
 
   const orderIds = formData
@@ -211,11 +219,17 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     );
   }
 
+  let invoiceNumbers: Record<string, string> | undefined;
+
   if (intent === "convert-to-invoice") {
+    invoiceNumbers = {};
     await Promise.all(
-      orderIds.map((orderId) =>
-        markOrderInvoiced(session.shop, toOrderGid(orderId)),
-      ),
+      orderIds.map(async (orderId) => {
+        const gid = toOrderGid(orderId);
+        const documentNumber = await markOrderInvoiced(session.shop, gid);
+        invoiceNumbers![orderId] = documentNumber;
+        invoiceNumbers![gid] = documentNumber;
+      }),
     );
     invalidateSalesOrdersCache(session.shop);
   }
@@ -240,6 +254,7 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
       deleted,
       document: "delete-invoice" as const,
       orderId: orderIds[0] ?? null,
+      orderIds,
     });
   }
 
@@ -249,14 +264,63 @@ export const action = async ({ request, context }: ActionFunctionArgs) => {
     document:
       intent === "convert-to-packing-slip" ? "packing-slip" : "invoice",
     orderId: orderIds[0] ?? null,
+    orderIds,
+    ...(invoiceNumbers ? { invoiceNumbers } : {}),
   });
 };
 
 export const headers: HeadersFunction = (headersArgs) => {
   const headers = boundary.headers(headersArgs);
-  headers.set("Cache-Control", "private, max-age=0, stale-while-revalidate=30");
+  headers.set("Cache-Control", "private, no-store");
   return headers;
 };
+
+const PENDING_INVOICES_KEY = "billoxi:pending-invoices";
+const INVOICE_LIST_BUST_KEY = "billoxi:invoice-list-bust";
+
+function readPendingInvoices(): SalesOrderRow[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_INVOICES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as SalesOrderRow[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingInvoices(rows: SalesOrderRow[]) {
+  if (typeof window === "undefined") return;
+  if (rows.length === 0) {
+    window.sessionStorage.removeItem(PENDING_INVOICES_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(PENDING_INVOICES_KEY, JSON.stringify(rows));
+}
+
+function pushPendingInvoices(rows: SalesOrderRow[]) {
+  if (rows.length === 0) return;
+  const byId = new Map(readPendingInvoices().map((row) => [row.id, row]));
+  for (const row of rows) byId.set(row.id, row);
+  writePendingInvoices([...byId.values()]);
+  window.sessionStorage.setItem(INVOICE_LIST_BUST_KEY, "1");
+}
+
+function removePendingInvoices(orderIds: Iterable<string>) {
+  const remove = new Set(orderIds);
+  writePendingInvoices(readPendingInvoices().filter((row) => !remove.has(row.id)));
+}
+
+function mergeInvoiceOrders(
+  loaded: SalesOrderRow[],
+  pending: SalesOrderRow[],
+): SalesOrderRow[] {
+  if (pending.length === 0) return loaded;
+  const loadedIds = new Set(loaded.map((row) => row.id));
+  const extras = pending.filter((row) => !loadedIds.has(row.id));
+  return extras.length === 0 ? loaded : [...extras, ...loaded];
+}
 
 export default function SalesOrderPage() {
   const data = useLoaderData<typeof loader>();
@@ -271,7 +335,31 @@ export default function SalesOrderPage() {
       ? IndexFiltersMode.Filtering
       : IndexFiltersMode.Default,
   );
-  const orders = data.orders;
+  const [orders, setOrders] = useState(() =>
+    isInvoiceList
+      ? mergeInvoiceOrders(data.orders, readPendingInvoices())
+      : data.orders,
+  );
+
+  useEffect(() => {
+    if (isInvoiceList) {
+      const pending = readPendingInvoices();
+      const loadedIds = new Set(data.orders.map((row) => row.id));
+      const stillPending = pending.filter((row) => !loadedIds.has(row.id));
+      writePendingInvoices(stillPending);
+      setOrders(mergeInvoiceOrders(data.orders, stillPending));
+      return;
+    }
+    setOrders(data.orders);
+  }, [data.orders, isInvoiceList]);
+
+  useEffect(() => {
+    if (!isInvoiceList) return;
+    if (typeof window === "undefined") return;
+    if (window.sessionStorage.getItem(INVOICE_LIST_BUST_KEY) !== "1") return;
+    window.sessionStorage.removeItem(INVOICE_LIST_BUST_KEY);
+    revalidator.revalidate();
+  }, [isInvoiceList, revalidator]);
 
   useEffect(() => {
     const localTemplate = window.localStorage.getItem(
@@ -756,14 +844,21 @@ export default function SalesOrderPage() {
       ok?: boolean;
       converted?: number;
       deleted?: number;
-      document?: "invoice" | "packing-slip" | "delete-invoice";
+      document?: "invoice" | "packing-slip" | "delete-invoice" | "reload";
       orderId?: string | null;
+      orderIds?: string[];
+      invoiceNumbers?: Record<string, string>;
       error?: string;
     };
     if (!result.ok) {
       if (result.error && typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(String(result.error), { isError: true });
       }
+      return;
+    }
+
+    if (result.document === "reload") {
+      revalidator.revalidate();
       return;
     }
 
@@ -779,13 +874,95 @@ export default function SalesOrderPage() {
         shopify.toast.show("Converted to invoice");
       }
     }
-    clearSelection();
-    revalidator.revalidate();
-  }, [clearSelection, convertFetcher.data, convertFetcher.state, revalidator]);
+
+    const patchedIds = new Set(
+      (result.orderIds?.length
+        ? result.orderIds
+        : result.orderId
+          ? [result.orderId]
+          : []
+      ).map(String),
+    );
+
+    if (patchedIds.size > 0) {
+      if (result.document === "delete-invoice") {
+        removePendingInvoices(patchedIds);
+        setOrders((prev) =>
+          isInvoiceList
+            ? prev.filter((order) => !patchedIds.has(order.id))
+            : prev.map((order) =>
+                patchedIds.has(order.id)
+                  ? { ...order, invoiced: false, invoicedAt: null, invoiceNumber: "" }
+                  : order,
+              ),
+        );
+        clearSelection();
+      } else if (result.document === "packing-slip") {
+        setOrders((prev) =>
+          prev.map((order) =>
+            patchedIds.has(order.id)
+              ? { ...order, packingSlip: true }
+              : order,
+          ),
+        );
+      } else if (result.document === "invoice") {
+        const invoicedAt = new Date().toISOString();
+        const invoiceNumbers = result.invoiceNumbers || {};
+        const invoiceDateLabel = new Intl.DateTimeFormat("en-IN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(invoicedAt));
+        const pendingRows = orders
+          .filter((order) => patchedIds.has(order.id))
+          .map((order) => ({
+            ...order,
+            invoiced: true,
+            invoicedAt: order.invoicedAt || invoicedAt,
+            // Invoice list Date column uses invoice (convert) date.
+            date: order.invoicedAt ? order.date : invoiceDateLabel,
+            invoiceNumber:
+              invoiceNumbers[order.id] || order.invoiceNumber || "",
+          }));
+        pushPendingInvoices(pendingRows);
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (!patchedIds.has(order.id)) return order;
+            const invoiceNumber =
+              invoiceNumbers[order.id] || order.invoiceNumber || "";
+            return {
+              ...order,
+              invoiced: true,
+              invoicedAt: order.invoicedAt || invoicedAt,
+              invoiceNumber,
+            };
+          }),
+        );
+      }
+    }
+  }, [
+    clearSelection,
+    convertFetcher.data,
+    convertFetcher.state,
+    isInvoiceList,
+    orders,
+    revalidator,
+  ]);
 
   useEffect(() => {
     setQueryValue(data.query);
   }, [data.query]);
+
+  const handleReload = useCallback(() => {
+    if (isBusy || convertFetcher.state !== "idle") return;
+    if (typeof window !== "undefined" && isInvoiceList) {
+      writePendingInvoices([]);
+      window.sessionStorage.removeItem(INVOICE_LIST_BUST_KEY);
+    }
+    clearSelection();
+    const formData = new FormData();
+    formData.set("intent", "reload-list");
+    convertFetcher.submit(formData, { method: "post" });
+  }, [clearSelection, convertFetcher, isBusy, isInvoiceList]);
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -1154,6 +1331,15 @@ export default function SalesOrderPage() {
   return (
     <AppProvider i18n={enTranslations}>
       <s-page heading={data.pageHeading} inlineSize="large">
+        <s-button
+          slot="secondary-actions"
+          variant="secondary"
+          icon="refresh"
+          disabled={isBusy || revalidator.state !== "idle" || undefined}
+          onClick={handleReload}
+        >
+          Reload
+        </s-button>
         <div className="sales-orders-page">
         {bulkActionButtons}
         <Modal
@@ -1213,7 +1399,9 @@ export default function SalesOrderPage() {
             onClearAll={handleFiltersClearAll}
             mode={mode}
             setMode={setMode}
-            loading={false}
+            loading={
+              revalidator.state !== "idle" || convertFetcher.state !== "idle"
+            }
           />
           <IndexTable
             resourceName={

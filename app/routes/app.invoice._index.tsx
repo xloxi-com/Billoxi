@@ -38,6 +38,10 @@ function resolveInvoiceTemplateId(value: string | null | undefined) {
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const { admin, session } = context.get(adminAuthenticationContext);
   const url = new URL(request.url);
+  // Invoice list defaults to newest created invoice first.
+  if (!url.searchParams.get("sort")) {
+    url.searchParams.set("sort", "date desc");
+  }
   const invoicedView =
     INVOICED_VIEW_INDEX >= 0 ? String(INVOICED_VIEW_INDEX) : "4";
   url.searchParams.set("view", invoicedView);
@@ -74,6 +78,8 @@ export async function loader({ request, context }: LoaderFunctionArgs) {
   };
 }
 
+export const shouldRevalidate = () => true;
+
 export default SalesOrdersListPage;
 
 export function ErrorBoundary() {
@@ -81,7 +87,5 @@ export function ErrorBoundary() {
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
-  const headers = salesOrdersHeaders(headersArgs);
-  headers.set("Cache-Control", "private, max-age=0, stale-while-revalidate=30");
-  return headers;
+  return salesOrdersHeaders(headersArgs);
 };

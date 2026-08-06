@@ -280,6 +280,8 @@ type TemplateEditorSettings = {
   totals: {
     showSubtotal: boolean;
     subtotalLabel: string;
+    showQuantity: boolean;
+    itemsInTotalLabel: string;
     showTaxLines: boolean;
     showDiscountAmount: boolean;
     discountAmountLabel: string;
@@ -291,6 +293,7 @@ type TemplateEditorSettings = {
     paidAmountLabel: string;
     showBalanceDue: boolean;
     balanceDueLabel: string;
+    refundedAmountLabel: string;
     paymentStatusStyle: PaymentStatusStyle;
     totalLabel: string;
   };
@@ -916,6 +919,8 @@ function createDefaultSettings(
     totals: {
       showSubtotal: true,
       subtotalLabel: "Sub Total",
+      showQuantity: false,
+      itemsInTotalLabel: "Items in Total",
       showTaxLines: Boolean(
         preset &&
           templateId !== "sales-standard" &&
@@ -934,6 +939,7 @@ function createDefaultSettings(
           ? true
           : preset?.showBalanceDue === true,
       balanceDueLabel: "Balance Due",
+      refundedAmountLabel: "Refunded Amount",
       paymentStatusStyle: preset?.paymentStatusStyle ?? "inTotals",
       totalLabel: "Total",
     },
@@ -3555,6 +3561,34 @@ export default function TemplateEditorPage() {
                         />
                       </div>
                     ))}
+                    <div className="template-editor__toggle-label">
+                      <Checkbox
+                        label="Show quantity"
+                        checked={Boolean(settings.totals.showQuantity)}
+                        onChange={(showQuantity) =>
+                          updateSettings({
+                            totals: { ...settings.totals, showQuantity },
+                          })
+                        }
+                      />
+                      <TextField
+                        label="Items in Total label"
+                        labelHidden
+                        value={displayTotalLabel(
+                          settings.totals.itemsInTotalLabel,
+                          "Items in Total",
+                        )}
+                        onChange={(itemsInTotalLabel) =>
+                          updateSettings({
+                            totals: {
+                              ...settings.totals,
+                              itemsInTotalLabel,
+                            },
+                          })
+                        }
+                        autoComplete="off"
+                      />
+                    </div>
                     <Checkbox
                       label="Show tax details"
                       checked={Boolean(settings.totals.showTaxLines)}

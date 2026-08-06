@@ -9,8 +9,12 @@ import {
   formatSalesOrderDocumentNumber,
   formatTaxLineLabel,
   formatQuantityDisplay,
+  computeTotalItemQuantity,
   formatAmountDisplay,
   hasNonZeroAmount,
+  shouldShowDocumentPaidAmount,
+  shouldShowDocumentBalanceDue,
+  shouldShowDocumentRefundedAmount,
   lineItemImageSizePx,
   normalizePaymentStatusStyle,
   resolveDisplayedUnitPrice,
@@ -172,15 +176,23 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const paymentStatusStyle = normalizePaymentStatusStyle(
     settings.totals.paymentStatusStyle,
   );
-  const showPaid =
-    settings.totals.showPaidAmount && hasNonZeroAmount(order.paidAmount);
-  const showBalance =
-    settings.totals.showBalanceDue && hasNonZeroAmount(order.balanceDue);
-  const showPaymentStatus = showPaid || showBalance;
-  const paymentColumnCount = ([showPaid, showBalance].filter(Boolean).length ===
-  2
-    ? 4
-    : 2) as 2 | 4;
+  const showPaid = shouldShowDocumentPaidAmount(
+    order,
+    settings.totals.showPaidAmount,
+  );
+  const showBalance = shouldShowDocumentBalanceDue(
+    order,
+    settings.totals.showBalanceDue,
+  );
+  const showRefunded = shouldShowDocumentRefundedAmount(order);
+  const showPaymentStatus = showPaid || showBalance || showRefunded;
+  const paymentColumnCount = ([showPaid, showRefunded, showBalance].filter(
+    Boolean,
+  ).length === 3
+    ? 6
+    : [showPaid, showRefunded, showBalance].filter(Boolean).length === 2
+      ? 4
+      : 2) as 2 | 4 | 6;
 
   const paymentStatusRows = (
     variant: "totalsRow" | "banner" | "panel",
@@ -201,6 +213,24 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
           </span>
           <span className="live-document__payment-status-value">
             {`${currencyPrefix}${formatAmountDisplay(order.paidAmount)}`}
+          </span>
+        </div>
+      ) : null}
+      {showRefunded ? (
+        <div
+          className={
+            variant === "panel"
+              ? "live-document__payment-panel"
+              : variant === "banner"
+                ? "live-document__payment-row"
+                : "live-document__payment-row"
+          }
+        >
+          <span className="live-document__payment-status-label">
+            {settings.totals.refundedAmountLabel}
+          </span>
+          <span className="live-document__payment-status-value">
+            {`${currencyPrefix}${formatAmountDisplay(order.refundedAmount)}`}
           </span>
         </div>
       ) : null}
@@ -241,6 +271,20 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
           <div className="live-document__payment-status-cell live-document__payment-status-cell--value">
             <span className="live-document__payment-status-value">
               {`${currencyPrefix}${formatAmountDisplay(order.paidAmount)}`}
+            </span>
+          </div>
+        </>
+      ) : null}
+      {showRefunded ? (
+        <>
+          <div className="live-document__payment-status-cell live-document__payment-status-cell--label">
+            <span className="live-document__payment-status-label">
+              {settings.totals.refundedAmountLabel}
+            </span>
+          </div>
+          <div className="live-document__payment-status-cell live-document__payment-status-cell--value">
+            <span className="live-document__payment-status-value">
+              {`${currencyPrefix}${formatAmountDisplay(order.refundedAmount)}`}
             </span>
           </div>
         </>
@@ -521,6 +565,13 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         </tbody>
       </table>
 
+      {settings.totals.showQuantity ? (
+        <div className="live-document__items-in-total">
+          {settings.totals.itemsInTotalLabel}:{" "}
+          {computeTotalItemQuantity(order.lineItems)}
+        </div>
+      ) : null}
+
       <section
         className="live-document__totals"
         data-payment-style={paymentStatusStyle}
@@ -580,8 +631,8 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         {paymentStatusStyle === "splitPanels" && showPaymentStatus ? (
           <div
             className="live-document__payment-split-panels"
-            data-count={([showPaid, showBalance].filter(Boolean).length ||
-              1) as 1 | 2}
+            data-count={([showPaid, showRefunded, showBalance].filter(Boolean)
+              .length || 1) as 1 | 2 | 3}
           >
             {paymentStatusRows("panel")}
           </div>
