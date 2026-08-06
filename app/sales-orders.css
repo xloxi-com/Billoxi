@@ -22,6 +22,17 @@
   border-block-end: var(--p-border-width-025) solid var(--p-color-border-secondary);
 }
 
+/* Keep view tabs in a normal row (don't stretch the active tab full-width). */
+.sales-orders-page .Polaris-Tabs__Wrapper,
+.sales-orders-page .Polaris-Tabs__TabContainer {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+}
+.sales-orders-page .Polaris-Tabs__Tab {
+  flex: 0 0 auto;
+}
+
 .sales-orders-page .Polaris-Filters__Container {
   background: var(--p-color-bg-surface);
 }

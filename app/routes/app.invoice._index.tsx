@@ -77,19 +77,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
-export function shouldRevalidate({
-  formMethod,
-  currentUrl,
-  nextUrl,
-}: {
-  formMethod?: string | null;
-  currentUrl: URL;
-  nextUrl: URL;
-}) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
-  if (currentUrl.search !== nextUrl.search) return true;
-  return false;
-}
+export const shouldRevalidate = () => true;
 
 export default SalesOrdersListPage;
 

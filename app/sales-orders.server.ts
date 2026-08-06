@@ -1,4 +1,4 @@
-import { getSalesOrderDocumentNumbersByOrderGids } from "./sales-order-number.server";
+import { getSalesOrderDocumentNumbersByOrderGids, allocateSalesOrderDocumentNumber } from "./sales-order-number.server";
 import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
@@ -9,11 +9,13 @@ import {
   INVOICED_VIEW_QUERY,
   SALES_ORDER_VIEWS,
 } from "./sales-orders";
+import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
+import { numberingFromSeries } from "./number-series";
 import prisma from "./db.server";
 
 const PAGE_SIZE = 25;
-const CACHE_TTL_MS = 90_000;
-const CACHE_MAX_ENTRIES = 120;
+const CACHE_TTL_MS = 30_000;
+const CACHE_MAX_ENTRIES = 80;
 const SEARCH_MATCH_LIMIT = 50;
 
 const dateFormatter = new Intl.DateTimeFormat("en-IN", {
@@ -841,6 +843,23 @@ export async function loadSalesOrdersPage(
             getInvoicedMetaByOrderGids(shop, orderGids),
             getPackingSlipOrderGids(shop, orderGids),
           ]);
+
+    // Ensure every row on this page has an SO document number (same UX as before).
+    const missingSoGids = orderGids.filter((gid) => !documentNumbers.get(gid));
+    if (missingSoGids.length > 0) {
+      const numbering = numberingFromSeries(
+        await loadNumberSeriesEntryForShop(shop, "sales-order"),
+      );
+      for (const orderGid of missingSoGids) {
+        const documentNumber = await allocateSalesOrderDocumentNumber(
+          shop,
+          templateId,
+          orderGid,
+          numbering,
+        );
+        documentNumbers.set(orderGid, documentNumber);
+      }
+    }
 
     // List reads must stay cheap under load — do not allocate/write invoice
     // numbers here. Detail + export loaders still call ensureInvoiceDocumentNumbers.

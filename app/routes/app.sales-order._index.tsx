@@ -182,21 +182,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
-export function shouldRevalidate({
-  formMethod,
-  currentUrl,
-  nextUrl,
-}: {
-  formMethod?: string | null;
-  currentUrl: URL;
-  nextUrl: URL;
-}) {
-  // Mutations (convert / delete / reload-list) must refresh the table.
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
-  // Filter / sort / pagination / search changes refetch.
-  if (currentUrl.search !== nextUrl.search) return true;
-  return false;
-}
+export const shouldRevalidate = () => true;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await requireAdminAuth(request);
@@ -1052,7 +1038,8 @@ export default function SalesOrderPage() {
       index,
       onAction: () => {},
       id: `${view.id}-${view.viewIndex}`,
-      isLocked: view.viewIndex === 0,
+      // Keep every view tab in the bar (not collapsed into "More views").
+      isLocked: true,
       actions: [],
     }));
   }, [isInvoiceList, visibleViews]);
