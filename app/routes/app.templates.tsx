@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
@@ -14,23 +14,27 @@ import { SalesOrderLiveDocument } from "../components/sales-order-live-document"
 import {
   DEFAULT_SALES_ORDER_TEMPLATE_ID,
   getSalesOrderTemplatePreset,
+  mergeTemplateSettings,
   paperPaddingCss,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  salesOrderTemplateName,
   type TemplateEditorSettings,
 } from "../sales-order-document";
 import { sampleSalesOrderForShop } from "../sales-order-sample";
 import { requireAdminAuth } from "../shopify-context.server";
-import {
-  loadDocumentTemplateSettings,
-  resetAllTemplatesToCleanDefaults,
-} from "../sales-order-document.server";
+import { resetAllTemplatesToCleanDefaults } from "../sales-order-document.server";
 import {
   loadNumberSeriesForShop,
   loadSelectedTemplatesForShop,
   loadStoreDetailsForShop,
   saveSelectedTemplateForShop,
 } from "../shop-settings.server";
+import {
+  numberingFromSeries,
+  type NumberSeriesEntry,
+  type NumberSeriesMap,
+} from "../number-series";
 import type { StoreDetails } from "../store-details";
 import { fetchShopCurrencyCode } from "../store-details.server";
 import prisma from "../db.server";
@@ -166,92 +170,90 @@ const isDocumentType = (value: string | null): value is DocumentType => {
 const selectionKey = (documentType: DocumentType) =>
   `invoice-app:selected-template:${documentType}`;
 
+function buildPreviewBundle(args: {
+  documentType: "sales-order" | "invoice";
+  templateId: string;
+  customizationSettings: unknown;
+  storeDetails: StoreDetails;
+  numberSeries: NumberSeriesEntry;
+}): SalesOrderPreviewBundle {
+  const templateName = salesOrderTemplateName(args.templateId);
+  const settings = mergeTemplateSettings(
+    args.customizationSettings,
+    templateName,
+    args.templateId,
+  );
+  settings.numbering = numberingFromSeries(args.numberSeries);
+  if (
+    args.storeDetails.name &&
+    (!settings.transactionLabels.organization ||
+      settings.transactionLabels.organization === "Northstar Commerce" ||
+      settings.transactionLabels.organization === "Organization")
+  ) {
+    settings.transactionLabels.organization = args.storeDetails.name;
+  }
+  return {
+    settings,
+    storeDetails: args.storeDetails,
+  };
+}
+
+/**
+ * Fast gallery loader: one Shopify + settings round-trip, raw customizations only.
+ * Live A4 card thumbs mount client-side after hydration (avoids SSR timeout /
+ * Application Error from rendering ~15 documents on the server).
+ */
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
-  const salesOrderTemplates = templates["sales-order"];
-  const invoiceTemplates = templates.invoice;
 
-  // One Shopify + settings round-trip shared by all ~30 template previews.
-  const [
-    shopCurrencyCode,
-    selectedTemplates,
-    storeDetails,
-    numberSeries,
-    customizations,
-  ] = await Promise.all([
-    fetchShopCurrencyCode(admin, session.shop),
-    loadSelectedTemplatesForShop(session.shop),
-    loadStoreDetailsForShop(session.shop, admin),
-    loadNumberSeriesForShop(session.shop),
-    prisma.templateCustomization.findMany({
-      where: {
-        shop: session.shop,
-        documentType: { in: ["sales-order", "invoice"] },
-      },
-      select: { documentType: true, templateId: true, settings: true },
-    }),
-  ]);
+  try {
+    const [
+      shopCurrencyCode,
+      selectedTemplates,
+      storeDetails,
+      numberSeries,
+      customizations,
+    ] = await Promise.all([
+      fetchShopCurrencyCode(admin, session.shop),
+      loadSelectedTemplatesForShop(session.shop),
+      loadStoreDetailsForShop(session.shop, admin),
+      loadNumberSeriesForShop(session.shop),
+      (async () => {
+        try {
+          return await prisma.templateCustomization.findMany({
+            where: {
+              shop: session.shop,
+              documentType: { in: ["sales-order", "invoice"] },
+            },
+            select: { documentType: true, templateId: true, settings: true },
+          });
+        } catch (error) {
+          console.error("Template customization query failed:", error);
+          return [] as Array<{
+            documentType: string;
+            templateId: string;
+            settings: unknown;
+          }>;
+        }
+      })(),
+    ]);
 
-  const customizationByKey = new Map(
-    customizations.map((row) => [
-      `${row.documentType}:${row.templateId}`,
-      row.settings,
-    ]),
-  );
+    const customizationByKey: Record<string, unknown> = {};
+    for (const row of customizations) {
+      customizationByKey[`${row.documentType}:${row.templateId}`] = row.settings;
+    }
 
-  const previews = await Promise.all([
-    ...salesOrderTemplates.map(async (template) => {
-      const loaded = await loadDocumentTemplateSettings(
-        session.shop,
-        "sales-order",
-        template.id,
-        admin,
-        {
-          storeDetails,
-          numberSeries: numberSeries["sales-order"],
-          customizationSettings:
-            customizationByKey.get(`sales-order:${template.id}`) ?? null,
-        },
-      );
-      return [
-        template.id,
-        {
-          settings: loaded.settings,
-          storeDetails: loaded.storeDetails,
-        } satisfies SalesOrderPreviewBundle,
-      ] as const;
-    }),
-    ...invoiceTemplates.map(async (template) => {
-      const loaded = await loadDocumentTemplateSettings(
-        session.shop,
-        "invoice",
-        template.id,
-        admin,
-        {
-          storeDetails,
-          numberSeries: numberSeries.invoice,
-          customizationSettings:
-            customizationByKey.get(`invoice:${template.id}`) ?? null,
-        },
-      );
-      return [
-        template.id,
-        {
-          settings: loaded.settings,
-          storeDetails: loaded.storeDetails,
-        } satisfies SalesOrderPreviewBundle,
-      ] as const;
-    }),
-  ]);
-
-  return {
-    shopCurrencyCode,
-    selectedTemplates,
-    salesOrderPreviews: Object.fromEntries(previews) as Record<
-      string,
-      SalesOrderPreviewBundle
-    >,
-  };
+    return {
+      shopCurrencyCode,
+      selectedTemplates,
+      storeDetails,
+      numberSeries,
+      customizationByKey,
+    };
+  } catch (error) {
+    console.error("Templates loader failed:", error);
+    throw new Response("Failed to load templates", { status: 500 });
+  }
 }
 
 export function shouldRevalidate({
@@ -443,6 +445,60 @@ function SalesOrderCardThumbnail({
   );
 }
 
+/** Mount live A4 thumbs only after hydration + when scrolled into view. */
+function DeferredSalesOrderCardThumbnail({
+  template,
+  preview,
+  shopCurrencyCode,
+}: {
+  template: Template;
+  preview: SalesOrderPreviewBundle;
+  shopCurrencyCode: string;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const node = hostRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "120px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [mounted]);
+
+  return (
+    <div ref={hostRef}>
+      {mounted && visible ? (
+        <SalesOrderCardThumbnail
+          templateId={template.id}
+          preview={preview}
+          shopCurrencyCode={shopCurrencyCode}
+        />
+      ) : (
+        <TemplateThumbnail template={template} />
+      )}
+    </div>
+  );
+}
+
 function SalesOrderTemplatePreview({
   templateId,
   preview,
@@ -486,9 +542,11 @@ function SalesOrderTemplatePreview({
 
 export default function TemplatesPage() {
   const {
-    salesOrderPreviews,
     shopCurrencyCode,
     selectedTemplates: serverSelectedTemplates,
+    storeDetails,
+    numberSeries,
+    customizationByKey,
   } = useLoaderData<typeof loader>();
   const selectFetcher = useFetcher<typeof action>();
   const [searchParams] = useSearchParams();
@@ -505,6 +563,32 @@ export default function TemplatesPage() {
   >({});
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [confirmTemplate, setConfirmTemplate] = useState<Template | null>(null);
+
+  const salesOrderPreviews = useMemo(() => {
+    const series = numberSeries as NumberSeriesMap;
+    const next: Record<string, SalesOrderPreviewBundle> = {};
+    for (const template of templates["sales-order"]) {
+      next[template.id] = buildPreviewBundle({
+        documentType: "sales-order",
+        templateId: template.id,
+        customizationSettings:
+          customizationByKey[`sales-order:${template.id}`] ?? null,
+        storeDetails,
+        numberSeries: series["sales-order"],
+      });
+    }
+    for (const template of templates.invoice) {
+      next[template.id] = buildPreviewBundle({
+        documentType: "invoice",
+        templateId: template.id,
+        customizationSettings:
+          customizationByKey[`invoice:${template.id}`] ?? null,
+        storeDetails,
+        numberSeries: series.invoice,
+      });
+    }
+    return next;
+  }, [customizationByKey, numberSeries, storeDetails]);
 
   useEffect(() => {
     const savedSelections: Partial<Record<DocumentType, string>> = {};
@@ -666,17 +750,21 @@ export default function TemplatesPage() {
                   {templates[activeType].map((template) => {
                     const isSelected =
                       selectedTemplates[activeType] === template.id;
+                    const livePreview =
+                      (activeType === "sales-order" ||
+                        activeType === "invoice") &&
+                      salesOrderPreviews[template.id]
+                        ? salesOrderPreviews[template.id]
+                        : null;
 
                     return (
                       <div className="template-card" key={template.id}>
                         <Card padding="0" background="bg-surface">
                           <div className="template-card__inner">
-                            {(activeType === "sales-order" ||
-                              activeType === "invoice") &&
-                            salesOrderPreviews[template.id] ? (
-                              <SalesOrderCardThumbnail
-                                templateId={template.id}
-                                preview={salesOrderPreviews[template.id]}
+                            {livePreview ? (
+                              <DeferredSalesOrderCardThumbnail
+                                template={template}
+                                preview={livePreview}
                                 shopCurrencyCode={shopCurrencyCode}
                               />
                             ) : (
