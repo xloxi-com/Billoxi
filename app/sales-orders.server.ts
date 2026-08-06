@@ -2,7 +2,6 @@ import { getSalesOrderDocumentNumbersByOrderGids } from "./sales-order-number.se
 import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
-  ensureInvoiceDocumentNumbers,
 } from "./order-invoice-status.server";
 import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
 import { DEFAULT_SALES_ORDER_TEMPLATE_ID } from "./sales-order-document";
@@ -13,9 +12,8 @@ import {
 import prisma from "./db.server";
 
 const PAGE_SIZE = 25;
-const CACHE_TTL_MS = 30_000;
-const CACHE_MAX_ENTRIES = 80;
-const AVAILABILITY_CACHE_TTL_MS = 90_000;
+const CACHE_TTL_MS = 90_000;
+const CACHE_MAX_ENTRIES = 120;
 const SEARCH_MATCH_LIMIT = 50;
 
 const dateFormatter = new Intl.DateTimeFormat("en-IN", {
@@ -256,7 +254,7 @@ const CUSTOMERS_SEARCH_QUERY = `#graphql
 `;
 
 const INVOICE_NODES_CHUNK = 50;
-const MAX_INVOICED_FETCH = 250;
+const MAX_INVOICED_FETCH = 100;
 
 function escapeSearchTerm(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -844,14 +842,9 @@ export async function loadSalesOrdersPage(
             getPackingSlipOrderGids(shop, orderGids),
           ]);
 
-    const invoicedGidsNeedingNumbers = orderGids.filter((gid) => {
-      const meta = invoicedMeta.get(gid);
-      return Boolean(meta) && !meta?.documentNumber;
-    });
-    const ensuredInvoiceNumbers =
-      invoicedGidsNeedingNumbers.length > 0
-        ? await ensureInvoiceDocumentNumbers(shop, invoicedGidsNeedingNumbers)
-        : new Map<string, string>();
+    // List reads must stay cheap under load — do not allocate/write invoice
+    // numbers here. Detail + export loaders still call ensureInvoiceDocumentNumbers.
+    const ensuredInvoiceNumbers = new Map<string, string>();
 
     return {
       orders: nodes.map((order) => {

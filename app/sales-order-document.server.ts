@@ -793,6 +793,15 @@ export async function fetchSalesOrderDocument(
   };
 }
 
+const SIDEBAR_LIST_TTL_MS = 60_000;
+const sidebarListCache = new Map<
+  string,
+  {
+    expires: number;
+    data: import("./sales-order-document").CustomerOrderListItem[];
+  }
+>();
+
 export async function fetchSalesOrderList(
   admin: {
     graphql: (
@@ -805,10 +814,17 @@ export async function fetchSalesOrderList(
     templateId?: string;
   },
 ): Promise<import("./sales-order-document").CustomerOrderListItem[]> {
+  const cacheKey = `${options?.shop || ""}|${options?.templateId || ""}`;
+  const now = Date.now();
+  if (options?.shop) {
+    const hit = sidebarListCache.get(cacheKey);
+    if (hit && hit.expires > now) return hit.data;
+  }
+
   const response = await admin.graphql(
     `#graphql
       query SalesOrderSidebarList {
-        orders(first: 25, sortKey: CREATED_AT, reverse: true) {
+        orders(first: 20, sortKey: CREATED_AT, reverse: true) {
           nodes {
             id
             name
@@ -864,7 +880,7 @@ export async function fetchSalesOrderList(
       : Promise.resolve(new Set<string>()),
   ]);
 
-  return nodes.map((node) => {
+  const list = nodes.map((node) => {
     const company = node.billingAddress?.company?.trim() || "";
     const customerName =
       company ||
@@ -884,4 +900,13 @@ export async function fetchSalesOrderList(
       invoiced: invoicedGids.has(node.id),
     };
   });
+
+  if (options?.shop) {
+    sidebarListCache.set(cacheKey, {
+      expires: Date.now() + SIDEBAR_LIST_TTL_MS,
+      data: list,
+    });
+  }
+
+  return list;
 }

@@ -6,7 +6,10 @@ declare global {
 }
 
 function createPrismaClient() {
-  return new PrismaClient();
+  return new PrismaClient({
+    // Production serverless: avoid query logging overhead under load.
+    log: process.env.NODE_ENV === "production" ? ["error"] : ["error", "warn"],
+  });
 }
 
 function clientHasInvoiceModel(client: PrismaClient) {

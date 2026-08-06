@@ -6,10 +6,11 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
-import { authenticate } from "../shopify.server";
+import { requireAdminAuth } from "../shopify-context.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  // Share the same per-request auth memo as child loaders (avoids 2× session DB hits).
+  await requireAdminAuth(request);
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

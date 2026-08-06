@@ -48,6 +48,7 @@ import {
 } from "../sales-order-document";
 import {
   loadSelectedTemplateForShop,
+  loadSelectedTemplatesForShop,
   saveNumberSeriesEntryMode,
   loadNumberSeriesEntryForShop,
 } from "../shop-settings.server";
@@ -157,16 +158,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const isInvoice = documentMode === "invoice";
   const url = new URL(request.url);
 
-  const [shopSelectedTemplateId, shopSelectedSalesOrderTemplateId] =
-    await Promise.all([
-      loadSelectedTemplateForShop(
-        session.shop,
-        isInvoice ? "invoice" : "sales-order",
-      ),
-      isInvoice
-        ? loadSelectedTemplateForShop(session.shop, "sales-order")
-        : Promise.resolve(null),
-    ]);
+  const selectedMap = await loadSelectedTemplatesForShop(session.shop);
+  const shopSelectedTemplateId =
+    selectedMap[isInvoice ? "invoice" : "sales-order"] || null;
+  const shopSelectedSalesOrderTemplateId = selectedMap["sales-order"] || null;
 
   // Shop Active template wins over a stale ?template= query (e.g. after
   // switching Classic on Templates while an old Studio URL is still open).

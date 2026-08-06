@@ -29,6 +29,12 @@ type ShopSettingsRow = {
 
 export type SelectedTemplatesMap = Record<string, string>;
 
+const SELECTED_TEMPLATES_TTL_MS = 30_000;
+const selectedTemplatesCache = new Map<
+  string,
+  { expires: number; value: SelectedTemplatesMap }
+>();
+
 function parseJsonObject(value: unknown): Record<string, unknown> {
   const raw =
     typeof value === "string"
@@ -107,18 +113,15 @@ export async function loadStoreDetailsForShop(
   shop: string,
   admin: { graphql: (query: string) => Promise<Response> },
 ): Promise<StoreDetails> {
-  const [rows, shopDefaults] = await Promise.all([
-    prisma.$queryRaw<ShopSettingsRow[]>`
-      SELECT "storeDetails"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `,
-    fetchShopStoreDefaults(admin, shop),
-  ]);
+  const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
+    SELECT "storeDetails"
+    FROM "ShopSettings"
+    WHERE shop = ${shop}
+    LIMIT 1
+  `;
 
   const raw = parseStoreDetailsJson(rows[0]?.storeDetails);
-  const merged = mergeStoreDetails(raw, shopDefaults);
+  const fromDb = normalizeStoreDetails(raw);
   const rawRecord =
     raw && typeof raw === "object" && !Array.isArray(raw)
       ? (raw as Record<string, unknown>)
@@ -130,6 +133,19 @@ export async function loadStoreDetailsForShop(
         asNonEmptyAddress(rawRecord?.city) ||
         asNonEmptyAddress(rawRecord?.country)),
   );
+
+  // Fast path: shop already saved complete store details — skip Shopify GraphQL.
+  if (
+    rows[0] &&
+    rawHasAddress &&
+    fromDb.name &&
+    !rawHasLegacyAddress
+  ) {
+    return fromDb;
+  }
+
+  const shopDefaults = await fetchShopStoreDefaults(admin, shop);
+  const merged = mergeStoreDetails(raw, shopDefaults);
   const filledFromShopify = !rawHasAddress && Boolean(merged.address);
 
   // Persist migrated / backfilled address so documents keep showing it.
@@ -215,14 +231,22 @@ export async function resetStoreDetailsFromShopify(
 export async function loadSelectedTemplatesForShop(
   shop: string,
 ): Promise<SelectedTemplatesMap> {
+  const cached = selectedTemplatesCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
-    SELECT id, shop, "selectedTemplates"
+    SELECT "selectedTemplates"
     FROM "ShopSettings"
     WHERE shop = ${shop}
     LIMIT 1
   `;
 
-  return normalizeSelectedTemplates(rows[0]?.selectedTemplates);
+  const value = normalizeSelectedTemplates(rows[0]?.selectedTemplates);
+  selectedTemplatesCache.set(shop, {
+    expires: Date.now() + SELECTED_TEMPLATES_TTL_MS,
+    value,
+  });
+  return value;
 }
 
 export async function loadSelectedTemplateForShop(
@@ -287,6 +311,10 @@ export async function saveSelectedTemplateForShop(
     `;
   }
 
+  selectedTemplatesCache.set(shop, {
+    expires: Date.now() + SELECTED_TEMPLATES_TTL_MS,
+    value: next,
+  });
   return next;
 }
 
