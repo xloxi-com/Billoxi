@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -23,7 +22,6 @@ import {
   IndexFilters,
   IndexFiltersMode,
   IndexTable,
-  InlineStack,
   Card,
   Link,
   Modal,
@@ -336,6 +334,31 @@ export default function SalesOrderPage() {
       ? mergeInvoiceOrders(data.orders, readPendingInvoices())
       : data.orders,
   );
+  const pageRef = useRef<HTMLDivElement>(null);
+
+  // Polaris Tabs only remasures on window resize; admin iframe often paints
+  // with width 0 first, which collapses views into "More views".
+  useEffect(() => {
+    const node = pageRef.current;
+    if (!node) return;
+
+    let frame = 0;
+    const remeasureTabs = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+    };
+
+    const observer = new ResizeObserver(remeasureTabs);
+    observer.observe(node);
+    remeasureTabs();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (isInvoiceList) {
@@ -749,93 +772,62 @@ export default function SalesOrderPage() {
     !selectedOrder!.packingSlip;
   const canSendEmail = !hasCancelledSelected;
 
-  const [bulkActionsMountNode, setBulkActionsMountNode] =
-    useState<HTMLElement | null>(null);
+  const promotedBulkActions = useMemo(() => {
+    if (selectedResources.length === 0) return undefined;
 
-  useEffect(() => {
-    if (selectedResources.length === 0) {
-      setBulkActionsMountNode(null);
-      return;
+    const actions: Array<{
+      content: string;
+      onAction: () => void;
+      disabled?: boolean;
+      destructive?: boolean;
+    }> = [];
+
+    if (canConvertToInvoice) {
+      actions.push({
+        content: "Convert to invoice",
+        onAction: () => setConfirmAction("invoice"),
+        disabled: isBusy,
+      });
+    }
+    if (canConvertToPackingSlip) {
+      actions.push({
+        content: "Convert to packing slip",
+        onAction: () => setConfirmAction("packing-slip"),
+        disabled: isBusy,
+      });
+    }
+    if (canSendEmail) {
+      actions.push({
+        content: "Send email",
+        onAction: () => setConfirmAction("email"),
+        disabled: isBusy,
+      });
+    }
+    actions.push({
+      content: downloadPdfLabel,
+      onAction: () => setConfirmAction("download"),
+      disabled: isBusy,
+    });
+    if (isInvoiceList) {
+      actions.push({
+        content:
+          selectedResources.length > 1 ? "Delete invoices" : "Delete",
+        onAction: () => setConfirmAction("delete-invoice"),
+        disabled: isBusy,
+        destructive: true,
+      });
     }
 
-    let frame = 0;
-    const findMountNode = () => {
-      const node = document.querySelector(
-        ".sales-orders-page .Polaris-BulkActions__BulkActionsSelectAllWrapper",
-      );
-      if (node instanceof HTMLElement) {
-        setBulkActionsMountNode(node);
-        return;
-      }
-      frame = window.requestAnimationFrame(findMountNode);
-    };
-    findMountNode();
-    return () => window.cancelAnimationFrame(frame);
-  }, [selectedResources.length, isBusy]);
-
-  const bulkActionButtons =
-    bulkActionsMountNode && selectedResources.length > 0
-      ? createPortal(
-          <div className="sales-orders-bulk-buttons">
-            <InlineStack gap="100" blockAlign="center" wrap={false}>
-              {canConvertToInvoice ? (
-                <Button
-                  size="micro"
-                  variant="secondary"
-                  loading={isConverting}
-                  disabled={isConverting || isDownloadingZip}
-                  onClick={() => setConfirmAction("invoice")}
-                >
-                  Convert to invoice
-                </Button>
-              ) : null}
-              {canConvertToPackingSlip ? (
-                <Button
-                  size="micro"
-                  variant="secondary"
-                  loading={isConverting}
-                  disabled={isConverting || isDownloadingZip}
-                  onClick={() => setConfirmAction("packing-slip")}
-                >
-                  Convert to packing slip
-                </Button>
-              ) : null}
-              {canSendEmail ? (
-                <Button
-                  size="micro"
-                  variant="secondary"
-                  disabled={isConverting || isDownloadingZip}
-                  onClick={() => setConfirmAction("email")}
-                >
-                  Send email
-                </Button>
-              ) : null}
-              <Button
-                size="micro"
-                variant="secondary"
-                loading={isDownloadingZip}
-                disabled={isConverting || isDownloadingZip}
-                onClick={() => setConfirmAction("download")}
-              >
-                {downloadPdfLabel}
-              </Button>
-              {isInvoiceList ? (
-                <Button
-                  size="micro"
-                  variant="primary"
-                  tone="critical"
-                  loading={isConverting}
-                  disabled={isConverting || isDownloadingZip}
-                  onClick={() => setConfirmAction("delete-invoice")}
-                >
-                  {selectedResources.length > 1 ? "Delete invoices" : "Delete"}
-                </Button>
-              ) : null}
-            </InlineStack>
-          </div>,
-          bulkActionsMountNode,
-        )
-      : null;
+    return actions;
+  }, [
+    canConvertToInvoice,
+    canConvertToPackingSlip,
+    canSendEmail,
+    downloadPdfLabel,
+    isBusy,
+    isInvoiceList,
+    selectedResources.length,
+  ]);
 
   useEffect(() => {
     if (convertFetcher.state !== "idle" || !convertFetcher.data) return;
@@ -1343,8 +1335,7 @@ export default function SalesOrderPage() {
         >
           Reload
         </s-button>
-        <div className="sales-orders-page">
-        {bulkActionButtons}
+        <div className="sales-orders-page" ref={pageRef}>
         <Modal
           open={confirmAction !== null}
           onClose={() => setConfirmAction(null)}
@@ -1417,6 +1408,7 @@ export default function SalesOrderPage() {
               allResourcesSelected ? "All" : selectedResources.length
             }
             onSelectionChange={handleSelectionChange}
+            promotedBulkActions={promotedBulkActions}
             headings={[
               { title: isInvoiceList ? "Invoice" : "Sales Order" },
               { title: "Reference" },

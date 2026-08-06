@@ -1,20 +1,24 @@
-/* Keep Polaris "N selected" bar; hide its empty promoted-actions slot. */
+/* Polaris native bulk actions — keep selection bar roomy next to tabs */
+.sales-orders-page .Polaris-BulkActions__BulkActionsWrapper,
+.sales-orders-page .Polaris-BulkActions__BulkActionsLayout {
+  min-height: 2.75rem;
+}
+
 .sales-orders-page .Polaris-BulkActions__BulkActionsPromotedActionsWrapper {
-  display: none !important;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--p-space-200, 8px);
+  min-width: 0;
 }
 
 .sales-orders-page .Polaris-BulkActions__BulkActionsSelectAllWrapper {
   display: flex;
   align-items: center;
   gap: var(--p-space-300, 12px);
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-}
-
-.sales-orders-bulk-buttons {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
+  padding-block: var(--p-space-150, 6px);
 }
 
 /* Polaris IndexFilters — keep search/filter toolbar flush with the table card */
@@ -22,13 +26,28 @@
   border-block-end: var(--p-border-width-025) solid var(--p-color-border-secondary);
 }
 
-/* Keep view tabs in a normal row (don't stretch the active tab full-width). */
-.sales-orders-page .Polaris-Tabs__Wrapper,
-.sales-orders-page .Polaris-Tabs__TabContainer {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 100%;
+/*
+ * Keep all view tabs visible (All, Unpaid, Paid, …).
+ * Polaris TabMeasurer often reads width 0 on first paint in the admin iframe,
+ * which collapses tabs into "More views". Give the measurer a real width and
+ * never stretch a single tab across the bar.
+ */
+.sales-orders-page .Polaris-IndexFilters__TabsWrapper,
+.sales-orders-page .Polaris-Tabs__Outer {
+  width: 100%;
+  min-width: 0;
 }
+
+.sales-orders-page .Polaris-Tabs__TabsMeasurer {
+  width: 100% !important;
+  /* Enough for All + Unpaid + Paid + Voided + Invoiced + Open + disclosure */
+  min-width: 32rem;
+}
+
+.sales-orders-page .Polaris-Tabs--fillSpace .Polaris-Tabs__TabContainer {
+  flex: 0 0 auto !important;
+}
+
 .sales-orders-page .Polaris-Tabs__Tab {
   flex: 0 0 auto;
 }
