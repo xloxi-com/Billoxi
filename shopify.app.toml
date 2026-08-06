@@ -10,7 +10,7 @@ name = "Billoxi"
 scopes = "write_products,read_products,write_metaobjects,read_metaobjects,write_metaobject_definitions,read_metaobject_definitions,read_orders,read_customers,read_merchant_managed_fulfillment_orders,read_assigned_fulfillment_orders"
 
 [webhooks]
-api_version = "2026-10"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   uri = "/webhooks/app/uninstalled"

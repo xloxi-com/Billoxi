@@ -1,5 +1,6 @@
 import type {
   HeadersFunction,
+  LoaderFunctionArgs,
   MiddlewareFunction,
 } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
@@ -16,7 +17,8 @@ const authenticateAdmin: MiddlewareFunction = async ({ request, context }) => {
 
 export const middleware = [authenticateAdmin];
 
-export const loader = async () => {
+export const loader = async ({ context }: LoaderFunctionArgs) => {
+  context.get(adminAuthenticationContext);
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
