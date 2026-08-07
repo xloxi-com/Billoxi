@@ -1866,6 +1866,8 @@ export default function TemplateEditorPage() {
   const pendingSaveRef = useRef<TemplateEditorSettings | null>(null);
   const handledFetcherDataRef = useRef<unknown>(null);
   const loadedFontsRef = useRef<Set<string>>(new Set());
+  /** Prevents RangeSlider/etc. onChange during Discard from flipping dirty back on. */
+  const suppressDirtyRef = useRef(false);
   // Keep form controls instant; defer the heavy document preview paint.
   const deferredSettings = useDeferredValue(settings);
   const previewPending = deferredSettings !== settings;
@@ -1981,26 +1983,35 @@ export default function TemplateEditorPage() {
   }, [settings.fontFamily]);
 
   useEffect(() => {
-    setSettings((current) => ({
-      ...current,
-      billingDetails: normalizeCustomerDetails(
-        current.billingDetails,
-        defaultBillingDetails,
-      ),
-      shippingDetails: normalizeCustomerDetails(
-        current.shippingDetails,
-        defaultShippingDetails,
-      ),
-      customerBlockDetails: normalizeCustomerDetails(
-        current.customerBlockDetails,
-        defaultCustomerBlockDetails,
-      ),
-    }));
+    setSettings((current) => {
+      const next = {
+        ...current,
+        billingDetails: normalizeCustomerDetails(
+          current.billingDetails,
+          defaultBillingDetails,
+        ),
+        shippingDetails: normalizeCustomerDetails(
+          current.shippingDetails,
+          defaultShippingDetails,
+        ),
+        customerBlockDetails: normalizeCustomerDetails(
+          current.customerBlockDetails,
+          defaultCustomerBlockDetails,
+        ),
+      };
+      setSavedSettings(next);
+      return next;
+    });
   }, []);
+
+  const markDirty = () => {
+    if (suppressDirtyRef.current) return;
+    setIsDirty(true);
+  };
 
   const updateSettings = (updates: Partial<TemplateEditorSettings>) => {
     setSettings((current) => ({ ...current, ...updates }));
-    setIsDirty(true);
+    markDirty();
   };
 
   const changeTemplateLanguage = (nextLanguage: string) => {
@@ -2016,7 +2027,7 @@ export default function TemplateEditorPage() {
         },
       }),
     );
-    setIsDirty(true);
+    markDirty();
   };
 
   const updateAppearance = (
@@ -2034,7 +2045,7 @@ export default function TemplateEditorPage() {
           appearance: { ...current.appearance, ...nextPatch },
         };
       });
-      setIsDirty(true);
+      markDirty();
     };
     if (options?.urgent) {
       apply();
@@ -2053,9 +2064,23 @@ export default function TemplateEditorPage() {
   };
 
   const discard = () => {
+    suppressDirtyRef.current = true;
     setSettings(savedSettings);
     setLogoError("");
     setIsDirty(false);
+    try {
+      if (typeof shopify !== "undefined" && shopify.saveBar?.hide) {
+        shopify.saveBar.hide("template-editor-save-bar");
+      }
+    } catch {
+      // Admin host may not expose saveBar in some embeds.
+    }
+    // Allow one paint cycle so controlled RangeSliders can settle without re-dirtying.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressDirtyRef.current = false;
+      });
+    });
   };
 
   const updateColumn = (
