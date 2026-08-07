@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import prisma from "./db.server";
-import { resolveSalesOrderTemplateId } from "./sales-order-document";
+import { resolveSalesOrderTemplateId } from "./sales-order-ids";
 import { numberingFromSeries } from "./number-series";
 import {
   loadNumberSeriesForShop,

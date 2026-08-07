@@ -37,9 +37,11 @@ export function normalizeSmtpSettings(value: unknown): SmtpSettings {
   }
 
   const input = value as Partial<SmtpSettings>;
+  const host = asTrimmedString(input.host);
   return {
-    enabled: Boolean(input.enabled),
-    host: asTrimmedString(input.host),
+    enabled:
+      input.enabled !== undefined ? Boolean(input.enabled) : Boolean(host),
+    host,
     port: asTrimmedString(input.port) || "587",
     username: asTrimmedString(input.username),
     password: asTrimmedString(input.password),
@@ -48,3 +50,24 @@ export function normalizeSmtpSettings(value: unknown): SmtpSettings {
     encryption: asEncryption(input.encryption),
   };
 }
+
+export const GMAIL_SMTP_PRESET: Pick<
+  SmtpSettings,
+  "host" | "port" | "encryption" | "enabled"
+> = {
+  enabled: true,
+  host: "smtp.gmail.com",
+  port: "587",
+  encryption: "tls",
+};
+
+/** Typical Hostinger / cPanel webmail defaults — replace host if your provider differs. */
+export const WEBMAIL_SMTP_PRESET: Pick<
+  SmtpSettings,
+  "host" | "port" | "encryption" | "enabled"
+> = {
+  enabled: true,
+  host: "smtp.hostinger.com",
+  port: "465",
+  encryption: "ssl",
+};

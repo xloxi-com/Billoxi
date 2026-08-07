@@ -11,6 +11,11 @@ import {
   type SmtpSettings,
 } from "./smtp-settings";
 import {
+  emailTemplatesNeedReadySeed,
+  normalizeEmailTemplatesSettings,
+  type EmailTemplatesSettings,
+} from "./email-templates";
+import {
   mergeStoreDetails,
   normalizeStoreDetails,
   type StoreDetails,
@@ -23,16 +28,23 @@ type ShopSettingsRow = {
   shop: string;
   storeDetails: unknown;
   smtpSettings?: unknown;
+  emailTemplates?: unknown;
   selectedTemplates?: unknown;
   numberSeries?: unknown;
 };
 
 export type SelectedTemplatesMap = Record<string, string>;
 
-const SELECTED_TEMPLATES_TTL_MS = 30_000;
+const SELECTED_TEMPLATES_TTL_MS = 120_000;
 const selectedTemplatesCache = new Map<
   string,
   { expires: number; value: SelectedTemplatesMap }
+>();
+
+const NUMBER_SERIES_TTL_MS = 120_000;
+const numberSeriesCache = new Map<
+  string,
+  { expires: number; value: NumberSeriesMap }
 >();
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
@@ -85,6 +97,17 @@ export async function saveSmtpSettingsForShop(
     LIMIT 1
   `;
 
+  // Blank password means "keep the previously saved password".
+  if (!normalized.password && existing[0]?.smtpSettings) {
+    const previous = normalizeSmtpSettings(existing[0].smtpSettings);
+    if (previous.password) {
+      normalized.password = previous.password;
+    }
+  }
+
+  // Having a host implies SMTP is ready to use.
+  normalized.enabled = Boolean(normalized.host);
+
   if (existing[0]) {
     await prisma.$executeRaw`
       UPDATE "ShopSettings"
@@ -98,6 +121,70 @@ export async function saveSmtpSettingsForShop(
       VALUES (
         ${randomUUID()},
         ${shop},
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify(normalized)}::jsonb,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+  }
+
+  return normalized;
+}
+
+export async function loadEmailTemplatesForShop(
+  shop: string,
+): Promise<EmailTemplatesSettings> {
+  try {
+    const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
+      SELECT id, shop, "emailTemplates"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    const raw = rows[0]?.emailTemplates;
+    const normalized = normalizeEmailTemplatesSettings(raw);
+    // Persist built-in ready templates for all 4 document types so Send uses them.
+    if (emailTemplatesNeedReadySeed(raw)) {
+      try {
+        await saveEmailTemplatesForShop(shop, normalized);
+      } catch {
+        // Ignore persist errors (e.g. migration pending); still return ready copy.
+      }
+    }
+    return normalized;
+  } catch {
+    // Column may not exist until migration runs — fall back to defaults.
+    return normalizeEmailTemplatesSettings(null);
+  }
+}
+
+export async function saveEmailTemplatesForShop(
+  shop: string,
+  emailTemplates: EmailTemplatesSettings,
+): Promise<EmailTemplatesSettings> {
+  const normalized = normalizeEmailTemplatesSettings(emailTemplates);
+  const existing = await prisma.$queryRaw<ShopSettingsRow[]>`
+    SELECT id, shop
+    FROM "ShopSettings"
+    WHERE shop = ${shop}
+    LIMIT 1
+  `;
+
+  if (existing[0]) {
+    await prisma.$executeRaw`
+      UPDATE "ShopSettings"
+      SET "emailTemplates" = ${JSON.stringify(normalized)}::jsonb,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE shop = ${shop}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "ShopSettings" (id, shop, "storeDetails", "smtpSettings", "emailTemplates", "createdAt", "updatedAt")
+      VALUES (
+        ${randomUUID()},
+        ${shop},
+        ${JSON.stringify({})}::jsonb,
         ${JSON.stringify({})}::jsonb,
         ${JSON.stringify(normalized)}::jsonb,
         CURRENT_TIMESTAMP,
@@ -377,6 +464,11 @@ async function seedNumberSeriesFromTemplates(
 export async function loadNumberSeriesForShop(
   shop: string,
 ): Promise<NumberSeriesMap> {
+  const cached = numberSeriesCache.get(shop);
+  if (cached && cached.expires > Date.now()) {
+    return cached.value;
+  }
+
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT id, shop, "numberSeries"
     FROM "ShopSettings"
@@ -398,6 +490,10 @@ export async function loadNumberSeriesForShop(
     `;
   }
 
+  numberSeriesCache.set(shop, {
+    expires: Date.now() + NUMBER_SERIES_TTL_MS,
+    value: seeded,
+  });
   return seeded;
 }
 
@@ -478,5 +574,9 @@ export async function saveNumberSeriesForShop(
     `;
   }
 
+  numberSeriesCache.set(shop, {
+    expires: Date.now() + NUMBER_SERIES_TTL_MS,
+    value: normalized,
+  });
   return normalized;
 }

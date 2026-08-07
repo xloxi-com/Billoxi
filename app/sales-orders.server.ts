@@ -4,6 +4,7 @@ import {
 import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
+  getInvoicedOrderGids,
 } from "./order-invoice-status.server";
 import { getPackingSlipOrderGids, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, ensurePackingSlipDocumentNumbers, type PackingSlipOrderMeta } from "./order-packing-slip-status.server";
 import {
@@ -13,7 +14,7 @@ import {
   getCreditNoteOrderGids,
   type CreditNoteOrderMeta,
 } from "./order-credit-note-status.server";
-import { DEFAULT_SALES_ORDER_TEMPLATE_ID } from "./sales-order-document";
+import { DEFAULT_SALES_ORDER_TEMPLATE_ID } from "./sales-order-ids";
 import {
   INVOICED_VIEW_QUERY,
   SALES_ORDER_VIEWS,
@@ -21,7 +22,8 @@ import {
 import prisma from "./db.server";
 
 const PAGE_SIZE = 25;
-const CACHE_TTL_MS = 30_000;
+/** Keep list hot while browsing Admin — invalidate on convert/delete/update. */
+const CACHE_TTL_MS = 180_000;
 const CACHE_MAX_ENTRIES = 80;
 const SEARCH_MATCH_LIMIT = 50;
 
@@ -861,67 +863,123 @@ export async function loadSalesOrdersPage(
     forcePackingSlip = false,
   ): Promise<SalesOrdersPage> => {
     const orderGids = nodes.map((order) => order.id);
-    const [
-      documentNumbers,
-      invoicedMeta,
-      packingSlipGids,
-      packingSlipMeta,
-      creditNoteGids,
-      creditNoteMeta,
-    ] =
-      orderGids.length === 0
-        ? [
-            new Map<string, string>(),
-            new Map<
-              string,
-              {
-                invoicedAt: Date;
-                createdAt: Date;
-                updatedAt: Date;
-                documentNumber: string | null;
-                sequence: number | null;
-                customerNote: string | null;
-                terms: string | null;
-              }
-            >(),
-            new Set<string>(),
-            new Map<string, PackingSlipOrderMeta>(),
-            new Set<string>(),
-            new Map<string, CreditNoteOrderMeta>(),
-          ]
-        : await Promise.all([
+
+    let documentNumbers = new Map<string, string>();
+    let invoicedMeta = new Map<
+      string,
+      {
+        invoicedAt: Date;
+        createdAt: Date;
+        updatedAt: Date;
+        documentNumber: string | null;
+        sequence: number | null;
+        customerNote: string | null;
+        terms: string | null;
+      }
+    >();
+    let packingSlipGids = new Set<string>();
+    let packingSlipMeta = new Map<string, PackingSlipOrderMeta>();
+    let creditNoteGids = new Set<string>();
+    let creditNoteMeta = new Map<string, CreditNoteOrderMeta>();
+
+    if (orderGids.length > 0) {
+      if (forceInvoiced) {
+        const [soNumbers, invMeta, cnGids, cnMeta] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedMetaByOrderGids(shop, orderGids),
+          getCreditNoteOrderGids(shop, orderGids),
+          getCreditNoteMetaByOrderGids(shop, orderGids),
+        ]);
+        documentNumbers = soNumbers;
+        invoicedMeta = invMeta;
+        creditNoteGids = cnGids;
+        creditNoteMeta = cnMeta;
+      } else if (forceCreditNote) {
+        const [soNumbers, invMeta, cnMeta] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedMetaByOrderGids(shop, orderGids),
+          getCreditNoteMetaByOrderGids(shop, orderGids),
+        ]);
+        documentNumbers = soNumbers;
+        invoicedMeta = invMeta;
+        creditNoteMeta = cnMeta;
+        creditNoteGids = new Set(cnMeta.keys());
+      } else if (forcePackingSlip) {
+        const [soNumbers, invMeta, packingMeta] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedMetaByOrderGids(shop, orderGids),
+          getPackingSlipMetaByOrderGids(shop, orderGids),
+        ]);
+        documentNumbers = soNumbers;
+        invoicedMeta = invMeta;
+        packingSlipMeta = packingMeta;
+        packingSlipGids = new Set(packingMeta.keys());
+      } else {
+        // Sales Orders list: flags only — skip heavy meta / number writes.
+        const [soNumbers, invoicedGids, packingGids, cnGids] = await Promise.all(
+          [
             getSalesOrderDocumentNumbersByOrderGids(
               shop,
               templateId,
               orderGids,
             ),
-            getInvoicedMetaByOrderGids(shop, orderGids),
+            getInvoicedOrderGids(shop, orderGids),
             getPackingSlipOrderGids(shop, orderGids),
-            forcePackingSlip
-              ? getPackingSlipMetaByOrderGids(shop, orderGids)
-              : Promise.resolve(new Map<string, PackingSlipOrderMeta>()),
             getCreditNoteOrderGids(shop, orderGids),
-            getCreditNoteMetaByOrderGids(shop, orderGids),
-          ]);
+          ],
+        );
+        documentNumbers = soNumbers;
+        packingSlipGids = packingGids;
+        creditNoteGids = cnGids;
+        for (const gid of invoicedGids) {
+          invoicedMeta.set(gid, {
+            invoicedAt: new Date(0),
+            createdAt: new Date(0),
+            updatedAt: new Date(0),
+            documentNumber: null,
+            sequence: null,
+            customerNote: null,
+            terms: null,
+          });
+        }
+      }
+    }
 
-    // Keep list reads cheap under load — do not allocate/write SO numbers here.
-    // Install sync + detail/export loaders assign missing numbers.
-    // (Same policy as invoice numbers below.)
+    // Do not allocate SO numbers on the list critical path (blocks navigation).
+    // Install sync + detail/export assign missing numbers.
 
-    // List reads must stay cheap under load — do not allocate/write invoice
-    // numbers here. Detail + export loaders still call ensureInvoiceDocumentNumbers.
     const ensuredInvoiceNumbers = new Map<string, string>();
 
-    // Credit note list: backfill missing CN- numbers so the document column
-    // never falls back to the invoice number.
-    const ensuredCreditNoteNumbers = forceCreditNote
-      ? await ensureCreditNoteDocumentNumbers(shop, orderGids)
-      : new Map<string, string>();
+    // Credit note / packing slip lists: prefer existing numbers; backfill missing
+    // without blocking the response when possible.
+    let ensuredCreditNoteNumbers = new Map<string, string>();
+    if (forceCreditNote && orderGids.length > 0) {
+      const missing = orderGids.filter((gid) => {
+        const num = creditNoteMeta.get(gid)?.documentNumber?.trim();
+        return !num;
+      });
+      if (missing.length > 0) {
+        // Await only missing — usually empty after first visit.
+        ensuredCreditNoteNumbers = await ensureCreditNoteDocumentNumbers(
+          shop,
+          missing,
+        );
+      }
+    }
 
-    // Packing slip list: backfill missing PS- numbers.
-    const ensuredPackingSlipNumbers = forcePackingSlip
-      ? await ensurePackingSlipDocumentNumbers(shop, orderGids)
-      : new Map<string, string>();
+    let ensuredPackingSlipNumbers = new Map<string, string>();
+    if (forcePackingSlip && orderGids.length > 0) {
+      const missing = orderGids.filter((gid) => {
+        const num = packingSlipMeta.get(gid)?.documentNumber?.trim();
+        return !num;
+      });
+      if (missing.length > 0) {
+        ensuredPackingSlipNumbers = await ensurePackingSlipDocumentNumbers(
+          shop,
+          missing,
+        );
+      }
+    }
 
     return {
       orders: nodes.map((order) => {
@@ -951,10 +1009,16 @@ export async function loadSalesOrdersPage(
           documentNumbers.get(order.id) ?? null,
           forceInvoiced || Boolean(meta),
           hasPackingSlip,
-          meta?.invoicedAt ?? null,
+          meta?.invoicedAt && meta.invoicedAt.getTime() > 0
+            ? meta.invoicedAt
+            : null,
           invoiceNumber,
           forceInvoiced || forceCreditNote || forcePackingSlip,
-          meta?.createdAt ?? meta?.invoicedAt ?? null,
+          meta?.createdAt && meta.createdAt.getTime() > 0
+            ? meta.createdAt
+            : meta?.invoicedAt && meta.invoicedAt.getTime() > 0
+              ? meta.invoicedAt
+              : null,
           isCreditNote,
           creditNoteNumber,
           cnMeta?.convertedAt ?? null,

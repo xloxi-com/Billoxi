@@ -54,6 +54,7 @@ model ShopSettings {
   shop               String   @unique
   storeDetails       Json
   smtpSettings       Json     @default("{}")
+  emailTemplates     Json     @default("{}")
   selectedTemplates  Json     @default("{}")
   numberSeries       Json     @default("{}")
   numberBackfillUndo Json?

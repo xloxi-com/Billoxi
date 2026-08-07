@@ -166,21 +166,21 @@ async function withOffscreenPaper<T>(
   }
 }
 
-export async function downloadSalesOrderDomPdfFromList(args: {
+export async function buildSalesOrderDomPdfBlobFromList(args: {
   orderId: string;
   templateId: string;
   documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
-}) {
+}): Promise<{ blob: Blob; fileName: string }> {
   const documentKind = args.documentKind ?? "sales-order";
-  await withOffscreenPaper(
+  return withOffscreenPaper(
     args.orderId,
     args.templateId,
     documentKind,
     async (paper, payload) => {
-      const { downloadSalesOrderDomVectorPdf } = await import(
+      const { buildSalesOrderDomVectorPdfBlob } = await import(
         "./sales-order-pdf"
       );
-      await downloadSalesOrderDomVectorPdf(
+      return buildSalesOrderDomVectorPdfBlob(
         paper,
         {
           paperSize: payload.settings.paperSize,
@@ -194,6 +194,23 @@ export async function downloadSalesOrderDomPdfFromList(args: {
       );
     },
   );
+}
+
+export async function downloadSalesOrderDomPdfFromList(args: {
+  orderId: string;
+  templateId: string;
+  documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
+}) {
+  const { blob, fileName } = await buildSalesOrderDomPdfBlobFromList(args);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 export async function printSalesOrderDomPdfFromList(args: {

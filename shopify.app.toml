@@ -20,6 +20,11 @@ api_version = "2026-07"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+  # Auto-convert sales order → invoice when Shopify marks the order paid
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/paid"
+  topics = [ "orders/paid" ]
+
   # Mandatory compliance webhooks (GDPR / privacy law)
   # See: https://shopify.dev/docs/apps/build/privacy-law-compliance
   [[webhooks.subscriptions]]

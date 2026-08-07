@@ -7,13 +7,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { requireAdminAuth } from "../shopify-context.server";
-import { ensureSalesOrderNumbersSynced } from "../sales-order-number-sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Share the same per-request auth memo as child loaders (avoids 2× session DB hits).
-  const { session, admin } = await requireAdminAuth(request);
-  // Never block navigation on one-time SO backfill — run in background.
-  void ensureSalesOrderNumbersSynced(session.shop, admin);
+  // Warm auth for nested loaders (shared WeakMap memo). SO number backfill
+  // stays on afterAuth only — do not compete with every navigation.
+  await requireAdminAuth(request);
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

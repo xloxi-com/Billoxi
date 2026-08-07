@@ -171,8 +171,17 @@ export async function getInvoicedOrderGids(
   shop: string,
   orderGids: string[],
 ): Promise<Set<string>> {
-  const map = await getInvoicedMetaByOrderGids(shop, orderGids);
-  return new Set(map.keys());
+  const marked = new Set<string>();
+  if (orderGids.length === 0) return marked;
+
+  const rows = await prisma.$queryRaw<OrderGidRow[]>`
+    SELECT "orderGid"
+    FROM "OrderInvoiceStatus"
+    WHERE shop = ${shop}
+      AND "orderGid" IN (${Prisma.join(orderGids)})
+  `;
+  for (const row of rows) marked.add(row.orderGid);
+  return marked;
 }
 
 /** Batch lookup: invoicedAt timestamps for order GIDs. */

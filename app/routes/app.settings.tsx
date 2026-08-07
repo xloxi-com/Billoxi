@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -7,7 +7,38 @@ import type {
 import { useFetcher, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { SaveBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import {
+  AppProvider,
+  Page,
+  Layout,
+  Card,
+  BlockStack,
+  InlineStack,
+  Text,
+  TextField,
+  Checkbox,
+  Button,
+  Banner,
+  Badge,
+  Divider,
+  Box,
+  Collapsible,
+  DataTable,
+  Icon,
+} from "@shopify/polaris";
+import enTranslations from "@shopify/polaris/locales/en.json";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DragHandleIcon,
+  EditIcon,
+  EmailIcon,
+  NoteIcon,
+  OrderIcon,
+  StoreIcon,
+} from "@shopify/polaris-icons";
 
+import { EmailBodyEditor, type EmailBodyEditorHandle } from "../components/email-body-editor";
 import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatNumberSeriesNextPreview,
@@ -26,10 +57,23 @@ import {
   getLastInvoiceAllocatedSequence,
 } from "../order-invoice-status.server";
 import {
+  GMAIL_SMTP_PRESET,
+  WEBMAIL_SMTP_PRESET,
   normalizeSmtpSettings,
-  type SmtpEncryption,
   type SmtpSettings,
 } from "../smtp-settings";
+import {
+  EMAIL_TEMPLATE_PLACEHOLDERS,
+  EMAIL_TEMPLATES_READY_SET_VERSION,
+  applyEmailTemplateVars,
+  bodyContentToHtml,
+  documentKindLabel,
+  getDefaultEmailTemplate,
+  getReadyEmailTemplates,
+  normalizeEmailTemplatesSettings,
+  type EmailDocumentKind,
+  type EmailTemplatesSettings,
+} from "../email-templates";
 import {
   createStoreCustomField,
   normalizeStoreDetails,
@@ -37,11 +81,13 @@ import {
   type StoreDetails,
 } from "../store-details";
 import {
+  loadEmailTemplatesForShop,
   loadNumberSeriesForShop,
   loadSelectedTemplateForShop,
   loadSmtpSettingsForShop,
   loadStoreDetailsForShop,
   resetStoreDetailsFromShopify,
+  saveEmailTemplatesForShop,
   saveNumberSeriesForShop,
   saveSmtpSettingsForShop,
   saveStoreDetailsForShop,
@@ -52,46 +98,155 @@ import {
   validateStartingNumber,
 } from "../sales-order-number.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
+import offrefyLogo from "../assets/recommended/offrefy.png";
+import approvefyLogo from "../assets/recommended/approvefy.png";
 import "../settings.css";
 
-type SettingsSection = "store-details" | "number-series" | "smtp";
+const RECOMMENDED_APPS = [
+  {
+    id: "offrefy",
+    name: "Offrefy",
+    tagline: "Ultra Quantity Breaks",
+    description:
+      "Raise order value with quantity breaks and volume discounts that apply at checkout.",
+    href: "https://apps.shopify.com/offrefy",
+    badge: "Free plan",
+    logo: offrefyLogo,
+  },
+  {
+    id: "approvefy",
+    name: "Approvefy",
+    tagline: "B2B legacy Signup",
+    description:
+      "B2B registration forms with manual approval, company accounts, and legacy customer support.",
+    href: "https://apps.shopify.com/approvefy",
+    badge: "From $4.99/mo",
+    logo: approvefyLogo,
+  },
+] as const;
 
-const settingsMenu: Array<{
+type SettingsSection =
+  | "store-details"
+  | "number-series"
+  | "smtp"
+  | "email-sales-order"
+  | "email-invoice"
+  | "email-credit-note"
+  | "email-packing-slip";
+
+type SettingsMenuItem = {
   id: SettingsSection;
   label: string;
   description: string;
-  icon: "store" | "order" | "email";
-}> = [
+  icon: "store" | "order" | "email" | "note";
+};
+
+type SettingsMenuGroup = {
+  id: "email-templates";
+  label: string;
+  icon: "note";
+  children: Array<{
+    id: SettingsSection;
+    label: string;
+    description: string;
+    kind: EmailDocumentKind;
+  }>;
+};
+
+const EMAIL_TEMPLATE_SECTIONS: SettingsMenuGroup["children"] = [
+  {
+    id: "email-sales-order",
+    label: "Sales Orders",
+    kind: "sales-order",
+    description: "Subject, body, and PDF for Sales order emails.",
+  },
+  {
+    id: "email-invoice",
+    label: "Invoice",
+    kind: "invoice",
+    description: "Subject, body, and PDF for Invoice emails.",
+  },
+  {
+    id: "email-credit-note",
+    label: "Credit Note",
+    kind: "credit-note",
+    description: "Subject, body, and PDF for Credit note emails.",
+  },
+  {
+    id: "email-packing-slip",
+    label: "Packing Slip",
+    kind: "packing-slip",
+    description: "Subject, body, and PDF for Packing slip emails.",
+  },
+];
+
+const settingsMenu: Array<SettingsMenuItem | SettingsMenuGroup> = [
   {
     id: "store-details",
     label: "Store details",
-    description: "Organization info shown on document headers.",
+    description: "Info shown on document headers.",
     icon: "store",
   },
   {
     id: "number-series",
     label: "Transaction numbers",
-    description: "Prefix and starting numbers for each document module.",
+    description: "Prefix and starting numbers per module.",
     icon: "order",
   },
   {
     id: "smtp",
     label: "SMTP",
-    description: "Outgoing email for invoices and documents.",
+    description: "Email server for sending documents.",
     icon: "email",
+  },
+  {
+    id: "email-templates",
+    label: "Email templates",
+    icon: "note",
+    children: EMAIL_TEMPLATE_SECTIONS,
   },
 ];
 
-function fieldValue(event: Event): string {
-  const target = (event.currentTarget ?? event.target) as
-    | HTMLInputElement
-    | null;
-  return target?.value ?? "";
+const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = {
+  store: StoreIcon,
+  order: OrderIcon,
+  email: EmailIcon,
+  note: NoteIcon,
+};
+
+function isEmailTemplatesSection(section: SettingsSection): boolean {
+  return (
+    section === "email-sales-order" ||
+    section === "email-invoice" ||
+    section === "email-credit-note" ||
+    section === "email-packing-slip"
+  );
 }
 
-function fieldChecked(event: Event): boolean {
-  const target = event.currentTarget as HTMLInputElement | null;
-  return Boolean(target?.checked);
+function parseSettingsSection(value: string | null): SettingsSection {
+  if (
+    value === "number-series" ||
+    value === "smtp" ||
+    value === "store-details" ||
+    value === "email-sales-order" ||
+    value === "email-invoice" ||
+    value === "email-credit-note" ||
+    value === "email-packing-slip"
+  ) {
+    return value;
+  }
+  // Legacy ?section=email-templates
+  if (value === "email-templates") return "email-invoice";
+  return "store-details";
+}
+
+function emailKindFromSection(section: SettingsSection): EmailDocumentKind {
+  const match = EMAIL_TEMPLATE_SECTIONS.find((item) => item.id === section);
+  return match?.kind ?? "invoice";
+}
+
+function redactSmtpPassword(settings: SmtpSettings): SmtpSettings {
+  return { ...settings, password: "" };
 }
 
 /** Keep Space inside inputs from being stolen by parent/admin shortcuts. */
@@ -117,11 +272,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedSalesOrderTemplateIdRaw,
     storeDetails,
     smtpSettings,
+    emailTemplates,
     numberSeries,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
+    loadEmailTemplatesForShop(session.shop),
     loadNumberSeriesForShop(session.shop),
   ]);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
@@ -129,7 +286,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   );
   const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
     await Promise.all([
-      getLastAllocatedSequence(session.shop, selectedSalesOrderTemplateId),
+      getLastAllocatedSequence(session.shop),
       getLastInvoiceAllocatedSequence(session.shop),
       getInvoiceNumberDigitWidth(session.shop),
     ]);
@@ -141,11 +298,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
   return {
     storeDetails,
-    smtpSettings,
+    smtpSettings: redactSmtpPassword(smtpSettings),
+    emailTemplates,
     numberSeries,
     lastAllocatedSequence,
     lastAllocatedByModule,
     invoiceDigitWidth,
+    hasSmtpPassword: Boolean(smtpSettings.password),
   };
 }
 
@@ -191,15 +350,48 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const smtpSettings = normalizeSmtpSettings(parsed);
-    if (smtpSettings.enabled && !smtpSettings.host) {
+    if (smtpSettings.host && !smtpSettings.fromEmail) {
       return Response.json(
-        { saved: false, error: "SMTP host is required when SMTP is enabled." },
+        { saved: false, error: "From email is required when SMTP host is set." },
         { status: 400 },
       );
     }
 
     const saved = await saveSmtpSettingsForShop(session.shop, smtpSettings);
-    return { saved: true, section: "smtp" as const, smtpSettings: saved };
+    return {
+      saved: true,
+      section: "smtp" as const,
+      smtpSettings: redactSmtpPassword(saved),
+      hasSmtpPassword: Boolean(saved.password),
+    };
+  }
+
+  if (intent === "save-email-templates") {
+    const raw = formData.get("emailTemplates");
+    if (typeof raw !== "string") {
+      return Response.json(
+        { saved: false, error: "Missing email templates." },
+        { status: 400 },
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return Response.json(
+        { saved: false, error: "Invalid email templates." },
+        { status: 400 },
+      );
+    }
+
+    const emailTemplates = normalizeEmailTemplatesSettings(parsed);
+    const saved = await saveEmailTemplatesForShop(session.shop, emailTemplates);
+    return {
+      saved: true,
+      section: "email-templates" as const,
+      emailTemplates: saved,
+    };
   }
 
   if (intent === "save-number-series") {
@@ -250,7 +442,7 @@ export async function action({ request }: ActionFunctionArgs) {
     );
     const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
       await Promise.all([
-        getLastAllocatedSequence(session.shop, selectedTemplateId),
+        getLastAllocatedSequence(session.shop),
         getLastInvoiceAllocatedSequence(session.shop),
         getInvoiceNumberDigitWidth(session.shop),
       ]);
@@ -304,12 +496,7 @@ export default function SettingsPage() {
   const fetcher = useFetcher<typeof action>();
   const [searchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
-  const initialSection: SettingsSection =
-    requestedSection === "number-series" ||
-    requestedSection === "smtp" ||
-    requestedSection === "store-details"
-      ? requestedSection
-      : "store-details";
+  const initialSection = parseSettingsSection(requestedSection);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(initialSection);
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(
@@ -318,6 +505,11 @@ export default function SettingsPage() {
   const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>(
     data.smtpSettings,
   );
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplatesSettings>(
+    data.emailTemplates,
+  );
+  const emailTemplateKind = emailKindFromSection(activeSection);
+  const emailBodyEditorRef = useRef<EmailBodyEditorHandle>(null);
   const [numberSeries, setNumberSeries] = useState<NumberSeriesMap>(
     data.numberSeries,
   );
@@ -327,6 +519,8 @@ export default function SettingsPage() {
   const [savedSmtpSettings, setSavedSmtpSettings] = useState<SmtpSettings>(
     data.smtpSettings,
   );
+  const [savedEmailTemplates, setSavedEmailTemplates] =
+    useState<EmailTemplatesSettings>(data.emailTemplates);
   const [savedNumberSeries, setSavedNumberSeries] = useState<NumberSeriesMap>(
     data.numberSeries,
   );
@@ -344,8 +538,16 @@ export default function SettingsPage() {
   >({});
   const [isStoreDirty, setIsStoreDirty] = useState(false);
   const [isSmtpDirty, setIsSmtpDirty] = useState(false);
+  const [isEmailTemplatesDirty, setIsEmailTemplatesDirty] = useState(false);
   const [isNumberSeriesDirty, setIsNumberSeriesDirty] = useState(false);
   const [isEditingSeries, setIsEditingSeries] = useState(false);
+  const [smtpHelpOpen, setSmtpHelpOpen] = useState(false);
+  const [smtpHelpProvider, setSmtpHelpProvider] = useState<
+    "gmail" | "webmail"
+  >("gmail");
+  const [hasSmtpPassword, setHasSmtpPassword] = useState(
+    Boolean(data.hasSmtpPassword),
+  );
   const [draggingFieldIndex, setDraggingFieldIndex] = useState<number | null>(
     null,
   );
@@ -359,9 +561,58 @@ export default function SettingsPage() {
       ? isStoreDirty
       : activeSection === "smtp"
         ? isSmtpDirty
-        : isNumberSeriesDirty;
-  const activeItem =
-    settingsMenu.find((item) => item.id === activeSection) ?? settingsMenu[0];
+        : isEmailTemplatesSection(activeSection)
+          ? isEmailTemplatesDirty
+          : isNumberSeriesDirty;
+  const activeEmailChild =
+    EMAIL_TEMPLATE_SECTIONS.find((item) => item.id === activeSection) ?? null;
+  const activeItem = (() => {
+    if (activeEmailChild) {
+      return {
+        id: activeEmailChild.id,
+        label: `Email · ${activeEmailChild.label}`,
+        description: activeEmailChild.description,
+        icon: "note" as const,
+      };
+    }
+    const top = settingsMenu.find(
+      (item): item is SettingsMenuItem =>
+        "description" in item && item.id === activeSection,
+    );
+    return top ?? (settingsMenu[0] as SettingsMenuItem);
+  })();
+
+  const emailPreview = useMemo(() => {
+    const sampleNumber =
+      emailTemplateKind === "invoice"
+        ? "INV-0007"
+        : emailTemplateKind === "credit-note"
+          ? "CN-0003"
+          : emailTemplateKind === "packing-slip"
+            ? "PS-0002"
+            : "SO-0007";
+    const vars = {
+      documentType: documentKindLabel(emailTemplateKind),
+      documentNumber: sampleNumber,
+      orderName: "#1008",
+      customerName: "Alex Customer",
+      total: "1,417.94",
+      currency: "USD",
+      storeName: storeDetails.name.trim() || "Your store",
+      referenceNumber: "SO-0007",
+    };
+    const template = emailTemplates.templates[emailTemplateKind];
+    return {
+      subject: applyEmailTemplateVars(template.subject, vars),
+      bodyText: applyEmailTemplateVars(template.body, vars),
+      storeName: vars.storeName,
+      documentType: vars.documentType,
+      documentNumber: vars.documentNumber,
+      amountLabel: [vars.currency, vars.total].filter(Boolean).join(" "),
+      attachPdf: template.attachPdf,
+      design: emailTemplates.design,
+    };
+  }, [emailTemplateKind, emailTemplates, storeDetails.name]);
 
   useEffect(() => {
     setStoreDetails(data.storeDetails);
@@ -372,8 +623,15 @@ export default function SettingsPage() {
   useEffect(() => {
     setSmtpSettings(data.smtpSettings);
     setSavedSmtpSettings(data.smtpSettings);
+    setHasSmtpPassword(Boolean(data.hasSmtpPassword));
     setIsSmtpDirty(false);
-  }, [data.smtpSettings]);
+  }, [data.smtpSettings, data.hasSmtpPassword]);
+
+  useEffect(() => {
+    setEmailTemplates(data.emailTemplates);
+    setSavedEmailTemplates(data.emailTemplates);
+    setIsEmailTemplatesDirty(false);
+  }, [data.emailTemplates]);
 
   useEffect(() => {
     setNumberSeries(data.numberSeries);
@@ -409,6 +667,15 @@ export default function SettingsPage() {
       setSmtpSettings(fetcher.data.smtpSettings);
       setSavedSmtpSettings(fetcher.data.smtpSettings);
       setIsSmtpDirty(false);
+      if ("hasSmtpPassword" in fetcher.data) {
+        setHasSmtpPassword(Boolean(fetcher.data.hasSmtpPassword));
+      }
+    }
+
+    if ("emailTemplates" in fetcher.data && fetcher.data.emailTemplates) {
+      setEmailTemplates(fetcher.data.emailTemplates);
+      setSavedEmailTemplates(fetcher.data.emailTemplates);
+      setIsEmailTemplatesDirty(false);
     }
 
     if ("numberSeries" in fetcher.data && fetcher.data.numberSeries) {
@@ -447,12 +714,14 @@ export default function SettingsPage() {
       shopify.toast.show(
         fetcher.data.section === "smtp"
           ? "SMTP settings saved"
-          : fetcher.data.section === "number-series"
-            ? "Transaction numbers saved"
-            : fetcher.data.section === "store-details" &&
-                "storeDetails" in fetcher.data
-              ? "Store details saved"
-              : "Settings saved",
+          : fetcher.data.section === "email-templates"
+            ? "Email templates saved"
+            : fetcher.data.section === "number-series"
+              ? "Transaction numbers saved"
+              : fetcher.data.section === "store-details" &&
+                  "storeDetails" in fetcher.data
+                ? "Store details saved"
+                : "Settings saved",
       );
     }
   }, [fetcher.state, fetcher.data]);
@@ -471,6 +740,74 @@ export default function SettingsPage() {
   ) => {
     setSmtpSettings((current) => ({ ...current, [key]: value }));
     setIsSmtpDirty(true);
+  };
+
+  const applyGmailSmtpPreset = () => {
+    setSmtpSettings((current) => ({
+      ...current,
+      ...GMAIL_SMTP_PRESET,
+    }));
+    setSmtpHelpProvider("gmail");
+    setIsSmtpDirty(true);
+  };
+
+  const applyWebmailSmtpPreset = () => {
+    setSmtpSettings((current) => ({
+      ...current,
+      ...WEBMAIL_SMTP_PRESET,
+    }));
+    setSmtpHelpProvider("webmail");
+    setSmtpHelpOpen(true);
+    setIsSmtpDirty(true);
+  };
+
+  const updateEmailDesign = <K extends keyof EmailTemplatesSettings["design"]>(
+    key: K,
+    value: EmailTemplatesSettings["design"][K],
+  ) => {
+    setEmailTemplates((current) => ({
+      ...current,
+      design: { ...current.design, [key]: value },
+    }));
+    setIsEmailTemplatesDirty(true);
+  };
+
+  const updateEmailTemplateField = <K extends keyof EmailTemplatesSettings["templates"]["invoice"]>(
+    key: K,
+    value: EmailTemplatesSettings["templates"]["invoice"][K],
+  ) => {
+    setEmailTemplates((current) => ({
+      ...current,
+      templates: {
+        ...current.templates,
+        [emailTemplateKind]: {
+          ...current.templates[emailTemplateKind],
+          [key]: value,
+        },
+      },
+    }));
+    setIsEmailTemplatesDirty(true);
+  };
+
+  const resetEmailTemplateToDefault = () => {
+    const next = getDefaultEmailTemplate(emailTemplateKind);
+    setEmailTemplates((current) => ({
+      ...current,
+      templates: {
+        ...current.templates,
+        [emailTemplateKind]: next,
+      },
+    }));
+    setIsEmailTemplatesDirty(true);
+  };
+
+  const loadAllReadyEmailTemplates = () => {
+    setEmailTemplates((current) => ({
+      ...current,
+      templates: getReadyEmailTemplates(),
+      readySetVersion: EMAIL_TEMPLATES_READY_SET_VERSION,
+    }));
+    setIsEmailTemplatesDirty(true);
   };
 
   const updateSeriesEntry = (
@@ -596,6 +933,17 @@ export default function SettingsPage() {
       return;
     }
 
+    if (isEmailTemplatesSection(activeSection)) {
+      fetcher.submit(
+        {
+          intent: "save-email-templates",
+          emailTemplates: JSON.stringify(emailTemplates),
+        },
+        { method: "post" },
+      );
+      return;
+    }
+
     if (activeSection === "number-series") {
       fetcher.submit(
         {
@@ -622,6 +970,11 @@ export default function SettingsPage() {
       setIsSmtpDirty(false);
       return;
     }
+    if (isEmailTemplatesSection(activeSection)) {
+      setEmailTemplates(savedEmailTemplates);
+      setIsEmailTemplatesDirty(false);
+      return;
+    }
     if (activeSection === "number-series") {
       setNumberSeries(savedNumberSeries);
       setIsNumberSeriesDirty(false);
@@ -639,7 +992,10 @@ export default function SettingsPage() {
   };
 
   const switchSection = (section: SettingsSection) => {
-    if (isDirty && section !== activeSection) {
+    const stayingInEmail =
+      isEmailTemplatesSection(activeSection) &&
+      isEmailTemplatesSection(section);
+    if (isDirty && section !== activeSection && !stayingInEmail) {
       discard();
     }
     setActiveSection(section);
@@ -673,6 +1029,15 @@ export default function SettingsPage() {
     setIsEditingSeries(true);
   };
 
+  const mainCardHeading =
+    activeSection === "store-details"
+      ? "Store details"
+      : activeSection === "number-series"
+        ? "Transaction numbers"
+        : activeSection === "smtp"
+          ? "SMTP"
+          : `Email · ${activeEmailChild?.label ?? "Template"}`;
+
   return (
     <>
       <SaveBar id="settings-save-bar" open={isDirty} discardConfirmation>
@@ -689,526 +1054,945 @@ export default function SettingsPage() {
         </button>
       </SaveBar>
 
-      <s-page heading="Settings" inlineSize="base">
-        {activeSection === "store-details" ? (
-          <s-button
-            slot="secondary-actions"
-            disabled={isSaving || undefined}
-            onClick={resetFromShopify}
-          >
-            Load from Shopify store
-          </s-button>
-        ) : null}
-
-        <div
-          className="settings-page"
-          onKeyDown={stopInputShortcutPropagation}
+      <AppProvider i18n={enTranslations}>
+        <Page
+          title="Settings"
+          fullWidth
+          secondaryActions={
+            activeSection === "store-details"
+              ? [
+                  {
+                    content: "Load from Shopify store",
+                    onAction: resetFromShopify,
+                    disabled: isSaving,
+                  },
+                ]
+              : undefined
+          }
         >
-          <s-stack direction="block" gap="base">
+          <BlockStack gap="400">
             {fetcher.data && "error" in fetcher.data && fetcher.data.error ? (
-              <s-banner tone="critical" heading="Could not save">
-                {String(fetcher.data.error)}
-              </s-banner>
+              <Banner tone="critical" title="Could not save">
+                <p>{String(fetcher.data.error)}</p>
+              </Banner>
             ) : null}
 
-            <div className="settings-layout">
-              <aside className="settings-sidebar">
-                <s-box
-                  border="base"
-                  borderRadius="base"
-                  overflow="hidden"
-                  background="base"
-                >
-                  <nav aria-label="Settings sections">
-                    {settingsMenu.map((item, index) => {
-                      const isActive = item.id === activeSection;
-                      return (
-                        <div key={item.id}>
-                          {index > 0 ? <s-divider /> : null}
-                          <s-clickable
-                            accessibilityLabel={`Open ${item.label}`}
-                            background={isActive ? "subdued" : "transparent"}
-                            padding="small"
+            <div
+              className={`settings-page${
+                isEmailTemplatesSection(activeSection)
+                  ? " settings-page--with-preview"
+                  : " settings-page--with-recommend"
+              }`}
+              onKeyDown={stopInputShortcutPropagation}
+            >
+              <Layout>
+                <Layout.Section variant="oneThird">
+                  <div className="settings-nav-column">
+                  <Card padding="0">
+                    <nav className="settings-nav" aria-label="Settings sections">
+                      {settingsMenu.map((item) => {
+                        if ("children" in item) {
+                          const groupActive = isEmailTemplatesSection(
+                            activeSection,
+                          );
+                          return (
+                            <div key={item.id} className="settings-nav__group">
+                              <button
+                                type="button"
+                                className={`settings-nav-item settings-nav-item--group${
+                                  groupActive ? " settings-nav-item--active" : ""
+                                }`}
+                                onClick={() =>
+                                  switchSection(
+                                    groupActive
+                                      ? activeSection
+                                      : item.children[0].id,
+                                  )
+                                }
+                              >
+                                <Icon
+                                  source={SETTINGS_MENU_ICONS[item.icon]}
+                                  tone={groupActive ? "base" : "subdued"}
+                                />
+                                <Text as="span" fontWeight="semibold">
+                                  {item.label}
+                                </Text>
+                              </button>
+                              {item.children.map((child) => {
+                                const isActive = child.id === activeSection;
+                                return (
+                                  <button
+                                    key={child.id}
+                                    type="button"
+                                    className={`settings-nav-item settings-nav-item--sub${
+                                      isActive ? " settings-nav-item--active" : ""
+                                    }`}
+                                    onClick={() => switchSection(child.id)}
+                                  >
+                                    <Text
+                                      as="span"
+                                      fontWeight={isActive ? "semibold" : "regular"}
+                                    >
+                                      {child.label}
+                                    </Text>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+
+                        const isActive = item.id === activeSection;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`settings-nav-item${
+                              isActive ? " settings-nav-item--active" : ""
+                            }`}
                             onClick={() => switchSection(item.id)}
                           >
-                            <s-stack
-                              direction="inline"
-                              gap="small"
-                              alignItems="center"
+                            <Icon
+                              source={SETTINGS_MENU_ICONS[item.icon]}
+                              tone={isActive ? "base" : "subdued"}
+                            />
+                            <Text
+                              as="span"
+                              fontWeight={isActive ? "semibold" : "regular"}
                             >
-                              <s-icon
-                                type={item.icon}
-                                tone={isActive ? "auto" : "neutral"}
+                              {item.label}
+                            </Text>
+                          </button>
+                        );
+                      })}
+                    </nav>
+                  </Card>
+                  </div>
+                </Layout.Section>
+
+                <Layout.Section>
+                  <div className="settings-form-column">
+                  <Card>
+                    <BlockStack gap="400">
+                      <Text as="h2" variant="headingMd">
+                        {mainCardHeading}
+                      </Text>
+
+                      {activeSection === "store-details" ? (
+                        <BlockStack gap="400">
+                          <Text as="p" tone="subdued">
+                            {activeItem.description}
+                          </Text>
+
+                          <TextField
+                            label="Store / organization name"
+                            value={storeDetails.name}
+                            onChange={(value) => updateField("name", value)}
+                            autoComplete="organization"
+                          />
+
+                          <TextField
+                            label="Address"
+                            value={storeDetails.address}
+                            multiline={4}
+                            onChange={(value) => updateField("address", value)}
+                            autoComplete="street-address"
+                            helpText="Type the full address. Use a new line for each address line."
+                          />
+
+                          <InlineStack gap="300" wrap={false}>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Phone"
+                                value={storeDetails.phone}
+                                onChange={(value) => updateField("phone", value)}
+                                autoComplete="off"
                               />
-                              <s-text type={isActive ? "strong" : undefined}>
-                                {item.label}
-                              </s-text>
-                            </s-stack>
-                          </s-clickable>
-                        </div>
-                      );
-                    })}
-                  </nav>
-                </s-box>
-              </aside>
+                            </div>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Email"
+                                type="email"
+                                value={storeDetails.email}
+                                onChange={(value) => updateField("email", value)}
+                                autoComplete="email"
+                              />
+                            </div>
+                          </InlineStack>
 
-              <div className="settings-content">
-            {activeSection === "store-details" ? (
-                <s-section heading="Store details">
-                  <s-stack direction="block" gap="base">
-                    <s-paragraph color="subdued">
-                      {activeItem.description}
-                    </s-paragraph>
+                          <TextField
+                            label="Website"
+                            value={storeDetails.website}
+                            onChange={(value) => updateField("website", value)}
+                            autoComplete="off"
+                            helpText="Shown on document headers as Website: www.your-site.com"
+                          />
 
-                    <s-text-field
-                      label="Store / organization name"
-                      value={storeDetails.name}
-                      onInput={(event) =>
-                        updateField("name", fieldValue(event))
-                      }
-                      autocomplete="organization"
-                    />
+                          <Divider />
 
-                    <s-text-area
-                      label="Address"
-                      value={storeDetails.address}
-                      rows={4}
-                      onInput={(event) =>
-                        updateField("address", fieldValue(event))
-                      }
-                      autocomplete="street-address"
-                      details="Type the full address. Use a new line for each address line."
-                    />
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h3" variant="headingSm">
+                              Custom fields
+                            </Text>
+                            <Button onClick={addCustomField}>Add field</Button>
+                          </InlineStack>
 
-                    <s-grid gridTemplateColumns="1fr 1fr" gap="small">
-                      <s-text-field
-                        label="Phone"
-                        value={storeDetails.phone}
-                        onInput={(event) =>
-                          updateField("phone", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                      <s-email-field
-                        label="Email"
-                        value={storeDetails.email}
-                        onInput={(event) =>
-                          updateField("email", fieldValue(event))
-                        }
-                        autocomplete="email"
-                      />
-                    </s-grid>
+                          {storeDetails.customFields.length === 0 ? (
+                            <Text as="p" tone="subdued">
+                              No custom fields yet.
+                            </Text>
+                          ) : (
+                            <BlockStack gap="200">
+                              <Text as="p" tone="subdued">
+                                Drag to reorder fields.
+                              </Text>
+                              <div className="settings-custom-fields">
+                                {storeDetails.customFields.map((field, index) => {
+                                  const isDragging = draggingFieldIndex === index;
+                                  const isDropTarget =
+                                    dragOverFieldIndex === index &&
+                                    draggingFieldIndex !== index;
+                                  const isLast =
+                                    index === storeDetails.customFields.length - 1;
 
-                    <s-text-field
-                      label="Website"
-                      value={storeDetails.website}
-                      onInput={(event) =>
-                        updateField("website", fieldValue(event))
-                      }
-                      autocomplete="off"
-                      details="Shown on document headers as Website: www.your-site.com"
-                    />
-
-                    <s-divider />
-
-                    <s-stack
-                      direction="inline"
-                      gap="base"
-                      alignItems="center"
-                      justifyContent="space-between"
-                    >
-                      <s-heading>Custom fields</s-heading>
-                      <s-button
-                        variant="secondary"
-                        onClick={addCustomField}
-                      >
-                        Add field
-                      </s-button>
-                    </s-stack>
-
-                    {storeDetails.customFields.length === 0 ? (
-                      <s-paragraph color="subdued">
-                        No custom fields yet.
-                      </s-paragraph>
-                    ) : (
-                      <s-stack direction="block" gap="small">
-                        <s-paragraph color="subdued">
-                          Drag to reorder fields.
-                        </s-paragraph>
-                        <s-box
-                          border="base"
-                          borderRadius="base"
-                          overflow="hidden"
-                        >
-                          <s-stack direction="block" gap="none">
-                            {storeDetails.customFields.map((field, index) => {
-                              const isDragging = draggingFieldIndex === index;
-                              const isDropTarget =
-                                dragOverFieldIndex === index &&
-                                draggingFieldIndex !== index;
-                              const isLast =
-                                index ===
-                                storeDetails.customFields.length - 1;
-
-                              return (
-                                <div
-                                  key={field.id}
-                                  className={[
-                                    "settings-custom-field",
-                                    isDragging
-                                      ? "settings-custom-field--dragging"
-                                      : "",
-                                    isDropTarget
-                                      ? "settings-custom-field--drop-target"
-                                      : "",
-                                    isLast
-                                      ? "settings-custom-field--last"
-                                      : "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                  onDragOver={(event) => {
-                                    event.preventDefault();
-                                    if (dragOverFieldIndex !== index) {
-                                      setDragOverFieldIndex(index);
-                                    }
-                                  }}
-                                  onDrop={(event) => {
-                                    event.preventDefault();
-                                    if (draggingFieldIndex !== null) {
-                                      moveCustomField(
-                                        draggingFieldIndex,
-                                        index,
-                                      );
-                                    }
-                                    setDraggingFieldIndex(null);
-                                    setDragOverFieldIndex(null);
-                                  }}
-                                >
-                                  <s-grid
-                                    gridTemplateColumns="auto 1fr 1fr auto"
-                                    gap="small"
-                                    alignItems="center"
-                                  >
+                                  return (
                                     <div
-                                      className="settings__drag-handle"
-                                      draggable
-                                      role="button"
-                                      tabIndex={0}
-                                      aria-label={`Drag to reorder ${field.label || "custom field"}`}
-                                      onDragStart={(event) => {
-                                        event.dataTransfer.effectAllowed =
-                                          "move";
-                                        event.dataTransfer.setData(
-                                          "text/plain",
-                                          String(index),
-                                        );
-                                        setDraggingFieldIndex(index);
+                                      key={field.id}
+                                      className={[
+                                        "settings-custom-field",
+                                        isDragging
+                                          ? "settings-custom-field--dragging"
+                                          : "",
+                                        isDropTarget
+                                          ? "settings-custom-field--drop-target"
+                                          : "",
+                                        isLast ? "settings-custom-field--last" : "",
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                      onDragOver={(event) => {
+                                        event.preventDefault();
+                                        if (dragOverFieldIndex !== index) {
+                                          setDragOverFieldIndex(index);
+                                        }
                                       }}
-                                      onDragEnd={() => {
+                                      onDrop={(event) => {
+                                        event.preventDefault();
+                                        if (draggingFieldIndex !== null) {
+                                          moveCustomField(draggingFieldIndex, index);
+                                        }
                                         setDraggingFieldIndex(null);
                                         setDragOverFieldIndex(null);
                                       }}
                                     >
-                                      <s-icon
-                                        type="drag-handle"
-                                        tone="neutral"
-                                      />
+                                      <InlineStack
+                                        gap="200"
+                                        blockAlign="center"
+                                        wrap={false}
+                                      >
+                                        <div
+                                          className="settings__drag-handle"
+                                          draggable
+                                          role="button"
+                                          tabIndex={0}
+                                          aria-label={`Drag to reorder ${field.label || "custom field"}`}
+                                          onDragStart={(event) => {
+                                            event.dataTransfer.effectAllowed =
+                                              "move";
+                                            event.dataTransfer.setData(
+                                              "text/plain",
+                                              String(index),
+                                            );
+                                            setDraggingFieldIndex(index);
+                                          }}
+                                          onDragEnd={() => {
+                                            setDraggingFieldIndex(null);
+                                            setDragOverFieldIndex(null);
+                                          }}
+                                        >
+                                          <Icon
+                                            source={DragHandleIcon}
+                                            tone="subdued"
+                                          />
+                                        </div>
+                                        <div className="settings-custom-field__input">
+                                          <TextField
+                                            label="Label"
+                                            labelHidden
+                                            value={field.label}
+                                            placeholder="Label"
+                                            onChange={(value) =>
+                                              updateCustomField(field.id, {
+                                                label: value,
+                                              })
+                                            }
+                                            autoComplete="off"
+                                          />
+                                        </div>
+                                        <div className="settings-custom-field__input">
+                                          <TextField
+                                            label="Text"
+                                            labelHidden
+                                            value={field.value}
+                                            placeholder="Text"
+                                            onChange={(value) =>
+                                              updateCustomField(field.id, { value })
+                                            }
+                                            autoComplete="off"
+                                          />
+                                        </div>
+                                        <Button
+                                          variant="tertiary"
+                                          tone="critical"
+                                          onClick={() => removeCustomField(field.id)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </InlineStack>
                                     </div>
-                                    <s-text-field
-                                      label="Label"
-                                      labelAccessibilityVisibility="exclusive"
-                                      value={field.label}
-                                      placeholder="Label"
-                                      onInput={(event) =>
-                                        updateCustomField(field.id, {
-                                          label: fieldValue(event),
-                                        })
-                                      }
-                                      autocomplete="off"
-                                    />
-                                    <s-text-field
-                                      label="Text"
-                                      labelAccessibilityVisibility="exclusive"
-                                      value={field.value}
-                                      placeholder="Text"
-                                      onInput={(event) =>
-                                        updateCustomField(field.id, {
-                                          value: fieldValue(event),
-                                        })
-                                      }
-                                      autocomplete="off"
-                                    />
-                                    <s-button
-                                      variant="tertiary"
-                                      tone="critical"
-                                      onClick={() =>
-                                        removeCustomField(field.id)
-                                      }
-                                    >
-                                      Remove
-                                    </s-button>
-                                  </s-grid>
-                                </div>
-                              );
+                                  );
+                                })}
+                              </div>
+                            </BlockStack>
+                          )}
+
+                          {isStoreDirty ? (
+                            <Text as="p" tone="subdued">
+                              Unsaved changes
+                            </Text>
+                          ) : null}
+                        </BlockStack>
+                      ) : activeSection === "number-series" ? (
+                        <BlockStack gap="400">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="p" tone="subdued">
+                              {activeItem.description}
+                            </Text>
+                            {isEditingSeries ? (
+                              <Button
+                                onClick={() => {
+                                  setNumberSeries(savedNumberSeries);
+                                  setIsNumberSeriesDirty(false);
+                                  setIsEditingSeries(false);
+                                  setPreviewDrafts({});
+                                  setInvoiceDigitWidth(data.invoiceDigitWidth);
+                                }}
+                                disabled={isSaving}
+                              >
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button icon={EditIcon} onClick={beginEditingSeries}>
+                                Edit
+                              </Button>
+                            )}
+                          </InlineStack>
+
+                          <DataTable
+                            columnContentTypes={["text", "text", "text", "text"]}
+                            headings={["Module", "Prefix", "Starting number", "Preview"]}
+                            rows={NUMBER_SERIES_MODULES.map((module) => {
+                              const entry = numberSeries[module.id];
+                              return [
+                                <Text as="span" fontWeight="semibold" key={`label-${module.id}`}>
+                                  {module.label}
+                                </Text>,
+                                isEditingSeries ? (
+                                  <TextField
+                                    key={`prefix-${module.id}`}
+                                    label="Prefix"
+                                    labelHidden
+                                    value={entry.prefix}
+                                    onChange={(value) =>
+                                      updateSeriesEntry(module.id, { prefix: value })
+                                    }
+                                    autoComplete="off"
+                                  />
+                                ) : (
+                                  entry.prefix || "—"
+                                ),
+                                isEditingSeries ? (
+                                  <TextField
+                                    key={`start-${module.id}`}
+                                    label="Starting number"
+                                    labelHidden
+                                    value={entry.startingNumber}
+                                    onChange={(value) =>
+                                      updateSeriesEntry(module.id, {
+                                        startingNumber: value,
+                                      })
+                                    }
+                                    autoComplete="off"
+                                  />
+                                ) : (
+                                  entry.startingNumber
+                                ),
+                                isEditingSeries ? (
+                                  <TextField
+                                    key={`preview-${module.id}`}
+                                    label="Preview / next number"
+                                    labelHidden
+                                    value={
+                                      previewDrafts[module.id] ??
+                                      previewForModule(module.id)
+                                    }
+                                    onChange={(value) =>
+                                      applyPreviewDraft(module.id, value)
+                                    }
+                                    onBlur={() => commitPreviewDraft(module.id)}
+                                    autoComplete="off"
+                                  />
+                                ) : (
+                                  <Text
+                                    as="span"
+                                    fontWeight="semibold"
+                                    key={`preview-text-${module.id}`}
+                                  >
+                                    {previewForModule(module.id)}
+                                  </Text>
+                                ),
+                              ];
                             })}
-                          </s-stack>
-                        </s-box>
-                      </s-stack>
-                    )}
+                          />
 
-                    {isStoreDirty ? (
-                      <s-paragraph color="subdued">
-                        Unsaved changes
-                      </s-paragraph>
-                    ) : null}
-                  </s-stack>
-                </s-section>
-              ) : activeSection === "number-series" ? (
-                <s-section heading="Transaction numbers">
-                  <s-stack direction="block" gap="base">
-                    <s-stack
-                      direction="inline"
-                      gap="base"
-                      alignItems="center"
-                      justifyContent="space-between"
-                    >
-                      <s-paragraph color="subdued">
-                        {activeItem.description}
-                      </s-paragraph>
-                      {isEditingSeries ? (
-                        <s-button
-                          variant="secondary"
-                          onClick={() => {
-                            setNumberSeries(savedNumberSeries);
-                            setIsNumberSeriesDirty(false);
-                            setIsEditingSeries(false);
-                            setPreviewDrafts({});
-                            setInvoiceDigitWidth(data.invoiceDigitWidth);
-                          }}
-                          disabled={isSaving || undefined}
-                        >
-                          Cancel
-                        </s-button>
-                      ) : (
-                        <s-button
-                          variant="secondary"
-                          icon="edit"
-                          onClick={beginEditingSeries}
-                        >
-                          Edit
-                        </s-button>
-                      )}
-                    </s-stack>
+                          {isNumberSeriesDirty ? (
+                            <Text as="p" tone="subdued">
+                              Unsaved changes
+                            </Text>
+                          ) : null}
+                        </BlockStack>
+                      ) : activeSection === "smtp" ? (
+                        <BlockStack gap="400">
+                          <Text as="p" tone="subdued">
+                            {activeItem.description}
+                          </Text>
 
-                    <s-box
-                      border="base"
-                      borderRadius="base"
-                      overflow="hidden"
-                      background="base"
-                    >
-                      <s-table>
-                        <s-table-header-row>
-                          <s-table-header listSlot="primary">
-                            Module
-                          </s-table-header>
-                          <s-table-header>Prefix</s-table-header>
-                          <s-table-header>
-                            Starting number
-                          </s-table-header>
-                          <s-table-header>Preview</s-table-header>
-                        </s-table-header-row>
-                        <s-table-body>
-                          {NUMBER_SERIES_MODULES.map((module) => {
-                            const entry = numberSeries[module.id];
-                            return (
-                              <s-table-row key={module.id}>
-                                <s-table-cell>
-                                  <s-text type="strong">{module.label}</s-text>
-                                </s-table-cell>
-                                <s-table-cell>
-                                  {isEditingSeries ? (
-                                    <s-text-field
-                                      label="Prefix"
-                                      labelAccessibilityVisibility="exclusive"
-                                      value={entry.prefix}
-                                      onInput={(event) =>
-                                        updateSeriesEntry(module.id, {
-                                          prefix: fieldValue(event),
-                                        })
-                                      }
-                                      autocomplete="off"
-                                    />
+                          <Box
+                            borderWidth="025"
+                            borderColor="border"
+                            borderRadius="200"
+                            background="bg-surface-secondary"
+                          >
+                            <button
+                              type="button"
+                              className="settings-smtp-help__toggle"
+                              aria-expanded={smtpHelpOpen}
+                              aria-controls="smtp-help-collapsible"
+                              onClick={() => setSmtpHelpOpen((open) => !open)}
+                            >
+                              <InlineStack align="space-between" blockAlign="center">
+                                <Text as="span" fontWeight="semibold">
+                                  How to set up SMTP
+                                </Text>
+                                <Icon
+                                  source={smtpHelpOpen ? ChevronUpIcon : ChevronDownIcon}
+                                />
+                              </InlineStack>
+                            </button>
+                            <Collapsible id="smtp-help-collapsible" open={smtpHelpOpen}>
+                              <Box padding="300" paddingBlockStart="0">
+                                <BlockStack gap="300">
+                                  <InlineStack gap="200">
+                                    <Button
+                                      size="slim"
+                                      pressed={smtpHelpProvider === "gmail"}
+                                      onClick={() => setSmtpHelpProvider("gmail")}
+                                    >
+                                      Gmail
+                                    </Button>
+                                    <Button
+                                      size="slim"
+                                      pressed={smtpHelpProvider === "webmail"}
+                                      onClick={() => setSmtpHelpProvider("webmail")}
+                                    >
+                                      Webmail / custom domain
+                                    </Button>
+                                  </InlineStack>
+
+                                  {smtpHelpProvider === "gmail" ? (
+                                    <ol className="settings-help-list">
+                                      <li>
+                                        Click <strong>Use Gmail</strong> below — host,
+                                        port 587, and TLS fill automatically.
+                                      </li>
+                                      <li>
+                                        Enter your full Gmail in{" "}
+                                        <strong>From email</strong> and{" "}
+                                        <strong>Username</strong> (e.g. you@gmail.com).
+                                      </li>
+                                      <li>
+                                        Turn on 2-Step Verification in your Google
+                                        Account, then create an{" "}
+                                        <strong>App Password</strong>. Use that
+                                        password here — not your normal Gmail password.
+                                      </li>
+                                      <li>
+                                        Paste the App Password in the{" "}
+                                        <strong>Password</strong> field.
+                                      </li>
+                                      <li>
+                                        Click <strong>Save</strong> at the top of this
+                                        page.
+                                      </li>
+                                    </ol>
                                   ) : (
-                                    entry.prefix || "—"
+                                    <ol className="settings-help-list">
+                                      <li>
+                                        Click <strong>Use Webmail</strong> below —
+                                        Hostinger defaults fill automatically
+                                        (smtp.hostinger.com, port 465, SSL). Change the
+                                        host if you use another provider (e.g.
+                                        mail.yourdomain.com or smtp.office365.com).
+                                      </li>
+                                      <li>
+                                        Hostinger: keep port <strong>465</strong> with
+                                        TLS off (SSL). For other providers, port{" "}
+                                        <strong>587</strong> + Use TLS is common.
+                                      </li>
+                                      <li>
+                                        Fill <strong>From email</strong>,{" "}
+                                        <strong>From name</strong>, username (full
+                                        email), and mailbox password.
+                                      </li>
+                                      <li>
+                                        Click <strong>Save</strong> at the top of this
+                                        page, then send a test document email.
+                                      </li>
+                                    </ol>
                                   )}
-                                </s-table-cell>
-                                <s-table-cell>
-                                  {isEditingSeries ? (
-                                    <s-text-field
-                                      label="Starting number"
-                                      labelAccessibilityVisibility="exclusive"
-                                      value={entry.startingNumber}
-                                      onInput={(event) =>
-                                        updateSeriesEntry(module.id, {
-                                          startingNumber: fieldValue(event),
-                                        })
-                                      }
-                                      autocomplete="off"
-                                    />
-                                  ) : (
-                                    entry.startingNumber
-                                  )}
-                                </s-table-cell>
-                                <s-table-cell>
-                                  {isEditingSeries ? (
-                                    <s-text-field
-                                      label="Preview / next number"
-                                      labelAccessibilityVisibility="exclusive"
-                                      value={
-                                        previewDrafts[module.id] ??
-                                        previewForModule(module.id)
-                                      }
-                                      onInput={(event) =>
-                                        applyPreviewDraft(
-                                          module.id,
-                                          fieldValue(event),
-                                        )
-                                      }
-                                      onBlur={() =>
-                                        commitPreviewDraft(module.id)
-                                      }
-                                      autocomplete="off"
-                                    />
-                                  ) : (
-                                    <s-text type="strong">
-                                      {previewForModule(module.id)}
-                                    </s-text>
-                                  )}
-                                </s-table-cell>
-                              </s-table-row>
-                            );
-                          })}
-                        </s-table-body>
-                      </s-table>
-                    </s-box>
+                                </BlockStack>
+                              </Box>
+                            </Collapsible>
+                          </Box>
 
-                    {isNumberSeriesDirty ? (
-                      <s-paragraph color="subdued">
-                        Unsaved changes
-                      </s-paragraph>
-                    ) : null}
-                  </s-stack>
-                </s-section>
-              ) : (
-                <s-section heading="SMTP">
-                  <s-stack direction="block" gap="base">
-                    <s-paragraph color="subdued">
-                      {activeItem.description}
-                    </s-paragraph>
+                          <InlineStack gap="200" blockAlign="center">
+                            <Button
+                              size="slim"
+                              pressed={smtpHelpProvider === "gmail"}
+                              onClick={applyGmailSmtpPreset}
+                            >
+                              Use Gmail
+                            </Button>
+                            <Button
+                              size="slim"
+                              pressed={smtpHelpProvider === "webmail"}
+                              onClick={applyWebmailSmtpPreset}
+                            >
+                              Use Webmail
+                            </Button>
+                            <Text as="span" tone="subdued">
+                              {smtpHelpProvider === "gmail"
+                                ? "Gmail needs an App Password, not your regular password."
+                                : "Hostinger example: smtp.hostinger.com · port 465 · SSL"}
+                            </Text>
+                          </InlineStack>
 
-                    <s-switch
-                      label="Enable SMTP"
-                      checked={smtpSettings.enabled || undefined}
-                      onChange={(event) =>
-                        updateSmtpField("enabled", fieldChecked(event))
-                      }
-                    />
+                          <TextField
+                            label="SMTP host"
+                            value={smtpSettings.host}
+                            placeholder={
+                              smtpHelpProvider === "gmail"
+                                ? "smtp.gmail.com"
+                                : "smtp.hostinger.com"
+                            }
+                            onChange={(value) => updateSmtpField("host", value)}
+                            autoComplete="off"
+                          />
 
-                    <s-grid gridTemplateColumns="2fr 1fr" gap="small">
-                      <s-text-field
-                        label="SMTP host"
-                        value={smtpSettings.host}
-                        placeholder="smtp.example.com"
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("host", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                      <s-text-field
-                        label="Port"
-                        value={smtpSettings.port}
-                        placeholder="587"
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("port", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                    </s-grid>
+                          <InlineStack gap="400" blockAlign="end" wrap={false}>
+                            <div className="settings-port-field">
+                              <TextField
+                                label="Port"
+                                value={smtpSettings.port}
+                                placeholder="587"
+                                onChange={(value) => updateSmtpField("port", value)}
+                                autoComplete="off"
+                              />
+                            </div>
+                            <Checkbox
+                              label="Use TLS"
+                              checked={smtpSettings.encryption === "tls"}
+                              onChange={(checked) => {
+                                if (checked) {
+                                  updateSmtpField("encryption", "tls");
+                                  return;
+                                }
+                                updateSmtpField(
+                                  "encryption",
+                                  smtpSettings.port === "465" ? "ssl" : "none",
+                                );
+                              }}
+                            />
+                          </InlineStack>
 
-                    <s-grid gridTemplateColumns="1fr 1fr" gap="small">
-                      <s-text-field
-                        label="Username"
-                        value={smtpSettings.username}
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("username", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                      <s-password-field
-                        label="Password"
-                        value={smtpSettings.password}
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("password", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                    </s-grid>
+                          <InlineStack gap="300" wrap={false}>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="From email"
+                                type="email"
+                                value={smtpSettings.fromEmail}
+                                placeholder="you@gmail.com"
+                                onChange={(value) =>
+                                  updateSmtpField("fromEmail", value)
+                                }
+                                autoComplete="email"
+                              />
+                            </div>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="From name"
+                                value={smtpSettings.fromName}
+                                placeholder="Your Store"
+                                onChange={(value) =>
+                                  updateSmtpField("fromName", value)
+                                }
+                                autoComplete="off"
+                              />
+                            </div>
+                          </InlineStack>
 
-                    <s-grid gridTemplateColumns="1fr 1fr" gap="small">
-                      <s-text-field
-                        label="From name"
-                        value={smtpSettings.fromName}
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("fromName", fieldValue(event))
-                        }
-                        autocomplete="off"
-                      />
-                      <s-email-field
-                        label="From email"
-                        value={smtpSettings.fromEmail}
-                        disabled={!smtpSettings.enabled || undefined}
-                        onInput={(event) =>
-                          updateSmtpField("fromEmail", fieldValue(event))
-                        }
-                        autocomplete="email"
-                      />
-                    </s-grid>
+                          <InlineStack gap="300" wrap={false}>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Username"
+                                value={smtpSettings.username}
+                                placeholder="Same as from email"
+                                onChange={(value) =>
+                                  updateSmtpField("username", value)
+                                }
+                                autoComplete="off"
+                              />
+                            </div>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Password"
+                                type="password"
+                                value={smtpSettings.password}
+                                placeholder={
+                                  hasSmtpPassword
+                                    ? "Leave blank to keep existing"
+                                    : "App password"
+                                }
+                                onChange={(value) =>
+                                  updateSmtpField("password", value)
+                                }
+                                autoComplete="off"
+                              />
+                            </div>
+                          </InlineStack>
 
-                    <s-select
-                      label="Encryption"
-                      value={smtpSettings.encryption}
-                      disabled={!smtpSettings.enabled || undefined}
-                      onChange={(event) =>
-                        updateSmtpField(
-                          "encryption",
-                          fieldValue(event) as SmtpEncryption,
-                        )
-                      }
+                          {smtpSettings.host ? (
+                            <Banner tone="info" title="SMTP ready">
+                              <p>
+                                Document emails will send through this server when
+                                you use Send Email. Turn PDF attach on in Email
+                                templates.
+                              </p>
+                            </Banner>
+                          ) : (
+                            <Banner tone="warning" title="SMTP not configured">
+                              <p>
+                                Without a host, Send Email opens a mailto draft
+                                instead of sending from the app.
+                              </p>
+                            </Banner>
+                          )}
+
+                          {isSmtpDirty ? (
+                            <Text as="p" tone="subdued">
+                              Unsaved changes
+                            </Text>
+                          ) : null}
+                        </BlockStack>
+                      ) : isEmailTemplatesSection(activeSection) ? (
+                        <BlockStack gap="400">
+                          <Text as="p" tone="subdued">
+                            {activeItem.description}
+                          </Text>
+
+                          <InlineStack gap="200">
+                            <Button
+                              variant="tertiary"
+                              onClick={resetEmailTemplateToDefault}
+                            >
+                              Reset this
+                            </Button>
+                            <Button
+                              variant="tertiary"
+                              onClick={loadAllReadyEmailTemplates}
+                            >
+                              Load all ready
+                            </Button>
+                          </InlineStack>
+
+                          <InlineStack gap="300" blockAlign="end" wrap={false}>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Subject"
+                                value={
+                                  emailTemplates.templates[emailTemplateKind].subject
+                                }
+                                onChange={(value) =>
+                                  updateEmailTemplateField("subject", value)
+                                }
+                                autoComplete="off"
+                              />
+                            </div>
+                            <Checkbox
+                              label="Attach PDF"
+                              checked={
+                                emailTemplates.templates[emailTemplateKind].attachPdf
+                              }
+                              onChange={(checked) =>
+                                updateEmailTemplateField("attachPdf", checked)
+                              }
+                            />
+                          </InlineStack>
+
+                          <EmailBodyEditor
+                            key={emailTemplateKind}
+                            ref={emailBodyEditorRef}
+                            label="Body"
+                            value={emailTemplates.templates[emailTemplateKind].body}
+                            onChange={(html) =>
+                              updateEmailTemplateField("body", html)
+                            }
+                          />
+
+                          <div className="settings-email-placeholders">
+                            {EMAIL_TEMPLATE_PLACEHOLDERS.map((token) => (
+                              <button
+                                key={token}
+                                type="button"
+                                className="settings-email-placeholders__chip"
+                                onClick={() =>
+                                  emailBodyEditorRef.current?.insertText(token)
+                                }
+                              >
+                                {token}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="settings-email-design-row">
+                            <InlineStack gap="300" wrap={false}>
+                              <div className="settings-flex-field">
+                                <TextField
+                                  label="Header"
+                                  value={emailTemplates.design.headerColor}
+                                  onChange={(value) =>
+                                    updateEmailDesign(
+                                      "headerColor",
+                                      value || "#1a1a1a",
+                                    )
+                                  }
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <div className="settings-flex-field">
+                                <TextField
+                                  label="Accent"
+                                  value={emailTemplates.design.accentColor}
+                                  onChange={(value) =>
+                                    updateEmailDesign(
+                                      "accentColor",
+                                      value || "#2c6ecb",
+                                    )
+                                  }
+                                  autoComplete="off"
+                                />
+                              </div>
+                            </InlineStack>
+                            <InlineStack gap="300" blockAlign="end" wrap={false}>
+                              <div className="settings-flex-field">
+                                <TextField
+                                  label="Footer"
+                                  value={emailTemplates.design.footerText}
+                                  onChange={(value) =>
+                                    updateEmailDesign("footerText", value)
+                                  }
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <Checkbox
+                                label="Store header"
+                                checked={emailTemplates.design.includeLogo}
+                                onChange={(checked) =>
+                                  updateEmailDesign("includeLogo", checked)
+                                }
+                              />
+                            </InlineStack>
+                          </div>
+
+                          {isEmailTemplatesDirty ? (
+                            <Text as="p" tone="subdued">
+                              Unsaved changes
+                            </Text>
+                          ) : null}
+                        </BlockStack>
+                      ) : null}
+                    </BlockStack>
+                  </Card>
+                  </div>
+                </Layout.Section>
+
+                {isEmailTemplatesSection(activeSection) ? (
+                  <Layout.Section variant="oneThird">
+                    <div
+                      className="settings-email-preview-column"
+                      aria-label="Email preview"
                     >
-                      <s-option value="tls">TLS</s-option>
-                      <s-option value="ssl">SSL</s-option>
-                      <s-option value="none">None</s-option>
-                    </s-select>
-
-                    {isSmtpDirty ? (
-                      <s-paragraph color="subdued">
-                        Unsaved changes
-                      </s-paragraph>
-                    ) : null}
-                  </s-stack>
-                </s-section>
-              )}
-              </div>
+                      <Card padding="0">
+                        <div className="settings-email-preview-panel">
+                          <div className="settings-email-preview-panel__bar">
+                            <Text as="span" fontWeight="semibold">
+                              Email preview
+                            </Text>
+                            {emailPreview.attachPdf ? (
+                              <Badge tone="info">PDF attached</Badge>
+                            ) : (
+                              <Badge>No PDF</Badge>
+                            )}
+                          </div>
+                          <div className="settings-email-preview-panel__subject">
+                            <span className="settings-email-preview-panel__subject-label">
+                              Subject
+                            </span>
+                            <span>{emailPreview.subject}</span>
+                          </div>
+                          <div className="settings-email-preview-card-wrap">
+                            <div
+                              className="settings-email-preview-card"
+                              style={
+                                {
+                                  ["--email-accent" as string]:
+                                    emailPreview.design.accentColor,
+                                } as CSSProperties
+                              }
+                            >
+                              {emailPreview.design.includeLogo ? (
+                                <div
+                                  className="settings-email-preview-card__header"
+                                  style={{
+                                    background: emailPreview.design.headerColor,
+                                  }}
+                                >
+                                  <div className="settings-email-preview-card__store">
+                                    {emailPreview.storeName}
+                                  </div>
+                                  <div
+                                    className="settings-email-preview-card__accent-line"
+                                    style={{
+                                      background: emailPreview.design.accentColor,
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                <div
+                                  className="settings-email-preview-card__accent-bar"
+                                  style={{
+                                    background: emailPreview.design.accentColor,
+                                  }}
+                                />
+                              )}
+                              <div
+                                className="settings-email-preview-card__body"
+                                dangerouslySetInnerHTML={{
+                                  __html: bodyContentToHtml(emailPreview.bodyText),
+                                }}
+                              />
+                              <div className="settings-email-preview-card__meta">
+                                <span
+                                  className="settings-email-preview-card__pill"
+                                  style={{
+                                    color: emailPreview.design.accentColor,
+                                    background: `${emailPreview.design.accentColor}14`,
+                                  }}
+                                >
+                                  {emailPreview.documentType}
+                                </span>
+                                <span className="settings-email-preview-card__doc-no">
+                                  {emailPreview.documentNumber}
+                                </span>
+                              </div>
+                              <div className="settings-email-preview-card__amount">
+                                <span>Amount</span>
+                                <strong>{emailPreview.amountLabel}</strong>
+                              </div>
+                              <div className="settings-email-preview-card__footer">
+                                {emailPreview.design.footerText}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                  </Layout.Section>
+                ) : (
+                  <Layout.Section variant="oneThird">
+                    <div
+                      className="settings-recommend-column"
+                      aria-label="Recommended apps"
+                    >
+                      <BlockStack gap="400">
+                        <Text as="h2" variant="headingSm" tone="subdued">
+                          More from XLOXI
+                        </Text>
+                        {RECOMMENDED_APPS.map((app) => (
+                          <Card key={app.id}>
+                            <BlockStack gap="300">
+                              <InlineStack
+                                align="space-between"
+                                blockAlign="start"
+                                gap="300"
+                                wrap={false}
+                              >
+                                <InlineStack
+                                  gap="300"
+                                  blockAlign="center"
+                                  wrap={false}
+                                >
+                                  <img
+                                    src={app.logo}
+                                    alt={`${app.name} logo`}
+                                    className="settings-recommend-card__logo"
+                                    width={48}
+                                    height={48}
+                                  />
+                                  <BlockStack gap="100">
+                                    <Text as="h3" variant="headingSm">
+                                      {app.name}
+                                    </Text>
+                                    <Text as="p" tone="subdued" variant="bodySm">
+                                      {app.tagline}
+                                    </Text>
+                                  </BlockStack>
+                                </InlineStack>
+                                <Badge>{app.badge}</Badge>
+                              </InlineStack>
+                              <Text as="p" variant="bodySm">
+                                {app.description}
+                              </Text>
+                              <Button
+                                url={app.href}
+                                external
+                                variant="primary"
+                                fullWidth
+                              >
+                                View on App Store
+                              </Button>
+                            </BlockStack>
+                          </Card>
+                        ))}
+                      </BlockStack>
+                    </div>
+                  </Layout.Section>
+                )}
+              </Layout>
             </div>
-          </s-stack>
-        </div>
-      </s-page>
+          </BlockStack>
+        </Page>
+      </AppProvider>
     </>
   );
 }

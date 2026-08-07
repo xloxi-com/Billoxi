@@ -341,6 +341,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     ]);
     orderInvoiced = invoicedGids.has(order.id);
     orderPackingSlip = packingGids.has(order.id);
+
+    // Paid in Shopify → self-heal invoice mark without blocking first paint.
+    // Primary path is the orders/paid webhook.
+    const financialStatus = (order.financialStatus || "").toUpperCase();
+    if (!orderInvoiced && financialStatus === "PAID") {
+      orderInvoiced = true;
+      void markOrderInvoiced(session.shop, order.id)
+        .then(() => invalidateSalesOrdersCache(session.shop))
+        .catch((error) => {
+          console.error("[sales-order] Paid self-heal failed", error);
+        });
+    }
+
     let soDetails = soDetailsInitial;
     if (!soDetails?.documentNumber) {
       const soSeries = await loadNumberSeriesEntryForShop(
@@ -728,13 +741,24 @@ export default function SalesOrderDocumentPage() {
     error?: string;
     document?: string;
   }>();
+  const sendFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    mode?: "smtp" | "mailto";
+    to?: string;
+    subject?: string;
+    body?: string;
+    attachedPdf?: boolean;
+  }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const paperRef = useRef<HTMLDivElement>(null);
   const actionRanRef = useRef(false);
   const handledConvertDataRef = useRef<unknown>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isPreparingEmail, setIsPreparingEmail] = useState(false);
   const isConverting = convertFetcher.state !== "idle";
+  const isSendingEmail = isPreparingEmail || sendFetcher.state !== "idle";
   const isInvoice = data.documentMode === "invoice";
   const isCreditNote = data.documentMode === "credit-note";
   const isPackingSlip = data.documentMode === "packing-slip";
@@ -1164,7 +1188,7 @@ export default function SalesOrderDocumentPage() {
     previewOrder.documentNumber,
   ]);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const email = data.order.email || data.order.billing.email;
     if (!email) {
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1172,28 +1196,134 @@ export default function SalesOrderDocumentPage() {
       }
       return;
     }
+    if (isSendingEmail) return;
 
-    const label = isCreditNote
-      ? "Credit Note"
+    const documentKind = isCreditNote
+      ? "credit-note"
       : isInvoice
-        ? "Invoice"
+        ? "invoice"
         : isPackingSlip
-          ? "Packing Slip"
-          : "Sales Order";
-    const docNo = data.order.documentNumber || data.order.name;
-    const subject = encodeURIComponent(`${label} ${docNo}`);
-    const body = encodeURIComponent(
-      `Please find ${label.toLowerCase()} ${docNo} attached.\n\nTotal: ${data.order.currencyCode} ${data.order.total}`,
+          ? "packing-slip"
+          : "sales-order";
+
+    const formData = new FormData();
+    formData.set("orderId", data.order.id);
+    formData.set("documentKind", documentKind);
+    formData.set("toEmail", email);
+    formData.set(
+      "documentNumber",
+      data.order.documentNumber || data.order.name,
     );
-    window.open(
-      `mailto:${email}?subject=${subject}&body=${body}`,
-      "_blank",
-      "noopener,noreferrer",
+    formData.set("orderName", data.order.name);
+    formData.set(
+      "customerName",
+      data.order.customerName || data.order.billing.name || "",
     );
-    if (typeof shopify !== "undefined" && shopify.toast) {
-      shopify.toast.show(`Email draft opened for ${email}`);
+    formData.set("total", data.order.total);
+    formData.set("currency", data.order.currencyCode);
+    formData.set("referenceNumber", data.order.referenceNumber || "");
+    formData.set("templateId", data.templateId);
+
+    setIsPreparingEmail(true);
+    try {
+      const paper = paperRef.current;
+      let pdfBlob: Blob;
+      let fileName: string;
+      if (paper) {
+        const { buildSalesOrderDomVectorPdfBlob } = await import(
+          "../sales-order-pdf"
+        );
+        ({ blob: pdfBlob, fileName } = await buildSalesOrderDomVectorPdfBlob(
+          paper,
+          {
+            paperSize: data.settings.paperSize,
+            orientation: data.settings.orientation,
+            backgroundColor: data.settings.backgroundColor,
+            fontFamily: resolveDocumentFontFamily(data.settings.fontFamily),
+            margins: data.settings.margins,
+          },
+          previewOrder.documentNumber || data.order.name,
+          documentKind,
+        ));
+      } else {
+        const { buildSalesOrderDomPdfBlobFromList } = await import(
+          "../sales-order-dom-export.client"
+        );
+        ({ blob: pdfBlob, fileName } = await buildSalesOrderDomPdfBlobFromList({
+          orderId: data.order.id,
+          templateId: data.templateId,
+          documentKind,
+        }));
+      }
+      formData.append(
+        "pdf",
+        new File([pdfBlob], fileName, { type: "application/pdf" }),
+      );
+    } catch (error) {
+      console.error("Email PDF prepare failed:", error);
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show("Could not prepare PDF for email", {
+          isError: true,
+        });
+      }
+      setIsPreparingEmail(false);
+      return;
     }
-  }, [data.order, isCreditNote, isInvoice, isPackingSlip]);
+    setIsPreparingEmail(false);
+
+    sendFetcher.submit(formData, {
+      method: "post",
+      action: "/app/send-document-email",
+      encType: "multipart/form-data",
+    });
+  }, [
+    data.order,
+    data.settings,
+    data.templateId,
+    isCreditNote,
+    isInvoice,
+    isPackingSlip,
+    isSendingEmail,
+    previewOrder.documentNumber,
+    sendFetcher,
+  ]);
+
+  const handledSendDataRef = useRef<unknown>(null);
+  useEffect(() => {
+    if (sendFetcher.state !== "idle" || !sendFetcher.data) return;
+    if (handledSendDataRef.current === sendFetcher.data) return;
+    handledSendDataRef.current = sendFetcher.data;
+
+    const result = sendFetcher.data;
+    if (!result.ok) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(result.error || "Failed to send email", {
+          isError: true,
+        });
+      }
+      return;
+    }
+
+    if (result.mode === "mailto" && result.to && result.subject && result.body) {
+      window.open(
+        `mailto:${result.to}?subject=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(result.body)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(`Email draft opened for ${result.to}`);
+      }
+      return;
+    }
+
+    if (typeof shopify !== "undefined" && shopify.toast) {
+      shopify.toast.show(
+        result.attachedPdf
+          ? `Email sent to ${result.to} with PDF attached`
+          : `Email sent to ${result.to}`,
+      );
+    }
+  }, [sendFetcher.state, sendFetcher.data]);
 
   const [queuedAction, setQueuedAction] = useState<
     "print" | "download" | "send" | null
@@ -1327,7 +1457,7 @@ export default function SalesOrderDocumentPage() {
       return { label: "Invoiced", variant: "invoiced" as const };
     }
     if (isPaidOrder) {
-      return { label: "Confirmed", variant: "confirmed" as const };
+      return { label: "Not Invoiced", variant: "not-invoiced" as const };
     }
     return null;
   })();
@@ -1521,7 +1651,8 @@ export default function SalesOrderDocumentPage() {
       <s-button
         slot="secondary-actions"
         icon="email"
-        disabled={isConverting || isCancelledOrder || undefined}
+        loading={isSendingEmail || undefined}
+        disabled={isConverting || isCancelledOrder || isSendingEmail || undefined}
         onClick={handleSend}
       >
         Send Email

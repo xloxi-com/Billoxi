@@ -1,8 +1,5 @@
 import prisma from "./db.server";
 import { randomUUID } from "node:crypto";
-import {
-  type TemplateEditorSettings,
-} from "./sales-order-document";
 import { getInvoicedOrderGids } from "./order-invoice-status.server";
 import {
   parseNumberSeriesDigits,
@@ -16,7 +13,13 @@ import {
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
 
-export function numberingMeta(numbering: TemplateEditorSettings["numbering"]) {
+type NumberingSettings = {
+  prefix: string;
+  suffix?: string;
+  startingNumber: string;
+};
+
+export function numberingMeta(numbering: NumberingSettings) {
   const padLength = Math.max(numbering.startingNumber.length, 1);
   const startAt = Number.parseInt(numbering.startingNumber, 10);
   return {
@@ -28,7 +31,7 @@ export function numberingMeta(numbering: TemplateEditorSettings["numbering"]) {
 }
 
 export function formatSequenceNumber(
-  numbering: TemplateEditorSettings["numbering"],
+  numbering: NumberingSettings,
   sequence: number,
 ) {
   const { prefix, suffix, padLength } = numberingMeta(numbering);
@@ -37,10 +40,11 @@ export function formatSequenceNumber(
 
 export async function getLastAllocatedSequence(
   shop: string,
-  templateId: string,
+  templateId?: string | null,
 ): Promise<number | null> {
   const last = await prisma.salesOrderDocumentNumber.findFirst({
-    where: { shop, templateId },
+    // Shop-wide by default: Active template can change, but the SO series is one.
+    where: templateId ? { shop, templateId } : { shop },
     orderBy: { sequence: "desc" },
     select: { sequence: true },
   });
@@ -56,20 +60,81 @@ export async function getSalesOrderDocumentNumbersByOrderGids(
   const map = new Map<string, string>();
   if (orderGids.length === 0) return map;
 
+  // Numbers are scoped by templateId in the DB, but Active template can change
+  // after assignment. Prefer the current template, then fall back to any
+  // existing number for the same Shopify order so the list never shows "—".
   const rows = await prisma.salesOrderDocumentNumber.findMany({
     where: {
       shop,
-      templateId,
       orderGid: { in: orderGids },
     },
     select: {
       orderGid: true,
       documentNumber: true,
+      templateId: true,
+      createdAt: true,
     },
+    orderBy: { createdAt: "asc" },
   });
 
+  const byOrder = new Map<string, typeof rows>();
   for (const row of rows) {
-    map.set(row.orderGid, row.documentNumber);
+    const list = byOrder.get(row.orderGid);
+    if (list) list.push(row);
+    else byOrder.set(row.orderGid, [row]);
+  }
+
+  for (const orderGid of orderGids) {
+    const matches = byOrder.get(orderGid);
+    if (!matches || matches.length === 0) continue;
+    const preferred =
+      matches.find((row) => row.templateId === templateId) ?? matches[0];
+    if (preferred?.documentNumber) {
+      map.set(orderGid, preferred.documentNumber);
+    }
+  }
+  return map;
+}
+
+/**
+ * Ensure visible orders have a sales-order number (allocate missing).
+ * Reuses a number already issued under another template for the same order.
+ * Safe to call in background — never throw to the caller path.
+ */
+export async function ensureSalesOrderDocumentNumbers(
+  shop: string,
+  templateId: string,
+  orderGids: string[],
+): Promise<Map<string, string>> {
+  const map = await getSalesOrderDocumentNumbersByOrderGids(
+    shop,
+    templateId,
+    orderGids,
+  );
+  const missing = orderGids.filter((gid) => !map.get(gid)?.trim());
+  if (missing.length === 0) return map;
+
+  const series = await loadNumberSeriesEntryForShop(shop, "sales-order");
+  if (series.entryMode === "manual") return map;
+
+  const numbering = numberingFromSeries(series);
+  for (const orderGid of missing) {
+    try {
+      const documentNumber = await allocateSalesOrderDocumentNumber(
+        shop,
+        templateId,
+        orderGid,
+        numbering,
+      );
+      map.set(orderGid, documentNumber);
+    } catch (error) {
+      console.error(
+        "[sales-order-number] Failed to allocate",
+        shop,
+        orderGid,
+        error,
+      );
+    }
   }
   return map;
 }
@@ -77,11 +142,11 @@ export async function getSalesOrderDocumentNumbersByOrderGids(
 export async function getNextSequence(
   shop: string,
   templateId: string,
-  numbering: TemplateEditorSettings["numbering"],
+  numbering: NumberingSettings,
 ): Promise<number> {
   const { startAt } = numberingMeta(numbering);
   const [last, counter] = await Promise.all([
-    getLastAllocatedSequence(shop, templateId),
+    getLastAllocatedSequence(shop),
     prisma.salesOrderNumberCounter.findUnique({
       where: { shop_templateId: { shop, templateId } },
       select: { nextValue: true },
@@ -100,8 +165,8 @@ export async function getNextSequence(
 export async function validateStartingNumber(
   shop: string,
   templateId: string,
-  numbering: TemplateEditorSettings["numbering"],
-  previousNumbering?: TemplateEditorSettings["numbering"] | null,
+  numbering: NumberingSettings,
+  previousNumbering?: NumberingSettings | null,
 ): Promise<string | null> {
   const { startAt } = numberingMeta(numbering);
   const previousStart = previousNumbering
@@ -113,7 +178,7 @@ export async function validateStartingNumber(
     return null;
   }
 
-  const last = await getLastAllocatedSequence(shop, templateId);
+  const last = await getLastAllocatedSequence(shop);
   if (last != null && startAt <= last) {
     return `Cannot set starting number to ${formatSequenceNumber(numbering, startAt)}. Numbers up to ${formatSequenceNumber(numbering, last)} are already used. Enter ${formatSequenceNumber(numbering, last + 1)} or higher.`;
   }
@@ -125,11 +190,11 @@ export async function validateStartingNumber(
 export async function syncNumberCounter(
   shop: string,
   templateId: string,
-  numbering: TemplateEditorSettings["numbering"],
+  numbering: NumberingSettings,
   nextSequence?: number | null,
 ) {
   const { prefix, padLength, startAt } = numberingMeta(numbering);
-  const last = await getLastAllocatedSequence(shop, templateId);
+  const last = await getLastAllocatedSequence(shop);
   const minNext = last == null ? startAt : last + 1;
   const requested =
     typeof nextSequence === "number" && Number.isFinite(nextSequence)
@@ -176,13 +241,14 @@ export async function syncNumberCounter(
 /**
  * Returns a stable sales-order document number for this Shopify order.
  * First open allocates the next sequence from the template starting number.
- * Existing assignments are never overridden.
+ * Existing assignments are never overridden — including numbers issued under a
+ * previous Active template for the same order.
  */
 export async function allocateSalesOrderDocumentNumber(
   shop: string,
   templateId: string,
   orderGid: string,
-  numbering: TemplateEditorSettings["numbering"],
+  numbering: NumberingSettings,
 ): Promise<string> {
   const existing = await prisma.salesOrderDocumentNumber.findUnique({
     where: {
@@ -194,6 +260,15 @@ export async function allocateSalesOrderDocumentNumber(
     },
   });
   if (existing) return existing.documentNumber;
+
+  // Active template may have changed after the number was first assigned.
+  // Reuse that number — do not insert a duplicate row (sequence unique can break).
+  const prior = await prisma.salesOrderDocumentNumber.findFirst({
+    where: { shop, orderGid },
+    orderBy: { createdAt: "asc" },
+    select: { documentNumber: true },
+  });
+  if (prior?.documentNumber) return prior.documentNumber;
 
   const { prefix, suffix, padLength, startAt } = numberingMeta(numbering);
 
@@ -211,6 +286,25 @@ export async function allocateSalesOrderDocumentNumber(
         });
         if (assigned) return assigned.documentNumber;
 
+        const priorInTx = await tx.salesOrderDocumentNumber.findFirst({
+          where: { shop, orderGid },
+          orderBy: { createdAt: "asc" },
+          select: { documentNumber: true },
+        });
+        if (priorInTx?.documentNumber) return priorInTx.documentNumber;
+
+        // Shop-wide high-water mark so switching Active template never restarts
+        // the series or collides with numbers issued under another template.
+        const shopLast = await tx.salesOrderDocumentNumber.findFirst({
+          where: { shop },
+          orderBy: { sequence: "desc" },
+          select: { sequence: true },
+        });
+        const minNext = Math.max(
+          startAt,
+          (shopLast?.sequence ?? startAt - 1) + 1,
+        );
+
         let counter = await tx.salesOrderNumberCounter.findUnique({
           where: {
             shop_templateId: {
@@ -225,7 +319,7 @@ export async function allocateSalesOrderDocumentNumber(
             data: {
               shop,
               templateId,
-              nextValue: startAt,
+              nextValue: minNext,
               prefix,
               padLength,
             },
@@ -236,9 +330,9 @@ export async function allocateSalesOrderDocumentNumber(
             prefix?: string;
             padLength?: number;
           } = {};
-          // Never move the counter backwards — only raise it when starting number increases.
-          if (startAt > counter.nextValue) {
-            updates.nextValue = startAt;
+          // Never move the counter backwards — only raise it when needed.
+          if (minNext > counter.nextValue) {
+            updates.nextValue = minNext;
           }
           if (counter.prefix !== prefix) updates.prefix = prefix;
           if (counter.padLength !== padLength) updates.padLength = padLength;
@@ -253,13 +347,10 @@ export async function allocateSalesOrderDocumentNumber(
         // Skip any sequence that somehow already exists (collision / legacy data).
         let sequence = counter.nextValue;
         for (let skip = 0; skip < 50; skip++) {
-          const taken = await tx.salesOrderDocumentNumber.findUnique({
+          const taken = await tx.salesOrderDocumentNumber.findFirst({
             where: {
-              shop_templateId_sequence: {
-                shop,
-                templateId,
-                sequence,
-              },
+              shop,
+              sequence,
             },
             select: { id: true },
           });
@@ -386,7 +477,7 @@ export async function fetchAllOrderGidsOldestFirst(
 export async function backfillSalesOrderDocumentNumbers(
   shop: string,
   templateId: string,
-  numbering: TemplateEditorSettings["numbering"],
+  numbering: NumberingSettings,
   orderGids: string[],
   options?: { persistUndo?: boolean },
 ): Promise<{
@@ -450,7 +541,7 @@ export async function backfillSalesOrderDocumentNumbers(
     assigned,
     skipped,
     lastNumber,
-    lastAllocatedSequence: await getLastAllocatedSequence(shop, templateId),
+    lastAllocatedSequence: await getLastAllocatedSequence(shop),
     canUndo: options?.persistUndo === true && assignedOrderGids.length > 0,
   };
 }
@@ -622,7 +713,7 @@ export async function revertLastSalesOrderNumberBackfill(
     },
   });
 
-  const last = await getLastAllocatedSequence(shop, templateId);
+  const last = await getLastAllocatedSequence(shop);
   const nextValue = last == null ? snapshot.previousNextValue : last + 1;
   const counter = await prisma.salesOrderNumberCounter.findUnique({
     where: { shop_templateId: { shop, templateId } },
@@ -662,16 +753,25 @@ export async function getSalesOrderDocumentDetails(
       documentDate: Date | null;
       customerNote: string | null;
       terms: string | null;
+      templateId: string;
     }>
   >`
-    SELECT "documentNumber", "documentDate", "customerNote", terms
+    SELECT "documentNumber", "documentDate", "customerNote", terms, "templateId"
     FROM "SalesOrderDocumentNumber"
     WHERE shop = ${shop}
-      AND "templateId" = ${templateId}
       AND "orderGid" = ${orderGid}
+    ORDER BY CASE WHEN "templateId" = ${templateId} THEN 0 ELSE 1 END,
+             "createdAt" ASC
     LIMIT 1
   `;
-  return rows[0] ?? null;
+  return rows[0]
+    ? {
+        documentNumber: rows[0].documentNumber,
+        documentDate: rows[0].documentDate,
+        customerNote: rows[0].customerNote,
+        terms: rows[0].terms,
+      }
+    : null;
 }
 
 export type UpdateSalesOrderDetailsInput = {

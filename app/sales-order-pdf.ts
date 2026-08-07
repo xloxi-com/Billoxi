@@ -3846,6 +3846,21 @@ export async function buildSalesOrderDomVectorPdfFromElement(
   }
 }
 
+export async function buildSalesOrderDomVectorPdfBlob(
+  paper: HTMLElement,
+  settings: TemplateExportSettings,
+  orderName: string,
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "credit-note"
+    | "packing-slip" = "sales-order",
+): Promise<{ blob: Blob; fileName: string }> {
+  const pdf = await buildSalesOrderDomVectorPdfFromElement(paper, settings);
+  const fileName = salesOrderPdfFileName(orderName, documentKind);
+  return { blob: pdf.output("blob"), fileName };
+}
+
 export async function downloadSalesOrderDomVectorPdf(
   paper: HTMLElement,
   settings: TemplateExportSettings,
@@ -3856,8 +3871,21 @@ export async function downloadSalesOrderDomVectorPdf(
     | "credit-note"
     | "packing-slip" = "sales-order",
 ) {
-  const pdf = await buildSalesOrderDomVectorPdfFromElement(paper, settings);
-  pdf.save(salesOrderPdfFileName(orderName, documentKind));
+  const { blob, fileName } = await buildSalesOrderDomVectorPdfBlob(
+    paper,
+    settings,
+    orderName,
+    documentKind,
+  );
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 export async function printSalesOrderDomVectorPdf(

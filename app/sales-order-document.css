@@ -139,6 +139,10 @@
   background: #2c6ecb;
 }
 
+.sales-order-status-ribbon--not-invoiced span {
+  background: #b98900;
+}
+
 .sales-order-status-ribbon--paid span {
   background: #2da44e;
 }

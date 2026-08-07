@@ -169,8 +169,9 @@ async function prepareOrdersForPdf(args: {
       args.shop,
       "credit-note",
     );
+    // Prefer the UI template (download/email) over shop Active when provided.
     const templateId = resolveCreditNoteTemplateId(
-      shopSelected || args.templateId,
+      args.templateId || shopSelected,
     );
     const [template, creditMeta, invoiceMeta] = await Promise.all([
       loadDocumentTemplateSettings(
@@ -272,7 +273,7 @@ async function prepareOrdersForPdf(args: {
       loadSelectedTemplateForShop(args.shop, "sales-order"),
     ]);
     const templateId = resolveInvoiceTemplateId(
-      shopSelectedInvoice || args.templateId,
+      args.templateId || shopSelectedInvoice,
     );
     const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
     const [template, invoiceMeta, soNumbers] = await Promise.all([
@@ -364,7 +365,7 @@ async function prepareOrdersForPdf(args: {
       loadSelectedTemplateForShop(args.shop, "sales-order"),
     ]);
     const templateId = resolvePackingSlipTemplateId(
-      shopSelectedPacking || args.templateId,
+      args.templateId || shopSelectedPacking,
     );
     const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
     const [template, packingMeta, soNumbers] = await Promise.all([
@@ -444,7 +445,7 @@ async function prepareOrdersForPdf(args: {
     "sales-order",
   );
   const templateId = resolveSalesOrderTemplateId(
-    shopSelected || args.templateId,
+    args.templateId || shopSelected,
   );
   const template = await loadDocumentTemplateSettings(
     args.shop,

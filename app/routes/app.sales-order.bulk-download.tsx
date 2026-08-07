@@ -22,10 +22,12 @@ export async function action({ request }: ActionFunctionArgs) {
       ? "invoice"
       : documentKind === "credit-note"
         ? "credit-note"
-        : "sales-order",
+        : documentKind === "packing-slip"
+          ? "packing-slip"
+          : "sales-order",
   );
   const templateId =
-    shopSelectedTemplateId || String(formData.get("template") || "");
+    String(formData.get("template") || "") || shopSelectedTemplateId || "";
   const intent = String(formData.get("intent") || "download");
 
   try {
