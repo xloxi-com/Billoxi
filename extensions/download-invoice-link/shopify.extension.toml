@@ -1,0 +1,15 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "download-invoice-link"
+uid = "576f3fea-6db7-f533-87f9-6b054cf4d8346c7bb01d"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.targeting]]
+module = "./src/Action.jsx"
+target = "admin.order-details.action.render"

@@ -1,0 +1,15 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "download-packing-slip-link"
+uid = "7abd828b-efe0-8d9b-dbe9-2ec997f2d27b94a866f5"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.targeting]]
+module = "./src/Action.jsx"
+target = "admin.order-details.action.render"

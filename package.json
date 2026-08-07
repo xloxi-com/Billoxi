@@ -47,9 +47,11 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
+    "@preact/signals": "^2.11.0",
     "@shopify/api-codegen-preset": "^1.2.0",
     "@shopify/app-bridge-types": "^0.7.2",
     "@shopify/polaris-types": "^1.0.1",
+    "@shopify/ui-extensions": "^2026.4.0",
     "@types/eslint": "^9.6.1",
     "@types/node": "^22.18.8",
     "@types/nodemailer": "^8.0.1",
@@ -64,6 +66,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^4.6.2",
     "graphql-config": "^5.1.1",
+    "preact": "^10.29.8",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "vite": "^6.3.6"

@@ -10,7 +10,7 @@ import type { StoreDetails } from "./store-details";
 import "./template-editor.css";
 import "./sales-order-document.css";
 
-type ExportPayload = {
+export type ExportPayload = {
   ok: true;
   order: SalesOrderDocumentData;
   templateId: string;
@@ -148,13 +148,11 @@ function mountOffscreenPaper(payload: ExportPayload): {
   return { host, paper, root };
 }
 
-async function withOffscreenPaper<T>(
-  orderId: string,
-  templateId: string,
+async function withOffscreenPaperPayload<T>(
+  payload: ExportPayload,
   documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
   run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
 ): Promise<T> {
-  const payload = await fetchExportPayload(orderId, templateId, documentKind);
   const { host, paper, root } = mountOffscreenPaper(payload);
 
   try {
@@ -164,6 +162,76 @@ async function withOffscreenPaper<T>(
     root.unmount();
     host.remove();
   }
+}
+
+async function withOffscreenPaper<T>(
+  orderId: string,
+  templateId: string,
+  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
+): Promise<T> {
+  const payload = await fetchExportPayload(orderId, templateId, documentKind);
+  return withOffscreenPaperPayload(payload, documentKind, run);
+}
+
+async function buildDomPdfBlobFromPaper(
+  paper: HTMLDivElement,
+  payload: ExportPayload,
+  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+): Promise<{ blob: Blob; fileName: string }> {
+  const { buildSalesOrderDomVectorPdfBlob } = await import("./sales-order-pdf");
+  return buildSalesOrderDomVectorPdfBlob(
+    paper,
+    {
+      paperSize: payload.settings.paperSize,
+      orientation: payload.settings.orientation,
+      backgroundColor: payload.settings.backgroundColor,
+      fontFamily: resolveDocumentFontFamily(payload.settings.fontFamily),
+      margins: payload.settings.margins,
+    },
+    payload.order.documentNumber || payload.order.name,
+    documentKind === "credit-note" ? "credit-note" : documentKind,
+  );
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+export async function buildSalesOrderDomPdfBlobFromPayload(
+  payload: ExportPayload,
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "credit-note"
+    | "packing-slip" = "sales-order",
+): Promise<{ blob: Blob; fileName: string }> {
+  return withOffscreenPaperPayload(payload, documentKind, (paper, p) =>
+    buildDomPdfBlobFromPaper(paper, p, documentKind),
+  );
+}
+
+export async function downloadSalesOrderDomPdfFromPayload(
+  payload: ExportPayload,
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "credit-note"
+    | "packing-slip" = "sales-order",
+) {
+  const { blob, fileName } = await buildSalesOrderDomPdfBlobFromPayload(
+    payload,
+    documentKind,
+  );
+  triggerBlobDownload(blob, fileName);
 }
 
 export async function buildSalesOrderDomPdfBlobFromList(args: {
@@ -176,23 +244,7 @@ export async function buildSalesOrderDomPdfBlobFromList(args: {
     args.orderId,
     args.templateId,
     documentKind,
-    async (paper, payload) => {
-      const { buildSalesOrderDomVectorPdfBlob } = await import(
-        "./sales-order-pdf"
-      );
-      return buildSalesOrderDomVectorPdfBlob(
-        paper,
-        {
-          paperSize: payload.settings.paperSize,
-          orientation: payload.settings.orientation,
-          backgroundColor: payload.settings.backgroundColor,
-          fontFamily: resolveDocumentFontFamily(payload.settings.fontFamily),
-          margins: payload.settings.margins,
-        },
-        payload.order.documentNumber || payload.order.name,
-        documentKind === "credit-note" ? "credit-note" : documentKind,
-      );
-    },
+    (paper, payload) => buildDomPdfBlobFromPaper(paper, payload, documentKind),
   );
 }
 
@@ -202,15 +254,7 @@ export async function downloadSalesOrderDomPdfFromList(args: {
   documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
 }) {
   const { blob, fileName } = await buildSalesOrderDomPdfBlobFromList(args);
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  triggerBlobDownload(blob, fileName);
 }
 
 export async function printSalesOrderDomPdfFromList(args: {
