@@ -14,6 +14,7 @@ import {
 import {
   DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
   DEFAULT_INVOICE_TEMPLATE_ID,
+  DEFAULT_PACKING_SLIP_TEMPLATE_ID,
   findTemplatePreset,
   resolveDocumentNotes,
   resolveSalesOrderTemplateId,
@@ -25,6 +26,7 @@ import {
   getInvoicedMetaByOrderGids,
 } from "../order-invoice-status.server";
 import { getCreditNoteMetaByOrderGids, ensureCreditNoteDocumentNumbers } from "../order-credit-note-status.server";
+import { ensurePackingSlipDocumentNumbers, getPackingSlipMetaByOrderGids } from "../order-packing-slip-status.server";
 
 function resolveInvoiceTemplateId(value: string | null | undefined) {
   if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
@@ -40,9 +42,16 @@ function resolveCreditNoteTemplateId(value: string | null | undefined) {
   return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
 }
 
+function resolvePackingSlipTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("packing-")) {
+    return value;
+  }
+  return DEFAULT_PACKING_SLIP_TEMPLATE_ID;
+}
+
 /**
  * JSON payload for client-side DOM vector PDF (same pipeline as document Download).
- * GET /app/sales-order/export/:orderId?template=...&document=sales-order|invoice|credit-note
+ * GET /app/sales-order/export/:orderId?template=...&document=sales-order|invoice|credit-note|packing-slip
  */
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
@@ -55,6 +64,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const documentKind = url.searchParams.get("document") || "sales-order";
   const isInvoice = documentKind === "invoice";
   const isCreditNote = documentKind === "credit-note";
+  const isPackingSlip = documentKind === "packing-slip";
   const orderGid = toOrderGid(decodeURIComponent(orderId));
 
   if (isCreditNote) {
@@ -134,6 +144,71 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         }),
         terms: currentCredit.terms ?? currentInvoice?.terms ?? template.settings.terms,
       },
+      storeDetails: template.storeDetails,
+    });
+  }
+
+  if (isPackingSlip) {
+    const [shopSelectedPacking, shopSelectedSo] = await Promise.all([
+      loadSelectedTemplateForShop(session.shop, "packing-slip"),
+      loadSelectedTemplateForShop(session.shop, "sales-order"),
+    ]);
+    const templateId = resolvePackingSlipTemplateId(
+      shopSelectedPacking || url.searchParams.get("template"),
+    );
+    const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
+
+    const [order, template, packingMeta, soNumbers] = await Promise.all([
+      fetchSalesOrderDocument(admin, orderGid),
+      loadDocumentTemplateSettings(
+        session.shop,
+        "packing-slip",
+        templateId,
+        admin,
+      ),
+      getPackingSlipMetaByOrderGids(session.shop, [orderGid]),
+      getSalesOrderDocumentNumbersByOrderGids(
+        session.shop,
+        salesOrderTemplateId,
+        [orderGid],
+      ),
+    ]);
+
+    if (!order) {
+      return Response.json(
+        { ok: false, error: "Order not found" },
+        { status: 404 },
+      );
+    }
+    const currentMeta = packingMeta.get(order.id);
+    if (!currentMeta) {
+      return Response.json(
+        { ok: false, error: "Packing slip not found for this order" },
+        { status: 404 },
+      );
+    }
+
+    const ensured =
+      !currentMeta.documentNumber
+        ? await ensurePackingSlipDocumentNumbers(session.shop, [order.id])
+        : new Map<string, string>();
+    const documentNumber =
+      currentMeta.documentNumber ||
+      ensured.get(order.id) ||
+      soNumbers.get(order.id) ||
+      order.name;
+
+    return Response.json({
+      ok: true,
+      order: {
+        ...order,
+        documentNumber,
+        referenceNumber: soNumbers.get(order.id) ?? order.name,
+        documentDate:
+          currentMeta.convertedAt?.toISOString() || order.createdAt,
+      },
+      templateId: template.templateId,
+      settings: template.settings,
       storeDetails: template.storeDetails,
     });
   }

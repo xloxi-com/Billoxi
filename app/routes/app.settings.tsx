@@ -51,7 +51,7 @@ import {
   syncNumberCounter,
   validateStartingNumber,
 } from "../sales-order-number.server";
-import { resolveSalesOrderTemplateId } from "../sales-order-document";
+import { resolveSalesOrderTemplateId } from "../sales-order-ids";
 import "../settings.css";
 
 type SettingsSection = "store-details" | "number-series" | "smtp";

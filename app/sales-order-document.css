@@ -2,53 +2,74 @@
   min-width: 0;
 }
 
-.sales-order-document-stage {
-  display: flex;
-  flex-direction: column;
-  gap: var(--p-space-400, 16px);
-  min-width: 0;
-}
-
 .sales-order-document-page > s-grid {
   width: 100%;
+  min-height: calc(100vh - 10rem);
+  align-items: stretch;
 }
 
 .sales-order-document-sidebar {
   min-width: 0;
-  align-self: start;
-  height: fit-content;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 10rem);
+  max-height: calc(100vh - 8rem);
   position: sticky;
   top: var(--p-space-400, 16px);
 }
 
+.sales-order-document-sidebar__card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sales-order-document-sidebar__card > .Polaris-ShadowBevel {
+  height: 100%;
+}
+
+.sales-order-document-sidebar__card > .Polaris-ShadowBevel > .Polaris-Box {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
 .sales-order-document-sidebar__list {
-  max-height: min(70vh, 720px);
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 
-.sales-order-document-sidebar__list s-divider {
-  display: block;
-  width: 100%;
+.sales-order-document-sidebar__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 12rem;
+  padding: var(--p-space-500, 20px);
+}
+
+.sales-order-document-sidebar__list .Polaris-ResourceList {
+  border-block-start: var(--p-border-width-025) solid
+    var(--p-color-border-secondary, #e3e3e3);
 }
 
 .sales-order-sidebar-item {
   min-width: 0;
 }
 
-.sales-order-sidebar-customer {
-  display: block;
-  min-width: 0;
-  font-size: var(--p-font-size-350, 0.875rem);
-  font-weight: var(--p-font-weight-semibold, 650);
-  line-height: var(--p-font-line-height-500, 1.25);
-  color: var(--p-color-text, #303030);
-  word-break: break-word;
-}
-
 .sales-order-sidebar-item--active {
   margin-inline-start: -12px;
   padding-inline-start: 9px;
   border-inline-start: 3px solid var(--p-color-border-brand, #2c6ecb);
+}
+
+.sales-order-document-sidebar__list
+  .Polaris-ResourceItem:has(.sales-order-sidebar-item--active) {
+  background: var(--p-color-bg-surface-secondary, #f6f6f7);
 }
 
 .sales-order-sidebar-dot {
@@ -69,6 +90,7 @@
   display: flex;
   justify-content: center;
   min-width: 0;
+  min-height: 100%;
   overflow: auto;
   padding: var(--p-space-500, 20px);
   background: var(--p-color-bg-surface-secondary, #f6f6f7);
@@ -420,10 +442,16 @@
   .sales-order-document-sidebar {
     position: static;
     width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .sales-order-document-sidebar__card {
+    height: auto;
   }
 
   .sales-order-document-sidebar__list {
-    max-height: 220px;
+    max-height: min(50vh, 360px);
   }
 }
 

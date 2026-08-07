@@ -530,7 +530,11 @@ function itemColumnLines(item: SalesOrderDocumentData["lineItems"][number]) {
 
 export function salesOrderPdfFileName(
   orderName: string,
-  documentKind: "sales-order" | "invoice" | "credit-note" = "sales-order",
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "credit-note"
+    | "packing-slip" = "sales-order",
 ) {
   const safeName = orderName.replace(/[^\w.-]+/g, "_");
   const suffix =
@@ -538,7 +542,9 @@ export function salesOrderPdfFileName(
       ? "invoice"
       : documentKind === "credit-note"
         ? "credit-note"
-        : "sales-order";
+        : documentKind === "packing-slip"
+          ? "packing-slip"
+          : "sales-order";
   return `${safeName}-${suffix}.pdf`;
 }
 
@@ -3844,7 +3850,11 @@ export async function downloadSalesOrderDomVectorPdf(
   paper: HTMLElement,
   settings: TemplateExportSettings,
   orderName: string,
-  documentKind: "sales-order" | "invoice" = "sales-order",
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "credit-note"
+    | "packing-slip" = "sales-order",
 ) {
   const pdf = await buildSalesOrderDomVectorPdfFromElement(paper, settings);
   pdf.save(salesOrderPdfFileName(orderName, documentKind));

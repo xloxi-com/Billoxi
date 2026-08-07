@@ -52,6 +52,7 @@ import salesOrdersStyles from "../sales-orders.css?url";
 import {
   CREDIT_NOTE_INDEX_COLUMNS,
   INVOICE_INDEX_COLUMNS,
+  PACKING_SLIP_INDEX_COLUMNS,
   SALES_ORDER_INDEX_COLUMNS,
   useIndexColumns,
 } from "../components/index-columns-menu";
@@ -62,9 +63,12 @@ import {
   SALES_ORDER_TEMPLATE_STORAGE_KEY,
   resolveSalesOrderTemplateId,
   toOrderGid,
-} from "../sales-order-document";
+} from "../sales-order-ids";
 import { markOrderInvoiced, unmarkOrdersInvoiced } from "../order-invoice-status.server";
-import { markOrderPackingSlip } from "../order-packing-slip-status.server";
+import {
+  markOrderPackingSlip,
+  unmarkOrdersPackingSlip,
+} from "../order-packing-slip-status.server";
 import {
   markOrderCreditNote,
   unmarkOrdersCreditNote,
@@ -82,6 +86,7 @@ import {
   INVOICED_VIEW_INDEX,
   INVOICE_LIST_VIEWS,
   CREDIT_NOTE_LIST_VIEWS,
+  PACKING_SLIP_LIST_VIEWS,
   SALES_ORDER_VIEWS,
 } from "../sales-orders";
 
@@ -201,6 +206,7 @@ type BulkConfirmAction =
   | "download"
   | "delete-invoice"
   | "delete-credit-note"
+  | "delete-packing-slip"
   | "void-credit-note";
 
 const BULK_CONFIRM_COPY: Record<
@@ -246,6 +252,12 @@ const BULK_CONFIRM_COPY: Record<
       "Are you sure you want to delete the selected credit note? The invoice and sales order will stay.",
     confirm: "Delete",
   },
+  "delete-packing-slip": {
+    title: "Delete packing slip?",
+    message:
+      "Are you sure you want to delete the selected packing slip? The sales order will stay.",
+    confirm: "Delete",
+  },
   "void-credit-note": {
     title: "Void credit note?",
     message:
@@ -275,10 +287,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    listMode: "sales-order" as "sales-order" | "invoice" | "credit-note",
+    listMode: "sales-order" as
+      | "sales-order"
+      | "invoice"
+      | "credit-note"
+      | "packing-slip",
     pageHeading: "Sales Orders",
     invoiceTemplateId: null as string | null,
     creditNoteTemplateId: null as string | null,
+    packingSlipTemplateId: null as string | null,
   };
 };
 
@@ -306,6 +323,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     intent !== "create-credit-note" &&
     intent !== "delete-invoice" &&
     intent !== "delete-credit-note" &&
+    intent !== "delete-packing-slip" &&
     intent !== "void-credit-note" &&
     intent !== "reload-list"
   ) {
@@ -330,6 +348,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   let invoiceNumbers: Record<string, string> | undefined;
+  let packingSlipNumbers: Record<string, string> | undefined;
 
   if (intent === "convert-to-invoice") {
     invoiceNumbers = {};
@@ -345,10 +364,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "convert-to-packing-slip") {
+    packingSlipNumbers = {};
     await Promise.all(
-      orderIds.map((orderId) =>
-        markOrderPackingSlip(session.shop, toOrderGid(orderId)),
-      ),
+      orderIds.map(async (orderId) => {
+        const gid = toOrderGid(orderId);
+        const documentNumber = await markOrderPackingSlip(session.shop, gid);
+        packingSlipNumbers![orderId] = documentNumber;
+        packingSlipNumbers![gid] = documentNumber;
+      }),
     );
     invalidateSalesOrdersCache(session.shop);
   }
@@ -423,6 +446,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  if (intent === "delete-packing-slip") {
+    const deleted = await unmarkOrdersPackingSlip(
+      session.shop,
+      orderIds.map((orderId) => toOrderGid(orderId)),
+    );
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-packing-slip" as const,
+      orderId: orderIds[0] ?? null,
+      orderIds,
+    });
+  }
+
   if (intent === "void-credit-note") {
     const voided = await voidOrdersCreditNote(
       session.shop,
@@ -446,6 +484,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     orderId: orderIds[0] ?? null,
     orderIds,
     ...(invoiceNumbers ? { invoiceNumbers } : {}),
+    ...(packingSlipNumbers ? { packingSlipNumbers } : {}),
   });
 };
 
@@ -511,17 +550,22 @@ export default function SalesOrderPage() {
   const [queryValue, setQueryValue] = useState(data.query);
   const isInvoiceList = data.listMode === "invoice";
   const isCreditNoteList = data.listMode === "credit-note";
-  const isDocumentList = isInvoiceList || isCreditNoteList;
-  const indexColumns = isCreditNoteList
-    ? CREDIT_NOTE_INDEX_COLUMNS
-    : isInvoiceList
-      ? INVOICE_INDEX_COLUMNS
-      : SALES_ORDER_INDEX_COLUMNS;
-  const columnsStorageKey = isCreditNoteList
-    ? "billoxi.index-columns.credit-note"
-    : isInvoiceList
-      ? "billoxi.index-columns.invoice"
-      : "billoxi.index-columns.sales-order";
+  const isPackingSlipList = data.listMode === "packing-slip";
+  const isDocumentList = isInvoiceList || isCreditNoteList || isPackingSlipList;
+  const indexColumns = isPackingSlipList
+    ? PACKING_SLIP_INDEX_COLUMNS
+    : isCreditNoteList
+      ? CREDIT_NOTE_INDEX_COLUMNS
+      : isInvoiceList
+        ? INVOICE_INDEX_COLUMNS
+        : SALES_ORDER_INDEX_COLUMNS;
+  const columnsStorageKey = isPackingSlipList
+    ? "billoxi.index-columns.packing-slip"
+    : isCreditNoteList
+      ? "billoxi.index-columns.credit-note"
+      : isInvoiceList
+        ? "billoxi.index-columns.invoice"
+        : "billoxi.index-columns.sales-order";
   const { visibleColumns, menu: columnsMenu } = useIndexColumns(
     columnsStorageKey,
     indexColumns,
@@ -694,6 +738,13 @@ export default function SalesOrderPage() {
       });
       return `/app/credit-note/${encodeURIComponent(numericId)}?${params.toString()}`;
     }
+    if (isPackingSlipList) {
+      const params = new URLSearchParams({
+        template:
+          data.packingSlipTemplateId || "packing-standard",
+      });
+      return `/app/packing-slip/${encodeURIComponent(numericId)}?${params.toString()}`;
+    }
     if (isInvoiceList) {
       const params = new URLSearchParams({
         template:
@@ -711,9 +762,11 @@ export default function SalesOrderPage() {
     data.creditNoteTemplateId,
     data.hasSelectedTemplate,
     data.invoiceTemplateId,
+    data.packingSlipTemplateId,
     data.selectedTemplateId,
     isCreditNoteList,
     isInvoiceList,
+    isPackingSlipList,
   ]);
 
   const openOrderDocument = useCallback(
@@ -727,6 +780,9 @@ export default function SalesOrderPage() {
     if (isCreditNoteList) {
       return data.creditNoteTemplateId || "credit-standard";
     }
+    if (isPackingSlipList) {
+      return data.packingSlipTemplateId || "packing-standard";
+    }
     if (isInvoiceList) {
       return data.invoiceTemplateId || "invoice-professional";
     }
@@ -737,16 +793,20 @@ export default function SalesOrderPage() {
     data.creditNoteTemplateId,
     data.hasSelectedTemplate,
     data.invoiceTemplateId,
+    data.packingSlipTemplateId,
     data.selectedTemplateId,
     isCreditNoteList,
     isInvoiceList,
+    isPackingSlipList,
   ]);
 
   const activeDocumentKind = isInvoiceList
     ? "invoice"
     : isCreditNoteList
       ? "credit-note"
-      : "sales-order";
+      : isPackingSlipList
+        ? "packing-slip"
+        : "sales-order";
 
   const runQuickDownload = useCallback(
     async (orderId: string) => {
@@ -829,14 +889,18 @@ export default function SalesOrderPage() {
 
       const docName = isCreditNoteList
         ? order.creditNoteNumber || order.name
-        : isInvoiceList
-          ? order.invoiceNumber || order.salesOrderNumber || order.name
-          : order.salesOrderNumber || order.name;
+        : isPackingSlipList
+          ? order.packingSlipNumber || order.name
+          : isInvoiceList
+            ? order.invoiceNumber || order.salesOrderNumber || order.name
+            : order.salesOrderNumber || order.name;
       const docLabel = isCreditNoteList
         ? "Credit Note"
-        : isInvoiceList
-          ? "Invoice"
-          : "Sales Order";
+        : isPackingSlipList
+          ? "Packing Slip"
+          : isInvoiceList
+            ? "Invoice"
+            : "Sales Order";
       const subject = encodeURIComponent(`${docLabel} ${docName}`);
       const body = encodeURIComponent(
         `Please find ${docLabel.toLowerCase()} ${docName} attached.\n\nTotal: ${order.total}`,
@@ -847,7 +911,7 @@ export default function SalesOrderPage() {
         shopify.toast.show(`Email draft opened for ${email}`);
       }
     },
-    [isCreditNoteList, isInvoiceList],
+    [isCreditNoteList, isInvoiceList, isPackingSlipList],
   );
 
   const handleConvertToInvoice = useCallback(() => {
@@ -920,6 +984,16 @@ export default function SalesOrderPage() {
     if (selectedResources.length === 0 || isConverting) return;
     const formData = new FormData();
     formData.set("intent", "delete-credit-note");
+    for (const orderId of selectedResources) {
+      formData.append("orderIds", orderId);
+    }
+    convertFetcher.submit(formData, { method: "post" });
+  }, [convertFetcher, isConverting, selectedResources]);
+
+  const handleDeletePackingSlips = useCallback(() => {
+    if (selectedResources.length === 0 || isConverting) return;
+    const formData = new FormData();
+    formData.set("intent", "delete-packing-slip");
     for (const orderId of selectedResources) {
       formData.append("orderIds", orderId);
     }
@@ -1035,25 +1109,34 @@ export default function SalesOrderPage() {
             ? `Are you sure you want to download ${selectedResources.length} ${
                 isCreditNoteList
                   ? "credit note"
-                  : isInvoiceList
-                    ? "invoice"
-                    : "sales order"
+                  : isPackingSlipList
+                    ? "packing slip"
+                    : isInvoiceList
+                      ? "invoice"
+                      : "sales order"
               } PDFs as a zip?`
             : confirmAction === "download" && isCreditNoteList
               ? "Are you sure you want to download the selected credit note PDF?"
-              : confirmAction === "download" && isInvoiceList
-                ? "Are you sure you want to download the selected invoice PDF?"
-                : confirmAction === "email" && isCreditNoteList
-                  ? "Are you sure you want to open an email draft for this credit note?"
-                  : confirmAction === "email" && isInvoiceList
-                    ? "Are you sure you want to open an email draft for this invoice?"
-                    : confirmAction === "delete-invoice" &&
-                        selectedResources.length > 1
-                      ? `Are you sure you want to delete ${selectedResources.length} invoices? Sales orders will stay; only the invoice records are removed.`
-                      : confirmAction === "delete-credit-note" &&
-                          selectedResources.length > 1
-                        ? `Are you sure you want to delete ${selectedResources.length} credit notes? Invoices and sales orders will stay.`
-                        : BULK_CONFIRM_COPY[confirmAction].message,
+              : confirmAction === "download" && isPackingSlipList
+                ? "Are you sure you want to download the selected packing slip PDF?"
+                : confirmAction === "download" && isInvoiceList
+                  ? "Are you sure you want to download the selected invoice PDF?"
+                  : confirmAction === "email" && isCreditNoteList
+                    ? "Are you sure you want to open an email draft for this credit note?"
+                    : confirmAction === "email" && isPackingSlipList
+                      ? "Are you sure you want to open an email draft for this packing slip?"
+                      : confirmAction === "email" && isInvoiceList
+                        ? "Are you sure you want to open an email draft for this invoice?"
+                        : confirmAction === "delete-invoice" &&
+                            selectedResources.length > 1
+                          ? `Are you sure you want to delete ${selectedResources.length} invoices? Sales orders will stay; only the invoice records are removed.`
+                          : confirmAction === "delete-credit-note" &&
+                              selectedResources.length > 1
+                            ? `Are you sure you want to delete ${selectedResources.length} credit notes? Invoices and sales orders will stay.`
+                            : confirmAction === "delete-packing-slip" &&
+                                selectedResources.length > 1
+                              ? `Are you sure you want to delete ${selectedResources.length} packing slips? Sales orders will stay.`
+                              : BULK_CONFIRM_COPY[confirmAction].message,
         confirm:
           confirmAction === "download" && selectedResources.length > 1
             ? "Download zip"
@@ -1071,6 +1154,7 @@ export default function SalesOrderPage() {
     else if (action === "email") handleBulkSendEmail();
     else if (action === "delete-invoice") handleDeleteInvoices();
     else if (action === "delete-credit-note") handleDeleteCreditNotes();
+    else if (action === "delete-packing-slip") handleDeletePackingSlips();
     else if (action === "void-credit-note") handleVoidCreditNotes();
     else void handleBulkDownloadPdf();
   }, [
@@ -1082,6 +1166,7 @@ export default function SalesOrderPage() {
     handleCreateCreditNote,
     handleDeleteCreditNotes,
     handleDeleteInvoices,
+    handleDeletePackingSlips,
     handleVoidCreditNotes,
   ]);
 
@@ -1097,12 +1182,16 @@ export default function SalesOrderPage() {
   });
   const canConvertToInvoice =
     !isInvoiceList &&
+    !isPackingSlipList &&
+    !isCreditNoteList &&
     selectedResources.length === 1 &&
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
     !selectedOrder!.invoiced;
   const canConvertToPackingSlip =
     !isInvoiceList &&
+    !isPackingSlipList &&
+    !isCreditNoteList &&
     selectedResources.length === 1 &&
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
@@ -1153,6 +1242,27 @@ export default function SalesOrderPage() {
         content:
           selectedResources.length > 1 ? "Delete credit notes" : "Delete",
         onAction: () => setConfirmAction("delete-credit-note"),
+        disabled: isBusy,
+        destructive: true,
+      });
+      return actions;
+    }
+
+    if (isPackingSlipList) {
+      actions.push({
+        content: "Send email",
+        onAction: () => setConfirmAction("email"),
+        disabled: isBusy || !canSendEmail,
+      });
+      actions.push({
+        content: downloadPdfLabel,
+        onAction: () => setConfirmAction("download"),
+        disabled: isBusy,
+      });
+      actions.push({
+        content:
+          selectedResources.length > 1 ? "Delete packing slips" : "Delete",
+        onAction: () => setConfirmAction("delete-packing-slip"),
         disabled: isBusy,
         destructive: true,
       });
@@ -1218,6 +1328,7 @@ export default function SalesOrderPage() {
     isBusy,
     isCreditNoteList,
     isInvoiceList,
+    isPackingSlipList,
     selectedResources.length,
   ]);
 
@@ -1236,11 +1347,13 @@ export default function SalesOrderPage() {
         | "credit-note"
         | "delete-invoice"
         | "delete-credit-note"
+        | "delete-packing-slip"
         | "void-credit-note"
         | "reload";
       orderId?: string | null;
       orderIds?: string[];
       invoiceNumbers?: Record<string, string>;
+      packingSlipNumbers?: Record<string, string>;
       creditNoteNumbers?: Record<string, string>;
       reason?: string;
       voided?: number;
@@ -1270,6 +1383,13 @@ export default function SalesOrderPage() {
           count > 1
             ? `Deleted ${count} credit notes`
             : "Credit note deleted",
+        );
+      } else if (result.document === "delete-packing-slip") {
+        const count = result.deleted ?? 1;
+        shopify.toast.show(
+          count > 1
+            ? `Deleted ${count} packing slips`
+            : "Packing slip deleted",
         );
       } else if (result.document === "void-credit-note") {
         const count = result.voided ?? 1;
@@ -1325,6 +1445,17 @@ export default function SalesOrderPage() {
               ),
         );
         clearSelection();
+      } else if (result.document === "delete-packing-slip") {
+        setOrders((prev) =>
+          isPackingSlipList
+            ? prev.filter((order) => !patchedIds.has(order.id))
+            : prev.map((order) =>
+                patchedIds.has(order.id)
+                  ? { ...order, packingSlip: false, packingSlipNumber: "" }
+                  : order,
+              ),
+        );
+        clearSelection();
       } else if (result.document === "void-credit-note") {
         setOrders((prev) =>
           prev.map((order) =>
@@ -1335,10 +1466,18 @@ export default function SalesOrderPage() {
         );
         clearSelection();
       } else if (result.document === "packing-slip") {
+        const packingSlipNumbers = result.packingSlipNumbers || {};
         setOrders((prev) =>
           prev.map((order) =>
             patchedIds.has(order.id)
-              ? { ...order, packingSlip: true }
+              ? {
+                  ...order,
+                  packingSlip: true,
+                  packingSlipNumber:
+                    packingSlipNumbers[order.id] ||
+                    order.packingSlipNumber ||
+                    "",
+                }
               : order,
           ),
         );
@@ -1478,6 +1617,16 @@ export default function SalesOrderPage() {
   };
 
   const tabs: TabProps[] = useMemo(() => {
+    if (isPackingSlipList) {
+      return PACKING_SLIP_LIST_VIEWS.map((view, index) => ({
+        content: view.label,
+        index,
+        onAction: () => {},
+        id: `packing-slip-${view.id}`,
+        isLocked: true,
+        actions: [],
+      }));
+    }
     if (isCreditNoteList) {
       return CREDIT_NOTE_LIST_VIEWS.map((view, index) => ({
         content: view.label,
@@ -1507,19 +1656,26 @@ export default function SalesOrderPage() {
       isLocked: true,
       actions: [],
     }));
-  }, [isCreditNoteList, isInvoiceList, visibleViews]);
+  }, [isCreditNoteList, isInvoiceList, isPackingSlipList, visibleViews]);
 
-  const selectedTab = isDocumentList
+  const selectedTab = isPackingSlipList
     ? Math.max(
         0,
-        (isCreditNoteList ? CREDIT_NOTE_LIST_VIEWS : INVOICE_LIST_VIEWS).findIndex(
-          (view) => view.payment === (data.paymentStatus || ""),
+        PACKING_SLIP_LIST_VIEWS.findIndex(
+          (view) => view.fulfillment === (data.fulfillmentStatus || ""),
         ),
       )
-    : Math.max(
-        0,
-        visibleViews.findIndex((view) => view.viewIndex === data.selectedView),
-      );
+    : isDocumentList
+      ? Math.max(
+          0,
+          (isCreditNoteList ? CREDIT_NOTE_LIST_VIEWS : INVOICE_LIST_VIEWS).findIndex(
+            (view) => view.payment === (data.paymentStatus || ""),
+          ),
+        )
+      : Math.max(
+          0,
+          visibleViews.findIndex((view) => view.viewIndex === data.selectedView),
+        );
 
   const handlePaymentStatusChange = useCallback(
     (value: string[]) => {
@@ -1591,46 +1747,49 @@ export default function SalesOrderPage() {
       shortcut: true,
     };
 
-    if (isDocumentList) return [paymentFilter];
+    const fulfillmentFilter = {
+      key: "fulfillmentStatus",
+      label: "Fulfillment status",
+      filter: (
+        <ChoiceList
+          title="Fulfillment status"
+          titleHidden
+          choices={[
+            { label: "Fulfilled", value: "fulfilled" },
+            { label: "Unfulfilled", value: "unfulfilled" },
+            { label: "Partially fulfilled", value: "partially_fulfilled" },
+          ]}
+          selected={data.fulfillmentStatus ? [data.fulfillmentStatus] : []}
+          onChange={handleFulfillmentStatusChange}
+        />
+      ),
+      shortcut: true,
+    };
 
-    return [
-      paymentFilter,
-      {
-        key: "fulfillmentStatus",
-        label: "Fulfillment status",
-        filter: (
-          <ChoiceList
-            title="Fulfillment status"
-            titleHidden
-            choices={[
-              { label: "Fulfilled", value: "fulfilled" },
-              { label: "Unfulfilled", value: "unfulfilled" },
-              { label: "Partially fulfilled", value: "partial" },
-            ]}
-            selected={data.fulfillmentStatus ? [data.fulfillmentStatus] : []}
-            onChange={handleFulfillmentStatusChange}
-          />
-        ),
-        shortcut: true,
-      },
-    ];
+    if (isPackingSlipList) return [fulfillmentFilter];
+    if (isInvoiceList || isCreditNoteList) return [paymentFilter];
+
+    return [paymentFilter, fulfillmentFilter];
   }, [
     data.paymentStatus,
     data.fulfillmentStatus,
     handlePaymentStatusChange,
     handleFulfillmentStatusChange,
+    isCreditNoteList,
     isDocumentList,
+    isInvoiceList,
+    isPackingSlipList,
   ]);
 
   const appliedFilters: IndexFiltersProps["appliedFilters"] = [];
-  if (data.paymentStatus) {
+  if (!isPackingSlipList && data.paymentStatus) {
     appliedFilters.push({
       key: "paymentStatus",
       label: `${isDocumentList ? "Status" : "Payment status"} is ${data.paymentStatus.replaceAll("_", " ")}`,
       onRemove: handlePaymentStatusRemove,
     });
   }
-  if (!isDocumentList && data.fulfillmentStatus) {
+  if ((isPackingSlipList || !isDocumentList) && data.fulfillmentStatus) {
     appliedFilters.push({
       key: "fulfillmentStatus",
       label: `Fulfillment status is ${data.fulfillmentStatus.replaceAll("_", " ")}`,
@@ -1645,15 +1804,28 @@ export default function SalesOrderPage() {
   const emptyStateMarkup = hasActiveFilters ? (
     <EmptySearchResult
       title={
-        isCreditNoteList
-          ? "No credit notes found"
-          : isInvoiceList
-            ? "No invoices found"
-            : "No orders found"
+        isPackingSlipList
+          ? "No packing slips found"
+          : isCreditNoteList
+            ? "No credit notes found"
+            : isInvoiceList
+              ? "No invoices found"
+              : "No orders found"
       }
       description="Try changing the filters or search term"
       withIllustration
     />
+  ) : isPackingSlipList ? (
+    <EmptyState
+      heading="No packing slips yet"
+      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      action={{
+        content: "Go to Sales Orders",
+        onAction: () => navigate("/app/sales-order"),
+      }}
+    >
+      <p>Convert a sales order to a packing slip to see it listed here.</p>
+    </EmptyState>
   ) : isCreditNoteList ? (
     <EmptyState
       heading="No credit notes yet"
@@ -1686,12 +1858,13 @@ export default function SalesOrderPage() {
   );
 
   const rowMarkup = orders.map((order, index) => {
-    const invoiceStatus = isDocumentList
-      ? documentStatusDisplay(
-          order,
-          isCreditNoteList ? "credit-note" : "invoice",
-        )
-      : null;
+    const invoiceStatus =
+      isInvoiceList || isCreditNoteList
+        ? documentStatusDisplay(
+            order,
+            isCreditNoteList ? "credit-note" : "invoice",
+          )
+        : null;
 
     const cells = visibleColumns.map((col) => {
       switch (col.id) {
@@ -1707,9 +1880,11 @@ export default function SalesOrderPage() {
                 <Text as="span" variant="bodyMd" fontWeight="semibold">
                   {isCreditNoteList
                     ? order.creditNoteNumber || "—"
-                    : isInvoiceList
-                      ? order.invoiceNumber || order.salesOrderNumber || "—"
-                      : order.salesOrderNumber || "—"}
+                    : isPackingSlipList
+                      ? order.packingSlipNumber || "—"
+                      : isInvoiceList
+                        ? order.invoiceNumber || order.salesOrderNumber || "—"
+                        : order.salesOrderNumber || "—"}
                 </Text>
               </Link>
             </IndexTable.Cell>
@@ -1720,9 +1895,35 @@ export default function SalesOrderPage() {
               <Text as="span" variant="bodyMd" tone="subdued">
                 {isCreditNoteList
                   ? order.invoiceNumber || order.salesOrderNumber || "—"
-                  : isInvoiceList
-                    ? order.salesOrderNumber || "—"
-                    : order.name}
+                  : isPackingSlipList
+                    ? order.name
+                    : isInvoiceList
+                      ? order.salesOrderNumber || "—"
+                      : order.name}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "salesOrderNumber":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text
+                as="span"
+                variant="bodyMd"
+                tone={order.salesOrderNumber ? undefined : "subdued"}
+              >
+                {order.salesOrderNumber || "—"}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "invoiceNumber":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text
+                as="span"
+                variant="bodyMd"
+                tone={order.invoiceNumber ? undefined : "subdued"}
+              >
+                {order.invoiceNumber || "—"}
               </Text>
             </IndexTable.Cell>
           );
@@ -2041,6 +2242,7 @@ export default function SalesOrderPage() {
             destructive:
               confirmAction === "delete-invoice" ||
               confirmAction === "delete-credit-note" ||
+              confirmAction === "delete-packing-slip" ||
               confirmAction === "void-credit-note",
             onAction: handleConfirmBulkAction,
           }}
@@ -2080,9 +2282,11 @@ export default function SalesOrderPage() {
             queryPlaceholder={
               isCreditNoteList
                 ? "Search credit notes"
-                : isInvoiceList
-                  ? "Search invoices"
-                  : "Search orders"
+                : isPackingSlipList
+                  ? "Search packing slips"
+                  : isInvoiceList
+                    ? "Search invoices"
+                    : "Search orders"
             }
             onQueryChange={setQueryValue}
             onQueryClear={handleQueryValueRemove}
@@ -2097,6 +2301,12 @@ export default function SalesOrderPage() {
             tabs={tabs}
             selected={selectedTab}
             onSelect={(index) => {
+              if (isPackingSlipList) {
+                const fulfillment =
+                  PACKING_SLIP_LIST_VIEWS[index]?.fulfillment ?? "";
+                updateParams({ fulfillment });
+                return;
+              }
               if (isCreditNoteList) {
                 const payment = CREDIT_NOTE_LIST_VIEWS[index]?.payment ?? "";
                 updateParams({ payment });
@@ -2133,9 +2343,11 @@ export default function SalesOrderPage() {
             resourceName={
               isCreditNoteList
                 ? { singular: "credit note", plural: "credit notes" }
-                : isInvoiceList
-                  ? { singular: "invoice", plural: "invoices" }
-                  : { singular: "order", plural: "orders" }
+                : isPackingSlipList
+                  ? { singular: "packing slip", plural: "packing slips" }
+                  : isInvoiceList
+                    ? { singular: "invoice", plural: "invoices" }
+                    : { singular: "order", plural: "orders" }
             }
             itemCount={orders.length}
             selectedItemsCount={

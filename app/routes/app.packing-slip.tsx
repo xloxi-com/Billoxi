@@ -1,3 +1,5 @@
-export default function PackingSlipPage() {
-  return <s-page heading="Packing Slip" />;
+import { Outlet } from "react-router";
+
+export default function PackingSlipLayout() {
+  return <Outlet />;
 }

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
   DEFAULT_INVOICE_TEMPLATE_ID,
+  DEFAULT_PACKING_SLIP_TEMPLATE_ID,
   findTemplatePreset,
   resolveDocumentNotes,
   resolveSalesOrderTemplateId,
@@ -24,6 +25,7 @@ import {
   ensureCreditNoteDocumentNumbers,
   getCreditNoteMetaByOrderGids,
 } from "./order-credit-note-status.server";
+import { ensurePackingSlipDocumentNumbers, getPackingSlipMetaByOrderGids } from "./order-packing-slip-status.server";
 import { loadSelectedTemplateForShop } from "./shop-settings.server";
 import {
   buildSalesOrderPdfBytes,
@@ -31,7 +33,11 @@ import {
   salesOrderPdfFileName,
 } from "./sales-order-pdf";
 
-export type BulkDocumentKind = "sales-order" | "invoice" | "credit-note";
+export type BulkDocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "credit-note"
+  | "packing-slip";
 
 const MAX_BULK_PDFS = 50;
 const BULK_PDF_CONCURRENCY = 4;
@@ -107,10 +113,23 @@ function resolveCreditNoteTemplateId(value: string | null | undefined) {
   return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
 }
 
+function resolvePackingSlipTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("packing-")) {
+    return value;
+  }
+  return DEFAULT_PACKING_SLIP_TEMPLATE_ID;
+}
+
 function resolveDocumentKind(
   value: string | null | undefined,
 ): BulkDocumentKind {
-  if (value === "invoice" || value === "credit-note") return value;
+  if (
+    value === "invoice" ||
+    value === "credit-note" ||
+    value === "packing-slip"
+  ) {
+    return value;
+  }
   return "sales-order";
 }
 
@@ -339,6 +358,87 @@ async function prepareOrdersForPdf(args: {
     return out;
   }
 
+  if (documentKind === "packing-slip") {
+    const [shopSelectedPacking, shopSelectedSo] = await Promise.all([
+      loadSelectedTemplateForShop(args.shop, "packing-slip"),
+      loadSelectedTemplateForShop(args.shop, "sales-order"),
+    ]);
+    const templateId = resolvePackingSlipTemplateId(
+      shopSelectedPacking || args.templateId,
+    );
+    const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
+    const [template, packingMeta, soNumbers] = await Promise.all([
+      loadDocumentTemplateSettings(
+        args.shop,
+        "packing-slip",
+        templateId,
+        args.admin,
+      ),
+      getPackingSlipMetaByOrderGids(args.shop, orderGids),
+      getSalesOrderDocumentNumbersByOrderGids(
+        args.shop,
+        salesOrderTemplateId,
+        orderGids,
+      ),
+    ]);
+
+    const missingNumbers = orderGids.filter((gid) => {
+      const meta = packingMeta.get(gid);
+      return meta && !meta.documentNumber?.trim();
+    });
+    const ensured =
+      missingNumbers.length > 0
+        ? await ensurePackingSlipDocumentNumbers(args.shop, missingNumbers)
+        : new Map<string, string>();
+
+    const built = await mapPool(
+      orderIds,
+      BULK_PDF_CONCURRENCY,
+      async (orderId) => {
+        const orderGid = toOrderGid(orderId);
+        const meta = packingMeta.get(orderGid);
+        if (!meta) return null;
+
+        const order = await fetchSalesOrderDocument(args.admin, orderGid);
+        if (!order) return null;
+
+        const documentNumber =
+          meta.documentNumber?.trim() ||
+          ensured.get(order.id)?.trim() ||
+          soNumbers.get(order.id) ||
+          order.name;
+
+        const enrichedOrder: SalesOrderDocumentData = {
+          ...order,
+          documentNumber,
+          referenceNumber: soNumbers.get(order.id) ?? order.name,
+          documentDate: meta.convertedAt?.toISOString() || order.createdAt,
+        };
+
+        const pdf = await buildSalesOrderPdfBytes({
+          order: enrichedOrder,
+          settings: template.settings,
+          storeDetails: template.storeDetails,
+          templateId: template.templateId,
+        });
+
+        return {
+          pdf,
+          fileName: salesOrderPdfFileName(
+            documentNumber || order.name,
+            "packing-slip",
+          ),
+        };
+      },
+    );
+
+    const out: BuiltPdfEntry[] = [];
+    for (const entry of built) {
+      if (entry) out.push(entry);
+    }
+    return out;
+  }
+
   const shopSelected = await loadSelectedTemplateForShop(
     args.shop,
     "sales-order",
@@ -454,7 +554,9 @@ export async function buildSalesOrdersPdfZip(args: {
       ? "credit-notes"
       : documentKind === "invoice"
         ? "invoices"
-        : "sales-orders";
+        : documentKind === "packing-slip"
+          ? "packing-slips"
+          : "sales-orders";
 
   return {
     zip: zipBytes,

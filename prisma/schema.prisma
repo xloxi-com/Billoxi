@@ -114,14 +114,18 @@ model OrderInvoiceStatus {
 }
 
 model OrderPackingSlipStatus {
-  id          String   @id @default(cuid())
-  shop        String
-  orderGid    String
-  convertedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  shop           String
+  orderGid       String
+  convertedAt    DateTime @default(now())
+  sequence       Int?
+  documentNumber String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([shop, orderGid])
+  @@unique([shop, sequence])
+  @@unique([shop, documentNumber])
   @@index([shop])
 }
 

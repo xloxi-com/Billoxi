@@ -8,7 +8,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
-  resolveInvoiceTemplateId,
+  resolvePackingSlipTemplateId,
   resolveSalesOrderTemplateId,
 } from "../sales-order-ids";
 import {
@@ -16,7 +16,6 @@ import {
   parseSalesOrdersSearchParams,
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
-import { INVOICED_VIEW_INDEX } from "../sales-orders";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -27,31 +26,22 @@ export { action };
 export const links: LinksFunction = salesOrdersLinks;
 
 /**
- * Invoice list — same Sales Orders table UI, but only orders that were
- * converted to invoice (OrderInvoiceStatus).
+ * Packing slip list — Polaris IndexTable of orders marked as packing slip.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
   const { admin, session } = await requireAdminAuth(request);
   const url = new URL(request.url);
-  // Invoice list defaults to newest created invoice first.
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
   }
-  const invoicedView =
-    INVOICED_VIEW_INDEX >= 0 ? String(INVOICED_VIEW_INDEX) : "4";
-  url.searchParams.set("view", invoicedView);
 
   const params = parseSalesOrdersSearchParams(url);
-  params.selectedView =
-    INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : params.selectedView;
 
-  const [
-    shopSelectedTemplateId,
-    shopSelectedInvoiceTemplateId,
-  ] = await Promise.all([
-    loadSelectedTemplateForShop(session.shop, "sales-order"),
-    loadSelectedTemplateForShop(session.shop, "invoice"),
-  ]);
+  const [shopSelectedTemplateId, shopSelectedPackingTemplateId] =
+    await Promise.all([
+      loadSelectedTemplateForShop(session.shop, "sales-order"),
+      loadSelectedTemplateForShop(session.shop, "packing-slip"),
+    ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
   );
@@ -60,16 +50,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
     session.shop,
     params,
     selectedTemplateId,
+    { listFilter: "packing-slip" },
   );
 
   return {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    listMode: "invoice" as const,
-    pageHeading: "Invoice",
-    invoiceTemplateId: resolveInvoiceTemplateId(shopSelectedInvoiceTemplateId),
+    listMode: "packing-slip" as const,
+    pageHeading: "Packing Slip",
+    invoiceTemplateId: null as string | null,
     creditNoteTemplateId: null as string | null,
+    packingSlipTemplateId: resolvePackingSlipTemplateId(
+      shopSelectedPackingTemplateId,
+    ),
   };
 }
 

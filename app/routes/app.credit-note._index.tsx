@@ -8,10 +8,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
-  findTemplatePreset,
+  resolveCreditNoteTemplateId,
   resolveSalesOrderTemplateId,
-  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
-} from "../sales-order-document";
+} from "../sales-order-ids";
 import {
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
@@ -25,13 +24,6 @@ import SalesOrdersListPage, {
 
 export { action };
 export const links: LinksFunction = salesOrdersLinks;
-
-function resolveCreditNoteTemplateId(value: string | null | undefined) {
-  if (value && findTemplatePreset(value)?.id.startsWith("credit-")) {
-    return value;
-  }
-  return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
-}
 
 /**
  * Credit note list — same IndexTable UI as Invoice, filtered to orders

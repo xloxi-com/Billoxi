@@ -275,6 +275,12 @@ type OrderNode = {
   phone?: string | null;
   paymentGatewayNames?: string[] | null;
   displayFinancialStatus?: string | null;
+  fulfillmentOrders?: {
+    nodes?: Array<{
+      fulfillAt?: string | null;
+      fulfillBy?: string | null;
+    } | null> | null;
+  } | null;
   transactions?: Array<{
     kind?: string | null;
     status?: string | null;
@@ -482,36 +488,16 @@ function resolveExpectedShipmentDate(
 }
 
 /** Soft-fail: missing fulfillment scopes must not break the document. */
-async function fetchExpectedShipmentDate(
-  admin: {
-    graphql: (
-      query: string,
-      options?: { variables?: Record<string, unknown> },
-    ) => Promise<Response>;
-  },
-  orderGid: string,
-) {
+function expectedShipmentDateFromOrder(order: {
+  fulfillmentOrders?: {
+    nodes?: Array<{
+      fulfillAt?: string | null;
+      fulfillBy?: string | null;
+    } | null> | null;
+  } | null;
+}) {
   try {
-    const response = await admin.graphql(
-      `#graphql
-        query SalesOrderShipmentDate($id: ID!) {
-          order(id: $id) {
-            fulfillmentOrders(first: 10) {
-              nodes {
-                fulfillAt
-                fulfillBy
-              }
-            }
-          }
-        }`,
-      { variables: { id: orderGid } },
-    );
-    const payload = await response.json();
-    if (payload?.errors?.length) return "";
-    const nodes = payload?.data?.order?.fulfillmentOrders?.nodes as
-      | Array<{ fulfillAt?: string | null; fulfillBy?: string | null } | null>
-      | undefined;
-    return resolveExpectedShipmentDate(nodes);
+    return resolveExpectedShipmentDate(order.fulfillmentOrders?.nodes);
   } catch {
     return "";
   }
@@ -526,9 +512,8 @@ export async function fetchSalesOrderDocument(
   },
   orderGid: string,
 ): Promise<SalesOrderDocumentData | null> {
-  const [response, expectedShipmentDate] = await Promise.all([
-    admin.graphql(
-      `#graphql
+  const response = await admin.graphql(
+    `#graphql
       query SalesOrderDocument($id: ID!) {
         order(id: $id) {
           id
@@ -539,6 +524,12 @@ export async function fetchSalesOrderDocument(
           phone
           paymentGatewayNames
           displayFinancialStatus
+          fulfillmentOrders(first: 10) {
+            nodes {
+              fulfillAt
+              fulfillBy
+            }
+          }
           transactions(first: 20) {
             kind
             status
@@ -626,10 +617,8 @@ export async function fetchSalesOrderDocument(
           }
         }
       }`,
-      { variables: { id: orderGid } },
-    ),
-    fetchExpectedShipmentDate(admin, orderGid),
-  ]);
+    { variables: { id: orderGid } },
+  );
 
   const payload = await response.json();
   if (payload?.errors?.length) {
@@ -641,6 +630,7 @@ export async function fetchSalesOrderDocument(
   const order = payload?.data?.order as OrderNode | null | undefined;
   if (!order) return null;
 
+  const expectedShipmentDate = expectedShipmentDateFromOrder(order);
   const currencyCode =
     order.currentTotalPriceSet?.shopMoney?.currencyCode ?? "USD";
   const customerName =

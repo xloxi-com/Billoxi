@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import {
+  Await,
   useFetcher,
   useLoaderData,
   useNavigate,
@@ -15,10 +16,17 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   AppProvider,
-  Modal,
-  Text,
-  RadioButton,
+  Badge,
   BlockStack,
+  Box,
+  Button,
+  Card,
+  InlineStack,
+  Modal,
+  RadioButton,
+  ResourceItem,
+  ResourceList,
+  Text,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
@@ -33,20 +41,23 @@ import {
 import {
   allocateSalesOrderDocumentNumber,
   getSalesOrderDocumentDetails,
+  getSalesOrderDocumentNumbersByOrderGids,
   updateSalesOrderDocumentDetails,
 } from "../sales-order-number.server";
 import { numberingFromSeries } from "../number-series";
 import {
-  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
-  DEFAULT_INVOICE_TEMPLATE_ID,
-  findTemplatePreset,
   formatOrderDate,
   paperPaddingCss,
   resolveDocumentNotes,
-  resolveSalesOrderTemplateId,
   SALES_ORDER_TEMPLATE_STORAGE_KEY,
-  toOrderGid,
 } from "../sales-order-document";
+import {
+  resolveCreditNoteTemplateId,
+  resolveInvoiceTemplateId,
+  resolvePackingSlipTemplateId,
+  resolveSalesOrderTemplateId,
+  toOrderGid,
+} from "../sales-order-ids";
 import {
   loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
@@ -55,11 +66,12 @@ import {
 import {
   ensureInvoiceDocumentNumbers,
   getInvoicedMetaByOrderGids,
+  getInvoicedOrderGids,
   markOrderInvoiced,
   unmarkOrdersInvoiced,
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
-import { markOrderPackingSlip } from "../order-packing-slip-status.server";
+import { markOrderPackingSlip, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, getPackingSlipOrderGids, unmarkOrdersPackingSlip, ensurePackingSlipDocumentNumbers } from "../order-packing-slip-status.server";
 import {
   getCreditNoteMetaByOrderGids,
   getAllCreditNoteOrderGids,
@@ -73,34 +85,18 @@ import { PaperScaleFrame } from "../components/paper-scale-frame";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
-type DocumentMode = "sales-order" | "invoice" | "credit-note";
+type DocumentMode = "sales-order" | "invoice" | "credit-note" | "packing-slip";
 
 function resolveDocumentMode(requestUrl: string): DocumentMode {
   try {
     const pathname = new URL(requestUrl).pathname;
     if (pathname.includes("/app/credit-note/")) return "credit-note";
-    return pathname.includes("/app/invoice/") ? "invoice" : "sales-order";
+    if (pathname.includes("/app/invoice/")) return "invoice";
+    if (pathname.includes("/app/packing-slip/")) return "packing-slip";
+    return "sales-order";
   } catch {
     return "sales-order";
   }
-}
-
-function resolveInvoiceTemplateId(value: string | null | undefined) {
-  if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
-    return value;
-  }
-  return DEFAULT_INVOICE_TEMPLATE_ID;
-}
-
-function resolveCreditNoteTemplateId(value: string | null | undefined) {
-  if (value && findTemplatePreset(value)?.id.startsWith("credit-")) {
-    return value;
-  }
-  // Fall back to invoice layout if credit presets aren't registered yet.
-  if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
-    return value;
-  }
-  return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
 }
 
 function resolveDocumentFontFamily(value: string | undefined): string {
@@ -177,13 +173,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const documentMode = resolveDocumentMode(request.url);
   const isInvoice = documentMode === "invoice";
   const isCreditNote = documentMode === "credit-note";
-  const isIssuedDocument = isInvoice || isCreditNote;
+  const isPackingSlip = documentMode === "packing-slip";
+  const isIssuedDocument = isInvoice || isCreditNote || isPackingSlip;
   const url = new URL(request.url);
 
   const selectedMap = await loadSelectedTemplatesForShop(session.shop);
   const shopSelectedTemplateId =
     selectedMap[
-      isCreditNote ? "credit-note" : isInvoice ? "invoice" : "sales-order"
+      isCreditNote
+        ? "credit-note"
+        : isInvoice
+          ? "invoice"
+          : isPackingSlip
+            ? "packing-slip"
+            : "sales-order"
     ] || null;
   const shopSelectedSalesOrderTemplateId = selectedMap["sales-order"] || null;
 
@@ -197,9 +200,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       ? resolveInvoiceTemplateId(
           shopSelectedTemplateId || url.searchParams.get("template"),
         )
-      : resolveSalesOrderTemplateId(
-          shopSelectedTemplateId || url.searchParams.get("template"),
-        );
+      : isPackingSlip
+        ? resolvePackingSlipTemplateId(
+            shopSelectedTemplateId || url.searchParams.get("template"),
+          )
+        : resolveSalesOrderTemplateId(
+            shopSelectedTemplateId || url.searchParams.get("template"),
+          );
   const orderGid = toOrderGid(decodeURIComponent(orderId));
 
   // Sidebar list still uses sales-order template ids for SO document numbers.
@@ -207,20 +214,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     ? resolveSalesOrderTemplateId(shopSelectedSalesOrderTemplateId)
     : templateId;
 
-  const [order, template, salesOrders] = await Promise.all([
+  const [order, template] = await Promise.all([
     fetchSalesOrderDocument(admin, orderGid),
     isIssuedDocument
       ? loadDocumentTemplateSettings(
           session.shop,
-          isCreditNote ? "credit-note" : "invoice",
+          isCreditNote
+            ? "credit-note"
+            : isInvoice
+              ? "invoice"
+              : "packing-slip",
           templateId,
           admin,
         )
       : loadSalesOrderTemplateSettings(session.shop, templateId, admin),
-    fetchSalesOrderList(admin, {
-      shop: session.shop,
-      templateId: salesOrderTemplateId,
-    }),
   ]);
 
   if (!order) {
@@ -235,22 +242,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let creditNoteReason: string | null = null;
   let creditNoteVoided = false;
   let hasCreditNote = false;
-  let sidebarOrders = salesOrders;
+  let orderInvoiced = false;
+  let orderPackingSlip = false;
 
   if (isCreditNote) {
     const [creditMeta, invoiceMeta] = await Promise.all([
-      getCreditNoteMetaByOrderGids(
-        session.shop,
-        salesOrders.map((item) => item.id),
-      ),
-      getInvoicedMetaByOrderGids(
-        session.shop,
-        salesOrders.map((item) => item.id),
-      ),
+      getCreditNoteMetaByOrderGids(session.shop, [order.id]),
+      getInvoicedMetaByOrderGids(session.shop, [order.id]),
     ]);
-    const creditGids = await getAllCreditNoteOrderGids(session.shop);
-    const creditGidSet = new Set(creditGids);
-    sidebarOrders = salesOrders.filter((item) => creditGidSet.has(item.id));
     const currentMeta = creditMeta.get(order.id);
     const currentInvoice = invoiceMeta.get(order.id);
 
@@ -281,32 +280,19 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       invoiceRef = ensured.get(order.id)?.trim() || "";
     }
     referenceNumber = invoiceRef || undefined;
-
-    sidebarOrders = sidebarOrders.map((item) => {
-      const meta = creditMeta.get(item.id);
-      return {
-        ...item,
-        documentNumber:
-          meta?.documentNumber ||
-          (item.id === order.id ? documentNumber : item.documentNumber),
-        createdAt: meta?.convertedAt?.toISOString() || item.createdAt,
-        creditNoteVoided: Boolean(meta?.voidedAt),
-      };
-    });
   } else if (isInvoice) {
-    const [invoiceMeta, creditNoteGids] = await Promise.all([
-      getInvoicedMetaByOrderGids(
+    const [invoiceMeta, creditNoteGids, soNumbers] = await Promise.all([
+      getInvoicedMetaByOrderGids(session.shop, [order.id]),
+      getCreditNoteOrderGids(session.shop, [order.id]),
+      getSalesOrderDocumentNumbersByOrderGids(
         session.shop,
-        salesOrders.map((item) => item.id),
-      ),
-      getCreditNoteOrderGids(
-        session.shop,
-        salesOrders.map((item) => item.id),
+        salesOrderTemplateId,
+        [order.id],
       ),
     ]);
-    sidebarOrders = salesOrders.filter((item) => invoiceMeta.has(item.id));
     const currentMeta = invoiceMeta.get(order.id);
     hasCreditNote = creditNoteGids.has(order.id);
+    orderInvoiced = Boolean(currentMeta);
     const ensured =
       currentMeta && !currentMeta.documentNumber
         ? await ensureInvoiceDocumentNumbers(session.shop, [order.id])
@@ -319,31 +305,43 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       currentMeta?.invoicedAt?.toISOString() || order.createdAt;
     invoiceCustomerNote = currentMeta?.customerNote ?? null;
     invoiceTerms = currentMeta?.terms ?? null;
-
-    const existingSalesOrderNumber = salesOrders.find(
-      (item) => item.id === order.id,
-    )?.documentNumber;
-    if (existingSalesOrderNumber) {
-      referenceNumber = existingSalesOrderNumber;
-    }
-
-    sidebarOrders = sidebarOrders.map((item) => {
-      const meta = invoiceMeta.get(item.id);
-      return {
-        ...item,
-        documentNumber:
-          meta?.documentNumber ||
-          (item.id === order.id ? documentNumber : item.documentNumber),
-        // Sidebar date follows editable invoice date.
-        createdAt: meta?.invoicedAt?.toISOString() || item.createdAt,
-      };
-    });
+    referenceNumber = soNumbers.get(order.id) || undefined;
+  } else if (isPackingSlip) {
+    const [packingMeta, soNumbers] = await Promise.all([
+      getPackingSlipMetaByOrderGids(session.shop, [order.id]),
+      getSalesOrderDocumentNumbersByOrderGids(
+        session.shop,
+        salesOrderTemplateId,
+        [order.id],
+      ),
+    ]);
+    const currentMeta = packingMeta.get(order.id);
+    const ensured =
+      currentMeta && !currentMeta.documentNumber
+        ? await ensurePackingSlipDocumentNumbers(session.shop, [order.id])
+        : new Map<string, string>();
+    const existingSalesOrderNumber = soNumbers.get(order.id);
+    documentNumber =
+      currentMeta?.documentNumber ||
+      ensured.get(order.id) ||
+      existingSalesOrderNumber ||
+      order.name;
+    documentDate =
+      currentMeta?.convertedAt?.toISOString() || order.createdAt;
+    referenceNumber = existingSalesOrderNumber || order.name;
   } else {
-    let soDetails = await getSalesOrderDocumentDetails(
-      session.shop,
-      template.templateId,
-      order.id,
-    );
+    const [soDetailsInitial, invoicedGids, packingGids] = await Promise.all([
+      getSalesOrderDocumentDetails(
+        session.shop,
+        template.templateId,
+        order.id,
+      ),
+      getInvoicedOrderGids(session.shop, [order.id]),
+      getPackingSlipOrderGids(session.shop, [order.id]),
+    ]);
+    orderInvoiced = invoicedGids.has(order.id);
+    orderPackingSlip = packingGids.has(order.id);
+    let soDetails = soDetailsInitial;
     if (!soDetails?.documentNumber) {
       const soSeries = await loadNumberSeriesEntryForShop(
         session.shop,
@@ -371,6 +369,81 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     invoiceTerms = soDetails?.terms ?? null;
   }
 
+  // Sidebar is non-blocking — document paints first, list streams in.
+  const salesOrdersPromise = (async () => {
+    const salesOrders = await fetchSalesOrderList(admin, {
+      shop: session.shop,
+      templateId: salesOrderTemplateId,
+    });
+
+    if (isCreditNote) {
+      const [creditMeta, creditGids] = await Promise.all([
+        getCreditNoteMetaByOrderGids(
+          session.shop,
+          salesOrders.map((item) => item.id),
+        ),
+        getAllCreditNoteOrderGids(session.shop),
+      ]);
+      const creditGidSet = new Set(creditGids);
+      return salesOrders
+        .filter((item) => creditGidSet.has(item.id))
+        .map((item) => {
+          const meta = creditMeta.get(item.id);
+          return {
+            ...item,
+            documentNumber:
+              meta?.documentNumber ||
+              (item.id === order.id ? documentNumber : item.documentNumber),
+            createdAt: meta?.convertedAt?.toISOString() || item.createdAt,
+            creditNoteVoided: Boolean(meta?.voidedAt),
+          };
+        });
+    }
+
+    if (isInvoice) {
+      const invoiceMeta = await getInvoicedMetaByOrderGids(
+        session.shop,
+        salesOrders.map((item) => item.id),
+      );
+      return salesOrders
+        .filter((item) => invoiceMeta.has(item.id))
+        .map((item) => {
+          const meta = invoiceMeta.get(item.id);
+          return {
+            ...item,
+            documentNumber:
+              meta?.documentNumber ||
+              (item.id === order.id ? documentNumber : item.documentNumber),
+            createdAt: meta?.invoicedAt?.toISOString() || item.createdAt,
+          };
+        });
+    }
+
+    if (isPackingSlip) {
+      const packingGids = await getAllPackingSlipOrderGids(session.shop);
+      const packingGidSet = new Set(packingGids);
+      const filtered = salesOrders.filter((item) =>
+        packingGidSet.has(item.id),
+      );
+      const packingMeta = await getPackingSlipMetaByOrderGids(
+        session.shop,
+        filtered.map((item) => item.id),
+      );
+      return filtered.map((item) => {
+        const meta = packingMeta.get(item.id);
+        return {
+          ...item,
+          documentNumber:
+            meta?.documentNumber ||
+            (item.id === order.id ? documentNumber : item.documentNumber),
+          createdAt: meta?.convertedAt?.toISOString() || item.createdAt,
+        };
+      });
+    }
+
+    return salesOrders;
+  })();
+
   return {
     documentMode,
     order: {
@@ -379,7 +452,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       ...(referenceNumber ? { referenceNumber } : {}),
       ...(documentDate ? { documentDate } : {}),
     },
-    salesOrders: sidebarOrders,
+    salesOrders: salesOrdersPromise,
+    paymentStatus: order.financialStatus ?? null,
+    orderInvoiced,
+    orderPackingSlip,
     templateId: template.templateId,
     templateName: template.templateName,
     settings: template.settings,
@@ -454,6 +530,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ok: true,
       deleted,
       document: "delete-credit-note" as const,
+    });
+  }
+
+  if (intent === "delete-packing-slip") {
+    const deleted = await unmarkOrdersPackingSlip(session.shop, [orderGid]);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-packing-slip" as const,
     });
   }
 
@@ -617,6 +703,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
   return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
 }
 
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+}: {
+  formMethod?: string | null;
+  currentUrl: URL;
+  nextUrl: URL;
+}) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  return (
+    currentUrl.pathname !== nextUrl.pathname ||
+    currentUrl.search !== nextUrl.search
+  );
+}
+
 export default function SalesOrderDocumentPage() {
   const data = useLoaderData<typeof loader>();
   const navigate = useNavigate();
@@ -635,12 +737,15 @@ export default function SalesOrderDocumentPage() {
   const isConverting = convertFetcher.state !== "idle";
   const isInvoice = data.documentMode === "invoice";
   const isCreditNote = data.documentMode === "credit-note";
-  const isIssuedDocument = isInvoice || isCreditNote;
+  const isPackingSlip = data.documentMode === "packing-slip";
+  const isIssuedDocument = isInvoice || isCreditNote || isPackingSlip;
   const listPath = isCreditNote
     ? "/app/credit-note"
     : isInvoice
       ? "/app/invoice"
-      : "/app/sales-order";
+      : isPackingSlip
+        ? "/app/packing-slip"
+        : "/app/sales-order";
   const documentBasePath = listPath;
   const templateQuery = useMemo(
     () => `?template=${encodeURIComponent(data.templateId)}`,
@@ -1028,7 +1133,13 @@ export default function SalesOrderDocumentPage() {
           margins: data.settings.margins,
         },
         previewOrder.documentNumber || data.order.name,
-        isIssuedDocument ? "invoice" : "sales-order",
+        isCreditNote
+          ? "credit-note"
+          : isInvoice
+            ? "invoice"
+            : isPackingSlip
+              ? "packing-slip"
+              : "sales-order",
       );
 
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1046,7 +1157,9 @@ export default function SalesOrderDocumentPage() {
     data.order.name,
     data.settings,
     isDownloading,
+    isCreditNote,
     isInvoice,
+    isPackingSlip,
     isPrinting,
     previewOrder.documentNumber,
   ]);
@@ -1064,7 +1177,9 @@ export default function SalesOrderDocumentPage() {
       ? "Credit Note"
       : isInvoice
         ? "Invoice"
-        : "Sales Order";
+        : isPackingSlip
+          ? "Packing Slip"
+          : "Sales Order";
     const docNo = data.order.documentNumber || data.order.name;
     const subject = encodeURIComponent(`${label} ${docNo}`);
     const body = encodeURIComponent(
@@ -1078,7 +1193,7 @@ export default function SalesOrderDocumentPage() {
     if (typeof shopify !== "undefined" && shopify.toast) {
       shopify.toast.show(`Email draft opened for ${email}`);
     }
-  }, [data.order, isInvoice]);
+  }, [data.order, isCreditNote, isInvoice, isPackingSlip]);
 
   const [queuedAction, setQueuedAction] = useState<
     "print" | "download" | "send" | null
@@ -1158,11 +1273,8 @@ export default function SalesOrderDocumentPage() {
     };
   }, [queuedAction, handleDownload, handlePrint, handleSend]);
 
-  const activeListItem = data.salesOrders.find(
-    (item) => item.id === data.order.id,
-  );
   const creditNoteVoided = Boolean(data.creditNoteVoided);
-  const paymentStatus = activeListItem?.paymentStatus ?? null;
+  const paymentStatus = data.paymentStatus ?? null;
   // Credit-note lifecycle status wins over Shopify order payment status.
   const headerStatus =
     isCreditNote && creditNoteVoided ? "VOIDED" : paymentStatus;
@@ -1171,7 +1283,7 @@ export default function SalesOrderDocumentPage() {
   const isCancelledOrder =
     paymentStatusKey === "VOIDED" ||
     paymentStatusKey.includes("CANCEL");
-  const alreadyInvoiced = Boolean(activeListItem?.invoiced);
+  const alreadyInvoiced = Boolean(data.orderInvoiced);
   const isPaidOrder = paymentStatusKey === "PAID";
 
   const documentStatusRibbon = (() => {
@@ -1246,6 +1358,14 @@ export default function SalesOrderDocumentPage() {
       );
       return;
     }
+    if (isPackingSlip) {
+      setDeleteInvoiceOpen(false);
+      convertFetcher.submit(
+        { intent: "delete-packing-slip" },
+        { method: "post" },
+      );
+      return;
+    }
     if (!isInvoice) return;
     if (data.hasCreditNote) {
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1265,6 +1385,7 @@ export default function SalesOrderDocumentPage() {
     isConverting,
     isCreditNote,
     isInvoice,
+    isPackingSlip,
   ]);
 
   useEffect(() => {
@@ -1303,6 +1424,10 @@ export default function SalesOrderDocumentPage() {
         shopify.toast.show("Invoice deleted");
         navigate(listPath);
         return;
+      } else if (result.document === "delete-packing-slip") {
+        shopify.toast.show("Packing slip deleted");
+        navigate(listPath);
+        return;
       } else if (result.document === "packing-slip") {
         shopify.toast.show("Converted to packing slip");
       } else if (result.document === "invoice") {
@@ -1324,7 +1449,13 @@ export default function SalesOrderDocumentPage() {
       inlineSize="large"
     >
       <s-link slot="breadcrumb-actions" href={listPath}>
-        {isCreditNote ? "Credit Note" : isInvoice ? "Invoice" : "Sales Orders"}
+        {isCreditNote
+          ? "Credit Note"
+          : isInvoice
+            ? "Invoice"
+            : isPackingSlip
+              ? "Packing Slip"
+              : "Sales Orders"}
       </s-link>
       {headerStatus ? (
         <s-badge slot="accessory" tone={paymentBadgeTone(headerStatus)}>
@@ -1343,14 +1474,16 @@ export default function SalesOrderDocumentPage() {
       >
         {isDownloading ? "Downloading…" : "Download"}
       </s-button>
-      <s-button
-        slot="secondary-actions"
-        icon="edit"
-        disabled={isConverting || undefined}
-        onClick={openInvoiceEdit}
-      >
-        Edit
-      </s-button>
+      {!isPackingSlip ? (
+        <s-button
+          slot="secondary-actions"
+          icon="edit"
+          disabled={isConverting || undefined}
+          onClick={openInvoiceEdit}
+        >
+          Edit
+        </s-button>
+      ) : null}
       {!isCancelledOrder ? (
         <>
           {!isIssuedDocument && !alreadyInvoiced ? (
@@ -1368,7 +1501,7 @@ export default function SalesOrderDocumentPage() {
               Convert to invoice
             </s-button>
           ) : null}
-          {!isIssuedDocument && !activeListItem?.packingSlip ? (
+          {!isIssuedDocument && !data.orderPackingSlip ? (
             <s-button
               slot="secondary-actions"
               loading={
@@ -1404,7 +1537,7 @@ export default function SalesOrderDocumentPage() {
       >
         {isPrinting ? "Preparing…" : "Print"}
       </s-button>
-      {isInvoice || isCreditNote ? (
+      {isInvoice || isCreditNote || isPackingSlip ? (
         <s-button
           slot="secondary-actions"
           icon="delete"
@@ -1413,7 +1546,9 @@ export default function SalesOrderDocumentPage() {
             (isConverting &&
               (convertFetcher.formData?.get("intent") === "delete-invoice" ||
                 convertFetcher.formData?.get("intent") ===
-                  "delete-credit-note")) ||
+                  "delete-credit-note" ||
+                convertFetcher.formData?.get("intent") ===
+                  "delete-packing-slip")) ||
             undefined
           }
           disabled={
@@ -1429,137 +1564,164 @@ export default function SalesOrderDocumentPage() {
         <s-grid
           gridTemplateColumns="minmax(340px, 400px) minmax(0, 1fr)"
           gap="small-200"
-          alignItems="start"
+          alignItems="stretch"
         >
           <aside className="sales-order-document-sidebar no-print">
-            <s-section
-              heading={
-                isCreditNote
-                  ? "Credit notes"
-                  : isInvoice
-                    ? "Invoices"
-                    : "Sales orders"
-              }
-            >
-              <s-button
-                slot="secondary-actions"
-                variant="tertiary"
-                href={listPath}
-              >
-                View all
-              </s-button>
-              <div className="sales-order-document-sidebar__list">
-                <s-box
-                  border="base"
-                  borderRadius="base"
-                  overflow="hidden"
-                  background="base"
-                >
-                  {data.salesOrders.map((item, index) => {
-                    const isActive = item.id === data.order.id;
-                    const salesOrderLabel =
-                      item.documentNumber || item.name;
-                    const itemCreditNoteVoided = Boolean(
-                      (
-                        item as {
-                          creditNoteVoided?: boolean;
-                        }
-                      ).creditNoteVoided,
-                    );
-                    const sidebarBadgeStatus =
-                      isCreditNote && itemCreditNoteVoided
-                        ? "VOIDED"
-                        : item.paymentStatus;
-                    return (
-                      <div key={item.id}>
-                        {index > 0 ? (
-                          <s-box paddingInline="small">
-                            <s-divider />
-                          </s-box>
-                        ) : null}
-                        <s-clickable
-                          accessibilityLabel={`Open ${salesOrderLabel}`}
-                          background={isActive ? "subdued" : "transparent"}
-                          padding="small"
-                          onClick={() => {
-                            if (!isActive) openOrder(item.id);
-                          }}
-                        >
-                          <div
-                            className={
-                              isActive
-                                ? "sales-order-sidebar-item sales-order-sidebar-item--active"
-                                : "sales-order-sidebar-item"
+            <AppProvider i18n={enTranslations}>
+              <div className="sales-order-document-sidebar__card">
+                <Card padding="0">
+                  <Box
+                    paddingInline="400"
+                    paddingBlockStart="400"
+                    paddingBlockEnd="300"
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingSm">
+                        {isCreditNote
+                          ? "Credit notes"
+                          : isInvoice
+                            ? "Invoices"
+                            : isPackingSlip
+                              ? "Packing slips"
+                              : "Sales orders"}
+                      </Text>
+                      <Button onClick={() => navigate(listPath)} variant="plain">
+                        View all
+                      </Button>
+                    </InlineStack>
+                  </Box>
+                  <div className="sales-order-document-sidebar__list">
+                    <Suspense
+                      fallback={
+                        <div className="sales-order-document-sidebar__loading">
+                          <s-spinner accessibilityLabel="Loading orders" />
+                        </div>
+                      }
+                    >
+                      <Await resolve={data.salesOrders}>
+                        {(salesOrders) => (
+                    <ResourceList
+                      resourceName={
+                        isCreditNote
+                          ? { singular: "credit note", plural: "credit notes" }
+                          : isInvoice
+                            ? { singular: "invoice", plural: "invoices" }
+                            : isPackingSlip
+                              ? {
+                                  singular: "packing slip",
+                                  plural: "packing slips",
+                                }
+                              : {
+                                  singular: "sales order",
+                                  plural: "sales orders",
+                                }
+                      }
+                      items={salesOrders}
+                      idForItem={(item) => item.id}
+                      renderItem={(item) => {
+                        const isActive = item.id === data.order.id;
+                        const salesOrderLabel =
+                          item.documentNumber || item.name;
+                        const itemCreditNoteVoided = Boolean(
+                          (
+                            item as {
+                              creditNoteVoided?: boolean;
                             }
+                          ).creditNoteVoided,
+                        );
+                        const sidebarBadgeStatus =
+                          isCreditNote && itemCreditNoteVoided
+                            ? "VOIDED"
+                            : item.paymentStatus;
+                        const badgeTone = sidebarBadgeStatus
+                          ? paymentBadgeTone(sidebarBadgeStatus)
+                          : null;
+
+                        return (
+                          <ResourceItem
+                            id={item.id}
+                            accessibilityLabel={`Open ${salesOrderLabel}`}
+                            onClick={() => {
+                              if (!isActive) openOrder(item.id);
+                            }}
+                            name={salesOrderLabel}
                           >
-                            <s-stack direction="block" gap="small-200">
-                              <s-grid
-                                gridTemplateColumns="1fr auto"
-                                gap="small"
-                                alignItems="start"
-                              >
-                                <span className="sales-order-sidebar-customer">
-                                  {item.customer}
-                                </span>
-                                <s-text type="strong">
-                                  {formatMoney(item.total, item.currencyCode)}
-                                </s-text>
-                              </s-grid>
-                              <s-stack
-                                direction="inline"
-                                gap="small-200"
-                                alignItems="center"
-                              >
-                                <s-text color="subdued">
-                                  {salesOrderLabel}
-                                </s-text>
-                                <s-text color="subdued">·</s-text>
-                                <s-text color="subdued">
-                                  {formatOrderDate(item.createdAt)}
-                                </s-text>
-                              </s-stack>
-                              <s-stack
-                              direction="inline"
-                              gap="small-200"
-                              alignItems="center"
+                            <div
+                              className={
+                                isActive
+                                  ? "sales-order-sidebar-item sales-order-sidebar-item--active"
+                                  : "sales-order-sidebar-item"
+                              }
                             >
-                              {sidebarBadgeStatus ? (
-                                <s-badge
-                                  tone={paymentBadgeTone(sidebarBadgeStatus)}
+                              <BlockStack gap="100">
+                                <InlineStack
+                                  align="space-between"
+                                  blockAlign="start"
+                                  gap="200"
+                                  wrap={false}
                                 >
-                                  {formatStatus(sidebarBadgeStatus)}
-                                </s-badge>
-                              ) : null}
-                              {!isIssuedDocument ? (
-                                <span
-                                  className={
-                                    item.invoiced
-                                      ? "sales-order-sidebar-dot sales-order-sidebar-dot--invoiced"
-                                      : "sales-order-sidebar-dot"
-                                  }
-                                  role="img"
-                                  aria-label={
-                                    item.invoiced
-                                      ? "Invoiced"
-                                      : "Not invoiced"
-                                  }
-                                  title={
-                                    item.invoiced
-                                      ? "Invoiced"
-                                      : "Not invoiced"
-                                  }
-                                />
-                              ) : null}
-                            </s-stack>
-                            </s-stack>
-                          </div>
-                        </s-clickable>
-                      </div>
-                    );
-                  })}
-                </s-box>
+                                  <Text
+                                    as="span"
+                                    variant="bodyMd"
+                                    fontWeight="semibold"
+                                    breakWord
+                                  >
+                                    {item.customer}
+                                  </Text>
+                                  <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                    {formatMoney(item.total, item.currencyCode)}
+                                  </Text>
+                                </InlineStack>
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  {salesOrderLabel} ·{" "}
+                                  {formatOrderDate(item.createdAt)}
+                                </Text>
+                                <InlineStack gap="200" blockAlign="center">
+                                  {sidebarBadgeStatus ? (
+                                    <Badge
+                                      tone={
+                                        badgeTone === "neutral"
+                                          ? undefined
+                                          : badgeTone ?? undefined
+                                      }
+                                    >
+                                      {formatStatus(sidebarBadgeStatus)}
+                                    </Badge>
+                                  ) : null}
+                                  {!isIssuedDocument ? (
+                                    <span
+                                      className={
+                                        item.invoiced
+                                          ? "sales-order-sidebar-dot sales-order-sidebar-dot--invoiced"
+                                          : "sales-order-sidebar-dot"
+                                      }
+                                      role="img"
+                                      aria-label={
+                                        item.invoiced
+                                          ? "Invoiced"
+                                          : "Not invoiced"
+                                      }
+                                      title={
+                                        item.invoiced
+                                          ? "Invoiced"
+                                          : "Not invoiced"
+                                      }
+                                    />
+                                  ) : null}
+                                </InlineStack>
+                              </BlockStack>
+                            </div>
+                          </ResourceItem>
+                        );
+                      }}
+                    />
+                        )}
+                      </Await>
+                    </Suspense>
+                  </div>
+                </Card>
               </div>
-            </s-section>
+            </AppProvider>
           </aside>
 
           <div className="sales-order-document-stage">
@@ -1598,7 +1760,13 @@ export default function SalesOrderDocumentPage() {
         <Modal
           open={deleteInvoiceOpen}
           onClose={() => setDeleteInvoiceOpen(false)}
-          title={isCreditNote ? "Delete credit note?" : "Delete invoice?"}
+          title={
+            isCreditNote
+              ? "Delete credit note?"
+              : isPackingSlip
+                ? "Delete packing slip?"
+                : "Delete invoice?"
+          }
           primaryAction={{
             content: "Delete",
             destructive: true,
@@ -1607,7 +1775,9 @@ export default function SalesOrderDocumentPage() {
               isConverting &&
               (convertFetcher.formData?.get("intent") === "delete-invoice" ||
                 convertFetcher.formData?.get("intent") ===
-                  "delete-credit-note"),
+                  "delete-credit-note" ||
+                convertFetcher.formData?.get("intent") ===
+                  "delete-packing-slip"),
             disabled: isInvoice && Boolean(data.hasCreditNote),
           }}
           secondaryActions={[
@@ -1621,9 +1791,11 @@ export default function SalesOrderDocumentPage() {
             <Text as="p">
               {isCreditNote
                 ? "Are you sure you want to delete this credit note? The invoice and sales order stay; only the credit note record is removed."
-                : data.hasCreditNote
-                  ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
-                  : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
+                : isPackingSlip
+                  ? "Are you sure you want to delete this packing slip? The sales order will stay; only the packing slip record is removed."
+                  : data.hasCreditNote
+                    ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
+                    : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
             </Text>
           </Modal.Section>
         </Modal>

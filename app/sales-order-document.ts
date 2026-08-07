@@ -475,10 +475,9 @@ export type SalesOrderDocumentData = {
   }>;
 };
 
-export const DEFAULT_SALES_ORDER_TEMPLATE_ID = "sales-standard";
-
 /** Bump when premium presets get new per-template colors / look. */
 export const PREMIUM_DESIGN_VERSION = 6;
+export const DEFAULT_SALES_ORDER_TEMPLATE_ID = "sales-standard";
 export const SALES_ORDER_TEMPLATE_STORAGE_KEY =
   "invoice-app:selected-template:sales-order";
 

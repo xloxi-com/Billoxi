@@ -31,3 +31,11 @@ export const INVOICE_LIST_VIEWS = [
 
 /** Credit note list tabs — same payment filters as invoice list. */
 export const CREDIT_NOTE_LIST_VIEWS = INVOICE_LIST_VIEWS;
+
+/** Packing slip list tabs — fulfillment-focused. */
+export const PACKING_SLIP_LIST_VIEWS = [
+  { id: "all", label: "All", fulfillment: "" },
+  { id: "unfulfilled", label: "Unfulfilled", fulfillment: "unfulfilled" },
+  { id: "partial", label: "Partial", fulfillment: "partially_fulfilled" },
+  { id: "fulfilled", label: "Fulfilled", fulfillment: "fulfilled" },
+] as const;

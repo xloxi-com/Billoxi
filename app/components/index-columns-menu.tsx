@@ -20,6 +20,8 @@ export type IndexColumnDef = {
   label: string;
   /** Always shown; hide toggle disabled. */
   locked?: boolean;
+  /** Hidden on first visit (and when newly added to an existing layout). */
+  defaultHidden?: boolean;
 };
 
 export type IndexColumnsState = {
@@ -66,26 +68,51 @@ export const CREDIT_NOTE_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "actions", label: "Actions", locked: true },
 ];
 
+export const PACKING_SLIP_INDEX_COLUMNS: IndexColumnDef[] = [
+  { id: "document", label: "Packing Slip", locked: true },
+  { id: "reference", label: "Order" },
+  { id: "salesOrderNumber", label: "Sales Order", defaultHidden: true },
+  { id: "invoiceNumber", label: "Invoice", defaultHidden: true },
+  { id: "date", label: "Date" },
+  { id: "company", label: "Company" },
+  { id: "customer", label: "Customer" },
+  { id: "fulfillmentStatus", label: "Fulfillment" },
+  { id: "actions", label: "Actions", locked: true },
+];
+
+function defaultHiddenIds(columns: IndexColumnDef[]): string[] {
+  return columns
+    .filter((col) => col.defaultHidden && !col.locked)
+    .map((col) => col.id);
+}
+
 function readStored(key: string, columns: IndexColumnDef[]): IndexColumnsState {
   const defaultOrder = columns.map((c) => c.id);
+  const defaultsHidden = defaultHiddenIds(columns);
   if (typeof window === "undefined") {
-    return { order: defaultOrder, hidden: [] };
+    return { order: defaultOrder, hidden: defaultsHidden };
   }
   try {
     const raw = window.localStorage.getItem(key);
-    if (!raw) return { order: defaultOrder, hidden: [] };
+    if (!raw) return { order: defaultOrder, hidden: defaultsHidden };
     const parsed = JSON.parse(raw) as IndexColumnsState;
     const known = new Set(columns.map((c) => c.id));
+    const newlyAdded = defaultOrder.filter((id) => !parsed.order.includes(id));
     const order = [
       ...parsed.order.filter((id) => known.has(id)),
-      ...defaultOrder.filter((id) => !parsed.order.includes(id)),
+      ...newlyAdded,
     ];
-    const hidden = (parsed.hidden || []).filter(
+    const hidden = [
+      ...(parsed.hidden || []),
+      ...newlyAdded.filter((id) =>
+        columns.find((c) => c.id === id)?.defaultHidden,
+      ),
+    ].filter(
       (id) => known.has(id) && !columns.find((c) => c.id === id)?.locked,
     );
-    return { order, hidden };
+    return { order, hidden: [...new Set(hidden)] };
   } catch {
-    return { order: defaultOrder, hidden: [] };
+    return { order: defaultOrder, hidden: defaultsHidden };
   }
 }
 

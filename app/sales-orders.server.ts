@@ -5,7 +5,7 @@ import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
 } from "./order-invoice-status.server";
-import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
+import { getPackingSlipOrderGids, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, ensurePackingSlipDocumentNumbers, type PackingSlipOrderMeta } from "./order-packing-slip-status.server";
 import {
   ensureCreditNoteDocumentNumbers,
   getAllCreditNoteOrderGids,
@@ -98,6 +98,7 @@ export type SalesOrderRow = {
   balanceDue: string;
   invoiced: boolean;
   packingSlip: boolean;
+  packingSlipNumber: string;
   creditNote: boolean;
   creditNoteNumber: string;
   creditNoteAt: string | null;
@@ -691,7 +692,7 @@ function toRow(
   packingSlip = false,
   invoicedAt: Date | null = null,
   invoiceNumber = "",
-  /** Invoice / credit-note list: show document date instead of order createdAt. */
+  /** Invoice / credit-note / packing-slip list: show document date instead of order createdAt. */
   useDocumentDate = false,
   _invoiceCreatedAt: Date | null = null,
   creditNote = false,
@@ -699,15 +700,19 @@ function toRow(
   creditNoteAt: Date | null = null,
   creditNoteReason = "",
   creditNoteVoided = false,
+  packingSlipNumber = "",
+  packingSlipAt: Date | null = null,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
   const documentDate =
     useDocumentDate && creditNote && creditNoteAt
       ? creditNoteAt
-      : useDocumentDate && invoicedAt
-        ? invoicedAt
-        : null;
+      : useDocumentDate && packingSlip && packingSlipAt
+        ? packingSlipAt
+        : useDocumentDate && invoicedAt
+          ? invoicedAt
+          : null;
   const displayDateIso = documentDate
     ? documentDate.toISOString()
     : order.createdAt;
@@ -724,6 +729,7 @@ function toRow(
     balanceDue: formatMoney(resolveBalanceDue(order)),
     invoiced,
     packingSlip,
+    packingSlipNumber: packingSlipNumber.trim(),
     creditNote,
     creditNoteNumber: creditNoteNumber.trim(),
     creditNoteAt: creditNoteAt ? creditNoteAt.toISOString() : null,
@@ -787,7 +793,7 @@ export async function loadSalesOrdersPage(
   shop: string,
   params: ReturnType<typeof parseSalesOrdersSearchParams>,
   templateId: string = DEFAULT_SALES_ORDER_TEMPLATE_ID,
-  options?: { listFilter?: "invoiced" | "credit-note" },
+  options?: { listFilter?: "invoiced" | "credit-note" | "packing-slip" },
 ): Promise<SalesOrdersPage> {
   const sortConfig = SORT_OPTIONS[params.sortSelected];
   const availableViews = SALES_ORDER_VIEWS.map((_, index) => index);
@@ -799,6 +805,7 @@ export async function loadSalesOrdersPage(
   const isInvoicedView =
     options?.listFilter === "invoiced" || viewQuery === INVOICED_VIEW_QUERY;
   const isCreditNoteView = options?.listFilter === "credit-note";
+  const isPackingSlipView = options?.listFilter === "packing-slip";
 
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
@@ -821,11 +828,13 @@ export async function loadSalesOrdersPage(
     templateId,
     params.after ?? "",
     params.before ?? "",
-    isCreditNoteView
-      ? "credit-note"
-      : isInvoicedView
-        ? INVOICED_VIEW_QUERY
-        : viewQuery,
+    isPackingSlipView
+      ? "packing-slip"
+      : isCreditNoteView
+        ? "credit-note"
+        : isInvoicedView
+          ? INVOICED_VIEW_QUERY
+          : viewQuery,
     params.query,
     params.paymentStatus,
     params.fulfillmentStatus,
@@ -849,12 +858,14 @@ export async function loadSalesOrdersPage(
     pageInfo: SalesOrdersPage["pageInfo"],
     forceInvoiced: boolean,
     forceCreditNote = false,
+    forcePackingSlip = false,
   ): Promise<SalesOrdersPage> => {
     const orderGids = nodes.map((order) => order.id);
     const [
       documentNumbers,
       invoicedMeta,
       packingSlipGids,
+      packingSlipMeta,
       creditNoteGids,
       creditNoteMeta,
     ] =
@@ -874,6 +885,7 @@ export async function loadSalesOrdersPage(
               }
             >(),
             new Set<string>(),
+            new Map<string, PackingSlipOrderMeta>(),
             new Set<string>(),
             new Map<string, CreditNoteOrderMeta>(),
           ]
@@ -885,6 +897,9 @@ export async function loadSalesOrdersPage(
             ),
             getInvoicedMetaByOrderGids(shop, orderGids),
             getPackingSlipOrderGids(shop, orderGids),
+            forcePackingSlip
+              ? getPackingSlipMetaByOrderGids(shop, orderGids)
+              : Promise.resolve(new Map<string, PackingSlipOrderMeta>()),
             getCreditNoteOrderGids(shop, orderGids),
             getCreditNoteMetaByOrderGids(shop, orderGids),
           ]);
@@ -903,10 +918,16 @@ export async function loadSalesOrdersPage(
       ? await ensureCreditNoteDocumentNumbers(shop, orderGids)
       : new Map<string, string>();
 
+    // Packing slip list: backfill missing PS- numbers.
+    const ensuredPackingSlipNumbers = forcePackingSlip
+      ? await ensurePackingSlipDocumentNumbers(shop, orderGids)
+      : new Map<string, string>();
+
     return {
       orders: nodes.map((order) => {
         const meta = invoicedMeta.get(order.id) ?? null;
         const cnMeta = creditNoteMeta.get(order.id) ?? null;
+        const psMeta = packingSlipMeta.get(order.id) ?? null;
         const invoiceNumber =
           meta?.documentNumber ||
           ensuredInvoiceNumbers.get(order.id) ||
@@ -917,20 +938,30 @@ export async function loadSalesOrdersPage(
           cnMeta?.documentNumber ||
           ensuredCreditNoteNumbers.get(order.id) ||
           "";
+        const hasPackingSlip =
+          forcePackingSlip ||
+          packingSlipGids.has(order.id) ||
+          Boolean(psMeta);
+        const packingSlipNumber =
+          psMeta?.documentNumber ||
+          ensuredPackingSlipNumbers.get(order.id) ||
+          "";
         return toRow(
           order,
           documentNumbers.get(order.id) ?? null,
           forceInvoiced || Boolean(meta),
-          packingSlipGids.has(order.id),
+          hasPackingSlip,
           meta?.invoicedAt ?? null,
           invoiceNumber,
-          forceInvoiced || forceCreditNote,
+          forceInvoiced || forceCreditNote || forcePackingSlip,
           meta?.createdAt ?? meta?.invoicedAt ?? null,
           isCreditNote,
           creditNoteNumber,
           cnMeta?.convertedAt ?? null,
           cnMeta?.reason || "",
           Boolean(cnMeta?.voidedAt),
+          packingSlipNumber,
+          psMeta?.convertedAt ?? null,
         );
       }),
       pageInfo,
@@ -948,6 +979,7 @@ export async function loadSalesOrdersPage(
     metaForSort: Map<string, { sortAt: number; searchNumber?: string }>,
     forceInvoiced: boolean,
     forceCreditNote: boolean,
+    forcePackingSlip = false,
   ) => {
     if (sourceGids.length === 0) return emptyPage();
 
@@ -970,10 +1002,13 @@ export async function loadSalesOrdersPage(
     }
     if (params.fulfillmentStatus) {
       const wanted = params.fulfillmentStatus.toUpperCase();
-      orders = orders.filter(
-        (order) =>
-          (order.displayFulfillmentStatus || "").toUpperCase() === wanted,
-      );
+      orders = orders.filter((order) => {
+        const status = (order.displayFulfillmentStatus || "").toUpperCase();
+        if (wanted === "PARTIAL" || wanted === "PARTIALLY_FULFILLED") {
+          return status === "PARTIALLY_FULFILLED";
+        }
+        return status === wanted;
+      });
     }
     if (params.query.trim()) {
       const q = params.query.trim().toLowerCase();
@@ -1021,6 +1056,7 @@ export async function loadSalesOrdersPage(
       pageInfo,
       forceInvoiced,
       forceCreditNote,
+      forcePackingSlip,
     );
     listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
     pruneCache(now);
@@ -1044,6 +1080,29 @@ export async function loadSalesOrdersPage(
     return filterAndPaginateDocumentOrders(
       creditNoteGids,
       metaForSort,
+      false,
+      true,
+    );
+  }
+
+  // Packing slip list: fetch by GID via nodes().
+  if (isPackingSlipView) {
+    const packingGids = await getAllPackingSlipOrderGids(shop);
+    const meta = await getPackingSlipMetaByOrderGids(shop, packingGids);
+    const metaForSort = new Map<
+      string,
+      { sortAt: number; searchNumber?: string }
+    >();
+    for (const [gid, row] of meta) {
+      metaForSort.set(gid, {
+        sortAt: row.convertedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
+        searchNumber: row.documentNumber || undefined,
+      });
+    }
+    return filterAndPaginateDocumentOrders(
+      packingGids,
+      metaForSort,
+      false,
       false,
       true,
     );
