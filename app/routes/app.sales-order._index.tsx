@@ -81,7 +81,8 @@ import {
   parseSalesOrdersSearchParams,
   type SalesOrderRow,
 } from "../sales-orders.server";
-import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
+import { isSmtpReadyForSend, SMTP_REQUIRED_NOTICE } from "../smtp-settings";
 import {
   INVOICED_VIEW_INDEX,
   INVOICE_LIST_VIEWS,
@@ -270,10 +271,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await requireAdminAuth(request);
   const url = new URL(request.url);
   const params = parseSalesOrdersSearchParams(url);
-  const shopSelectedTemplateId = await loadSelectedTemplateForShop(
-    session.shop,
-    "sales-order",
-  );
+  const [shopSelectedTemplateId, smtpSettings] = await Promise.all([
+    loadSelectedTemplateForShop(session.shop, "sales-order"),
+    loadSmtpSettingsForShop(session.shop),
+  ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
   );
@@ -287,6 +288,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
+    smtpReady: isSmtpReadyForSend(smtpSettings),
     listMode: "sales-order" as
       | "sales-order"
       | "invoice"
@@ -303,13 +305,17 @@ export function shouldRevalidate({
   formMethod,
   currentUrl,
   nextUrl,
+  defaultShouldRevalidate,
 }: {
   formMethod?: string | null;
   currentUrl: URL;
   nextUrl: URL;
+  defaultShouldRevalidate: boolean;
 }) {
   if (formMethod && formMethod.toUpperCase() !== "GET") return true;
-  return currentUrl.search !== nextUrl.search;
+  if (currentUrl.search !== nextUrl.search) return true;
+  // Allow useRevalidator() / background poll to refresh the list.
+  return defaultShouldRevalidate;
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -714,19 +720,18 @@ export default function SalesOrderPage() {
   );
 
   const convertFetcher = useFetcher<typeof action>();
+  const pollFetcher = useFetcher<typeof action>();
   const sendFetcher = useFetcher<{
     ok: boolean;
     error?: string;
-    mode?: "smtp" | "mailto";
     to?: string;
-    subject?: string;
-    body?: string;
     attachedPdf?: boolean;
   }>();
   const isConverting = convertFetcher.state !== "idle";
   const isSendingEmail = sendFetcher.state !== "idle";
   const handledConvertDataRef = useRef<unknown>(null);
   const handledSendDataRef = useRef<unknown>(null);
+  const handledPollDataRef = useRef<unknown>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [quickActionOrderId, setQuickActionOrderId] = useState<string | null>(
     null,
@@ -741,6 +746,47 @@ export default function SalesOrderPage() {
     isDownloadingZip ||
     isSendingEmail ||
     Boolean(quickActionOrderId);
+
+  // Keep Sales Orders list live: bust cache + revalidate while the page is open.
+  useEffect(() => {
+    if (data.listMode !== "sales-order") return;
+
+    const POLL_MS = 12_000;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      if (revalidator.state !== "idle") return;
+      if (pollFetcher.state !== "idle") return;
+      if (convertFetcher.state !== "idle") return;
+      if (isDownloadingZip || isSendingEmail || quickActionOrderId) return;
+      const formData = new FormData();
+      formData.set("intent", "reload-list");
+      pollFetcher.submit(formData, { method: "post" });
+    };
+
+    const id = window.setInterval(tick, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [
+    convertFetcher.state,
+    data.listMode,
+    isDownloadingZip,
+    isSendingEmail,
+    pollFetcher,
+    quickActionOrderId,
+    revalidator.state,
+  ]);
+
+  useEffect(() => {
+    if (pollFetcher.state !== "idle" || !pollFetcher.data) return;
+    if (handledPollDataRef.current === pollFetcher.data) return;
+    handledPollDataRef.current = pollFetcher.data;
+    const result = pollFetcher.data as {
+      ok?: boolean;
+      document?: string;
+    };
+    if (result.ok && result.document === "reload") {
+      revalidator.revalidate();
+    }
+  }, [pollFetcher.data, pollFetcher.state, revalidator]);
 
   const resolveOrderPath = useCallback((orderGid: string) => {
     const numericId = orderGid.includes("/")
@@ -903,6 +949,12 @@ export default function SalesOrderPage() {
         }
         return;
       }
+      if (!data.smtpReady) {
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(SMTP_REQUIRED_NOTICE, { isError: true });
+        }
+        return;
+      }
       if (isBusy) return;
 
       const documentKind = isCreditNoteList
@@ -963,6 +1015,7 @@ export default function SalesOrderPage() {
     },
     [
       activeTemplateId,
+      data.smtpReady,
       isBusy,
       isCreditNoteList,
       isInvoiceList,
@@ -986,18 +1039,6 @@ export default function SalesOrderPage() {
         shopify.toast.show(result.error || "Failed to send email", {
           isError: true,
         });
-      }
-      return;
-    }
-
-    if (result.mode === "mailto" && result.to && result.subject && result.body) {
-      window.open(
-        `mailto:${result.to}?subject=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(result.body)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show(`Email draft opened for ${result.to}`);
       }
       return;
     }

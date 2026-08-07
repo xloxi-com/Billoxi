@@ -51,6 +51,20 @@ export function normalizeSmtpSettings(value: unknown): SmtpSettings {
   };
 }
 
+/** True when Send Email can deliver through the app (not mailto). */
+export function isSmtpReadyForSend(settings: SmtpSettings): boolean {
+  return Boolean(
+    settings.enabled &&
+      settings.host &&
+      settings.fromEmail &&
+      settings.username &&
+      settings.password,
+  );
+}
+
+export const SMTP_REQUIRED_NOTICE =
+  "Set up SMTP in Settings → SMTP first. Email can only be sent after SMTP is configured.";
+
 export const GMAIL_SMTP_PRESET: Pick<
   SmtpSettings,
   "host" | "port" | "encryption" | "enabled"

@@ -1,4 +1,5 @@
 import {
+  ensureSalesOrderDocumentNumbers,
   getSalesOrderDocumentNumbersByOrderGids,
 } from "./sales-order-number.server";
 import {
@@ -945,8 +946,28 @@ export async function loadSalesOrdersPage(
       }
     }
 
-    // Do not allocate SO numbers on the list critical path (blocks navigation).
-    // Install sync + detail/export assign missing numbers.
+    // Do not leave "—" on the Sales Order column for new orders: allocate
+    // missing numbers for this page only (usually 0–few rows → fast).
+    if (
+      !forceInvoiced &&
+      !forceCreditNote &&
+      !forcePackingSlip &&
+      orderGids.length > 0
+    ) {
+      const missing = orderGids.filter(
+        (gid) => !documentNumbers.get(gid)?.trim(),
+      );
+      if (missing.length > 0) {
+        const ensured = await ensureSalesOrderDocumentNumbers(
+          shop,
+          templateId,
+          missing,
+        );
+        for (const [gid, num] of ensured) {
+          if (num?.trim()) documentNumbers.set(gid, num);
+        }
+      }
+    }
 
     const ensuredInvoiceNumbers = new Map<string, string>();
 

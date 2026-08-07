@@ -20,6 +20,11 @@ api_version = "2026-07"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+  # Assign sales-order number as soon as a Shopify order is created
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = [ "orders/create" ]
+
   # Auto-convert sales order → invoice when Shopify marks the order paid
   [[webhooks.subscriptions]]
   uri = "/webhooks/orders/paid"

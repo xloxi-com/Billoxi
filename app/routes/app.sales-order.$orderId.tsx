@@ -62,7 +62,9 @@ import {
   loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
   loadSelectedTemplatesForShop,
+  loadSmtpSettingsForShop,
 } from "../shop-settings.server";
+import { isSmtpReadyForSend, SMTP_REQUIRED_NOTICE } from "../smtp-settings";
 import {
   ensureInvoiceDocumentNumbers,
   getInvoicedMetaByOrderGids,
@@ -178,6 +180,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const url = new URL(request.url);
 
   const selectedMap = await loadSelectedTemplatesForShop(session.shop);
+  const smtpSettings = await loadSmtpSettingsForShop(session.shop);
   const shopSelectedTemplateId =
     selectedMap[
       isCreditNote
@@ -474,6 +477,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     settings: template.settings,
     storeDetails: template.storeDetails,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
+    smtpReady: isSmtpReadyForSend(smtpSettings),
     invoiceCustomerNote,
     invoiceTerms,
     creditNoteReason,
@@ -744,10 +748,7 @@ export default function SalesOrderDocumentPage() {
   const sendFetcher = useFetcher<{
     ok: boolean;
     error?: string;
-    mode?: "smtp" | "mailto";
     to?: string;
-    subject?: string;
-    body?: string;
     attachedPdf?: boolean;
   }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1196,6 +1197,12 @@ export default function SalesOrderDocumentPage() {
       }
       return;
     }
+    if (!data.smtpReady) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(SMTP_REQUIRED_NOTICE, { isError: true });
+      }
+      return;
+    }
     if (isSendingEmail) return;
 
     const documentKind = isCreditNote
@@ -1279,6 +1286,7 @@ export default function SalesOrderDocumentPage() {
   }, [
     data.order,
     data.settings,
+    data.smtpReady,
     data.templateId,
     isCreditNote,
     isInvoice,
@@ -1300,18 +1308,6 @@ export default function SalesOrderDocumentPage() {
         shopify.toast.show(result.error || "Failed to send email", {
           isError: true,
         });
-      }
-      return;
-    }
-
-    if (result.mode === "mailto" && result.to && result.subject && result.body) {
-      window.open(
-        `mailto:${result.to}?subject=${encodeURIComponent(result.subject)}&body=${encodeURIComponent(result.body)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show(`Email draft opened for ${result.to}`);
       }
       return;
     }

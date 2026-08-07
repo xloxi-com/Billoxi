@@ -15,7 +15,8 @@ import {
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
 } from "../sales-orders.server";
-import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
+import { isSmtpReadyForSend } from "../smtp-settings";
 import { INVOICED_VIEW_INDEX } from "../sales-orders";
 import SalesOrdersListPage, {
   action,
@@ -48,9 +49,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const [
     shopSelectedTemplateId,
     shopSelectedInvoiceTemplateId,
+    smtpSettings,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadSelectedTemplateForShop(session.shop, "invoice"),
+    loadSmtpSettingsForShop(session.shop),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -66,6 +69,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
+    smtpReady: isSmtpReadyForSend(smtpSettings),
     listMode: "invoice" as const,
     pageHeading: "Invoice",
     invoiceTemplateId: resolveInvoiceTemplateId(shopSelectedInvoiceTemplateId),

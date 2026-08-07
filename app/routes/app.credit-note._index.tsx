@@ -15,7 +15,8 @@ import {
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
 } from "../sales-orders.server";
-import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
+import { isSmtpReadyForSend } from "../smtp-settings";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -41,9 +42,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const [
     shopSelectedTemplateId,
     shopSelectedCreditNoteTemplateId,
+    smtpSettings,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadSelectedTemplateForShop(session.shop, "credit-note"),
+    loadSmtpSettingsForShop(session.shop),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -60,6 +63,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
+    smtpReady: isSmtpReadyForSend(smtpSettings),
     listMode: "credit-note" as const,
     pageHeading: "Credit Note",
     invoiceTemplateId: null as string | null,

@@ -11,6 +11,10 @@ import {
   type EmailTemplatesSettings,
 } from "./email-templates";
 import type { SmtpSettings } from "./smtp-settings";
+import {
+  isSmtpReadyForSend,
+  SMTP_REQUIRED_NOTICE,
+} from "./smtp-settings";
 import type { StoreDetails } from "./store-details";
 import { buildSalesOrderPdfFile } from "./sales-order-bulk-pdf.server";
 import {
@@ -25,13 +29,6 @@ export type SendDocumentEmailResult =
       mode: "smtp";
       to: string;
       attachedPdf: boolean;
-    }
-  | {
-      ok: true;
-      mode: "mailto";
-      to: string;
-      subject: string;
-      body: string;
     }
   | {
       ok: false;
@@ -137,20 +134,20 @@ export async function sendDocumentEmail(args: {
     ? plainTextFromHtml(bodyContent)
     : bodyContent;
 
-  if (!smtp.enabled || !smtp.host) {
-    return {
-      ok: true,
-      mode: "mailto",
-      to,
-      subject,
-      body: plainBody,
-    };
-  }
-
-  if (!smtp.fromEmail) {
+  if (!isSmtpReadyForSend(smtp)) {
+    if (!smtp.enabled || !smtp.host) {
+      return { ok: false, error: SMTP_REQUIRED_NOTICE };
+    }
+    if (!smtp.fromEmail) {
+      return {
+        ok: false,
+        error: "Set a From email in Settings → SMTP before sending.",
+      };
+    }
     return {
       ok: false,
-      error: "Set a From email in Settings → SMTP before sending.",
+      error:
+        "Add SMTP username and password in Settings → SMTP before sending.",
     };
   }
 

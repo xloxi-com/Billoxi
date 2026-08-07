@@ -1854,8 +1854,8 @@ export default function SettingsPage() {
                           ) : (
                             <Banner tone="warning" title="SMTP not configured">
                               <p>
-                                Without a host, Send Email opens a mailto draft
-                                instead of sending from the app.
+                                Set up SMTP here before using Send Email. Without
+                                SMTP, document emails cannot be sent from the app.
                               </p>
                             </Banner>
                           )}
