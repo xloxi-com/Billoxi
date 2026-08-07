@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
+  PrefetchPageLinks,
   useFetcher,
   useLoaderData,
   useLocation,
@@ -11,7 +12,6 @@ import {
 import { AppProvider, Modal, Text, Card, Button, Badge, BlockStack, InlineStack, Box } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
-  DEFAULT_SALES_ORDER_TEMPLATE_ID,
   defaultTemplateSettings,
   getSalesOrderTemplatePreset,
   mergeTemplateSettings,
@@ -20,8 +20,6 @@ import {
   INVOICE_TEMPLATE_PRESETS,
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
-  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
-  DEFAULT_PACKING_SLIP_TEMPLATE_ID,
   salesOrderTemplateName,
   type TemplateEditorSettings,
 } from "../sales-order-document";
@@ -217,38 +215,35 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
 
   try {
-    const [
-      shopCurrencyCode,
-      selectedTemplates,
-      storeDetails,
-      numberSeries,
-      customizations,
-    ] = await Promise.all([
-      fetchShopCurrencyCode(admin, session.shop),
-      loadSelectedTemplatesForShop(session.shop),
-      loadStoreDetailsForShop(session.shop, admin),
-      loadNumberSeriesForShop(session.shop),
-      (async () => {
-        try {
-          return await prisma.templateCustomization.findMany({
-            where: {
-              shop: session.shop,
-              documentType: {
-                in: ["sales-order", "invoice", "credit-note", "packing-slip"],
+    const [selectedTemplates, storeDetails, numberSeries, customizations] =
+      await Promise.all([
+        loadSelectedTemplatesForShop(session.shop),
+        loadStoreDetailsForShop(session.shop, admin),
+        loadNumberSeriesForShop(session.shop),
+        (async () => {
+          try {
+            return await prisma.templateCustomization.findMany({
+              where: {
+                shop: session.shop,
+                documentType: {
+                  in: ["sales-order", "invoice", "credit-note", "packing-slip"],
+                },
               },
-            },
-            select: { documentType: true, templateId: true, settings: true },
-          });
-        } catch (error) {
-          console.error("Template customization query failed:", error);
-          return [] as Array<{
-            documentType: string;
-            templateId: string;
-            settings: unknown;
-          }>;
-        }
-      })(),
-    ]);
+              select: { documentType: true, templateId: true, settings: true },
+            });
+          } catch (error) {
+            console.error("Template customization query failed:", error);
+            return [] as Array<{
+              documentType: string;
+              templateId: string;
+              settings: unknown;
+            }>;
+          }
+        })(),
+      ]);
+
+    // Prefer currency cache warmed by store-defaults; avoid racing a second GraphQL.
+    const shopCurrencyCode = await fetchShopCurrencyCode(admin, session.shop);
 
     const customizationByKey: Record<string, unknown> = {};
     for (const row of customizations) {
@@ -416,105 +411,6 @@ function buildPreviewSettings(
   return previewSettings;
 }
 
-function SalesOrderCardThumbnail({
-  templateId,
-  preview,
-  shopCurrencyCode,
-}: {
-  templateId: string;
-  preview: SalesOrderPreviewBundle;
-  shopCurrencyCode: string;
-}) {
-  const previewSettings = buildPreviewSettings(preview.settings, templateId);
-  const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
-  const previewOrder = {
-    ...(templateId.startsWith("credit-")
-      ? sampleCreditNoteForShop(shopCurrencyCode)
-      : sampleSalesOrderForShop(shopCurrencyCode)),
-    name: "#1008",
-    documentNumber,
-  };
-
-  return (
-    <div aria-hidden="true" className="template-card-thumb">
-      <PaperScaleFrame className="template-card-thumb__scale" fit="contain">
-        <div
-          className="template-editor__paper template-editor__paper--portrait template-editor__paper--a4 template-card-thumb__paper"
-          style={{
-            backgroundColor: previewSettings.backgroundColor,
-            fontFamily: previewSettings.fontFamily,
-            padding: paperPaddingCss(previewSettings.margins),
-          }}
-        >
-          <Suspense fallback={null}>
-            <SalesOrderLiveDocument
-              settings={previewSettings}
-              templateId={templateId}
-              storeDetails={preview.storeDetails}
-              showLogoPlaceholder={false}
-              order={previewOrder}
-            />
-          </Suspense>
-        </div>
-      </PaperScaleFrame>
-    </div>
-  );
-}
-
-/** Mount live A4 thumbs only after hydration + when scrolled into view. */
-function DeferredSalesOrderCardThumbnail({
-  template,
-  preview,
-  shopCurrencyCode,
-}: {
-  template: Template;
-  preview: SalesOrderPreviewBundle;
-  shopCurrencyCode: string;
-}) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const node = hostRef.current;
-    if (!node) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "120px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [mounted]);
-
-  return (
-    <div ref={hostRef}>
-      {mounted && visible ? (
-        <SalesOrderCardThumbnail
-          templateId={template.id}
-          preview={preview}
-          shopCurrencyCode={shopCurrencyCode}
-        />
-      ) : (
-        <TemplateThumbnail template={template} />
-      )}
-    </div>
-  );
-}
-
 function SalesOrderTemplatePreview({
   templateId,
   preview,
@@ -585,27 +481,24 @@ export default function TemplatesPage() {
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [confirmTemplate, setConfirmTemplate] = useState<Template | null>(null);
 
-  // Only build live previews for the visible document type (~15, not all 60).
-  const salesOrderPreviews = useMemo(() => {
-    if (isEditRoute) return {} as Record<string, SalesOrderPreviewBundle>;
+  // Build live preview only when Preview modal is open (not for every card).
+  const salesOrderPreviewBundle = useMemo(() => {
+    if (isEditRoute || !previewTemplate) return null;
     const series = numberSeries as NumberSeriesMap;
-    const next: Record<string, SalesOrderPreviewBundle> = {};
-    for (const template of templates[activeType]) {
-      next[template.id] = buildPreviewBundle({
-        documentType: activeType,
-        templateId: template.id,
-        customizationSettings:
-          customizationByKey[`${activeType}:${template.id}`] ?? null,
-        storeDetails,
-        numberSeries: series[activeType],
-      });
-    }
-    return next;
+    return buildPreviewBundle({
+      documentType: activeType,
+      templateId: previewTemplate.id,
+      customizationSettings:
+        customizationByKey[`${activeType}:${previewTemplate.id}`] ?? null,
+      storeDetails,
+      numberSeries: series[activeType],
+    });
   }, [
     activeType,
     customizationByKey,
     isEditRoute,
     numberSeries,
+    previewTemplate,
     storeDetails,
   ]);
 
@@ -693,21 +586,7 @@ export default function TemplatesPage() {
     return <Outlet />;
   }
 
-  const salesOrderPreview =
-    previewTemplate &&
-    (activeType === "sales-order" ||
-      activeType === "invoice" ||
-      activeType === "credit-note" ||
-      activeType === "packing-slip")
-      ? salesOrderPreviews[previewTemplate.id] ||
-        (activeType === "sales-order"
-          ? salesOrderPreviews[DEFAULT_SALES_ORDER_TEMPLATE_ID]
-          : activeType === "credit-note"
-            ? salesOrderPreviews[DEFAULT_CREDIT_NOTE_TEMPLATE_ID]
-            : activeType === "packing-slip"
-              ? salesOrderPreviews[DEFAULT_PACKING_SLIP_TEMPLATE_ID]
-              : salesOrderPreviews[INVOICE_TEMPLATE_PRESETS[0]!.id])
-      : null;
+  const salesOrderPreview = salesOrderPreviewBundle;
 
   return (
     <AppProvider i18n={enTranslations}>
@@ -776,28 +655,12 @@ export default function TemplatesPage() {
                   {templates[activeType].map((template) => {
                     const isSelected =
                       selectedTemplates[activeType] === template.id;
-                    const livePreview =
-                      (activeType === "sales-order" ||
-                        activeType === "invoice" ||
-                        activeType === "credit-note" ||
-                        activeType === "packing-slip") &&
-                      salesOrderPreviews[template.id]
-                        ? salesOrderPreviews[template.id]
-                        : null;
 
                     return (
                       <div className="template-card" key={template.id}>
                         <Card padding="0" background="bg-surface">
                           <div className="template-card__inner">
-                            {livePreview ? (
-                              <DeferredSalesOrderCardThumbnail
-                                template={template}
-                                preview={livePreview}
-                                shopCurrencyCode={shopCurrencyCode}
-                              />
-                            ) : (
-                              <TemplateThumbnail template={template} />
-                            )}
+                            <TemplateThumbnail template={template} />
                             <Box padding="400">
                               <BlockStack gap="300">
                                 <InlineStack gap="200" blockAlign="center" wrap={false}>
@@ -819,21 +682,30 @@ export default function TemplatesPage() {
                                   >
                                     Preview
                                   </Button>
-                                  <Button
-                                    variant={isSelected ? "secondary" : "primary"}
-                                    onClick={
-                                      isSelected
-                                        ? () =>
-                                            navigate(
-                                              `/app/templates/edit/${activeType}/${template.id}`,
-                                            )
-                                        : () => setConfirmTemplate(template)
-                                    }
-                                  >
-                                    {isSelected
-                                      ? "Edit template"
-                                      : "Use template"}
-                                  </Button>
+                                  {isSelected ? (
+                                    <>
+                                      <PrefetchPageLinks
+                                        page={`/app/templates/edit/${activeType}/${template.id}`}
+                                      />
+                                      <Button
+                                        variant="secondary"
+                                        onClick={() =>
+                                          navigate(
+                                            `/app/templates/edit/${activeType}/${template.id}`,
+                                          )
+                                        }
+                                      >
+                                        Edit template
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button
+                                      variant="primary"
+                                      onClick={() => setConfirmTemplate(template)}
+                                    >
+                                      Use template
+                                    </Button>
+                                  )}
                                 </div>
                               </BlockStack>
                             </Box>

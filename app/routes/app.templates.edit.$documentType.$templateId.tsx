@@ -1,6 +1,8 @@
 import {
   memo,
+  lazy,
   startTransition,
+  Suspense,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -12,6 +14,7 @@ import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
+  ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   useFetcher,
@@ -92,10 +95,15 @@ import {
 import {
   syncNumberCounter,
 } from "../sales-order-number.server";
-import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
 import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { templatePreviewLogoDataUrl } from "../template-preview-logo";
+
+const SalesOrderLiveDocument = lazy(() =>
+  import("../components/sales-order-live-document").then((mod) => ({
+    default: mod.SalesOrderLiveDocument,
+  })),
+);
 import {
   TEMPLATE_LANGUAGES,
   applyTemplateLanguageLabels,
@@ -1530,59 +1538,22 @@ function isMerchantCreatedMetafield(node: MetafieldDefinitionNode): boolean {
   return true;
 }
 
-async function fetchCustomFieldSources(
-  admin: { graphql: (query: string) => Promise<Response> },
-): Promise<CustomFieldSource[]> {
-  try {
-    const response = await admin.graphql(
-      `#graphql
-        query ProductCustomFieldSources {
-          productMetafields: metafieldDefinitions(first: 50, ownerType: PRODUCT) {
-            nodes {
-              id
-              name
-              namespace
-              key
-              ownerType
-              type {
-                name
-              }
-            }
-          }
-        }`,
-    );
-    const payload = (await response.json()) as {
-      data?: {
-        productMetafields?: { nodes?: MetafieldDefinitionNode[] };
-      };
-      errors?: Array<{ message: string }>;
-    };
-
-    if (payload.errors?.length) {
-      console.error("Custom field sources GraphQL errors:", payload.errors);
-    }
-
-    return (payload.data?.productMetafields?.nodes ?? [])
-      .filter(isMerchantCreatedMetafield)
-      .map((node) => ({
-        id: node.id,
-        kind: "metafield" as const,
-        name: node.name,
-        typeName: node.type?.name || "metafield",
-        namespace: node.namespace,
-        key: node.key,
-        ownerType: node.ownerType,
-      }));
-  } catch (error) {
-    console.error("Failed to load custom field sources:", error);
-    return [];
-  }
-}
-
 function getTemplate(documentType: string | undefined, templateId: string | undefined) {
   if (!documentType || !templateId) return null;
   const template = templateDefinitions[templateId];
   return template?.documentType === documentType ? template : null;
+}
+
+export function shouldRevalidate({
+  formMethod,
+  currentParams,
+  nextParams,
+}: ShouldRevalidateFunctionArgs) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  return (
+    currentParams.documentType !== nextParams.documentType ||
+    currentParams.templateId !== nextParams.templateId
+  );
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -1592,7 +1563,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const { session, admin } = await requireAdminAuth(request);
-  const [customization, customFieldSources, storeDetails, lastAllocated, shopCurrencyCode, numberSeries] =
+  // Critical path only — metafields load after paint via /app/templates/custom-fields.
+  const [customization, storeDetails, lastAllocated, numberSeries] =
     await Promise.all([
       prisma.templateCustomization.findUnique({
         where: {
@@ -1603,17 +1575,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           },
         },
       }),
-      fetchCustomFieldSources(admin),
       loadStoreDetailsForShop(session.shop, admin),
       prisma.salesOrderDocumentNumber.findFirst({
         where: {
           shop: session.shop,
-          templateId: params.templateId,
+          ...(params.documentType === "sales-order"
+            ? {}
+            : { templateId: params.templateId }),
         },
         orderBy: { sequence: "desc" },
         select: { sequence: true },
       }),
-      fetchShopCurrencyCode(admin, session.shop),
       loadNumberSeriesEntryForShop(
         session.shop,
         params.documentType === "invoice"
@@ -1625,6 +1597,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               : "sales-order",
       ),
     ]);
+
+  // Usually a cache hit after store-details warm-up.
+  const shopCurrencyCode = await fetchShopCurrencyCode(admin, session.shop);
 
   let settings = mergeSettings(
     customization?.settings,
@@ -1650,7 +1625,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     documentType: params.documentType,
     templateId: params.templateId,
     settings,
-    customFieldSources,
+    customFieldSources: [] as CustomFieldSource[],
     storeDetails,
     shopCurrencyCode,
     lastAllocatedSequence: lastAllocated?.sequence ?? null,
@@ -1770,7 +1745,18 @@ const sectionItems: Array<{
 export default function TemplateEditorPage() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const customFieldsFetcher = useFetcher<{ sources: CustomFieldSource[] }>();
   const revalidator = useRevalidator();
+  const customFieldsRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (customFieldsRequestedRef.current) return;
+    customFieldsRequestedRef.current = true;
+    customFieldsFetcher.load("/app/templates/custom-fields");
+  }, [customFieldsFetcher]);
+
+  const customFieldSources =
+    customFieldsFetcher.data?.sources ?? data.customFieldSources;
   const defaultAppearance = useMemo(() => {
     const preset = findTemplatePreset(data.templateId) ?? null;
     return {
@@ -3491,7 +3477,7 @@ export default function TemplateEditorPage() {
                         </div>
                         {column.key === "custom" && column.enabled ? (
                           <div className="template-editor__custom-fields">
-                            {data.customFieldSources.length === 0 ? (
+                            {customFieldSources.length === 0 ? (
                               <BlockStack gap="300">
                                 <Text as="h3" variant="headingSm">
                                   Set up product metafields
@@ -3537,7 +3523,7 @@ export default function TemplateEditorPage() {
                                   Select product metafields to show in this
                                   column.
                                 </Text>
-                                {data.customFieldSources.map((source) => {
+                                {customFieldSources.map((source) => {
                                   const checked =
                                     settings.selectedCustomFields.some(
                                       (field) => field.id === source.id,
@@ -4040,12 +4026,26 @@ export default function TemplateEditorPage() {
                   padding: paperPaddingCss(previewSettings.margins),
                 }}
               >
-                <SalesOrderLiveDocument
-                  settings={previewDocumentSettings}
-                  templateId={data.templateId}
-                  storeDetails={data.storeDetails}
-                  order={previewOrder}
-                />
+                <Suspense
+                  fallback={
+                    <div
+                      className="template-editor__preview-skeleton"
+                      aria-hidden="true"
+                      style={{
+                        minHeight: "40vh",
+                        background: "var(--p-color-bg-surface-secondary, #f6f6f7)",
+                        borderRadius: 8,
+                      }}
+                    />
+                  }
+                >
+                  <SalesOrderLiveDocument
+                    settings={previewDocumentSettings}
+                    templateId={data.templateId}
+                    storeDetails={data.storeDetails}
+                    order={previewOrder}
+                  />
+                </Suspense>
               </div>
               </PaperScaleFrame>
               </div>
