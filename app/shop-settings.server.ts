@@ -344,6 +344,12 @@ export async function resetStoreDetailsFromShopify(
   const next: StoreDetails = {
     ...shopDefaults,
     customFields: current.customFields,
+    ...(current.logoDataUrl
+      ? {
+          logoDataUrl: current.logoDataUrl,
+          ...(current.logoFileName ? { logoFileName: current.logoFileName } : {}),
+        }
+      : {}),
   };
   return saveStoreDetailsForShop(shop, next);
 }

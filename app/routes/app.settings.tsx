@@ -85,6 +85,7 @@ import {
 import {
   createStoreCustomField,
   normalizeStoreDetails,
+  normalizeStoreLogoDataUrl,
   type StoreCustomField,
   type StoreDetails,
 } from "../store-details";
@@ -487,10 +488,31 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
+  const rawLogo =
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "logoDataUrl" in parsed &&
+    typeof (parsed as { logoDataUrl?: unknown }).logoDataUrl === "string"
+      ? (parsed as { logoDataUrl: string }).logoDataUrl.trim()
+      : "";
+
   const storeDetails = normalizeStoreDetails(parsed);
   if (!storeDetails.name) {
     return Response.json(
       { saved: false, error: "Store name is required." },
+      { status: 400 },
+    );
+  }
+
+  // Client sent a logo but it was stripped — tell the merchant instead of silent drop.
+  if (rawLogo && !storeDetails.logoDataUrl) {
+    return Response.json(
+      {
+        saved: false,
+        error:
+          "Logo could not be saved. Use PNG, JPG, or WebP under 1 MB.",
+      },
       { status: 400 },
     );
   }
@@ -663,6 +685,13 @@ export default function SettingsPage() {
     if (handledFetcherDataRef.current === fetcher.data) return;
     handledFetcherDataRef.current = fetcher.data;
 
+    if ("error" in fetcher.data && fetcher.data.error) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(String(fetcher.data.error), { isError: true });
+      }
+      return;
+    }
+
     if (!("saved" in fetcher.data) || !fetcher.data.saved) {
       return;
     }
@@ -751,16 +780,31 @@ export default function SettingsPage() {
       setLogoError("Logo must be smaller than 1 MB.");
       return;
     }
+    const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+    if (file.type && !allowed.has(file.type.toLowerCase())) {
+      setLogoError("Logo must be PNG, JPG, or WebP.");
+      return;
+    }
     setLogoError("");
     const reader = new FileReader();
     reader.addEventListener("load", () => {
       if (typeof reader.result !== "string") return;
+      const logoDataUrl = normalizeStoreLogoDataUrl(reader.result);
+      if (!logoDataUrl) {
+        setLogoError(
+          "Could not read this logo. Use PNG, JPG, or WebP under 1 MB.",
+        );
+        return;
+      }
       setStoreDetails((current) => ({
         ...current,
-        logoDataUrl: reader.result as string,
+        logoDataUrl,
         logoFileName: file.name,
       }));
       setIsStoreDirty(true);
+    });
+    reader.addEventListener("error", () => {
+      setLogoError("Could not read this logo file.");
     });
     reader.readAsDataURL(file);
   };
@@ -1267,8 +1311,9 @@ export default function SettingsPage() {
                             </Text>
                             <Text as="p" tone="subdued">
                               Used on every sales order, invoice, credit note,
-                              and packing slip template. Set size per template
-                              in Templates → Edit → Transaction details.
+                              and packing slip template. Upload a logo, then
+                              click Save. Set size per template in Templates →
+                              Edit → Transaction details.
                             </Text>
                             {logoError ? (
                               <Banner tone="critical" onDismiss={() => setLogoError("")}>

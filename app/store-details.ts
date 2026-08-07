@@ -26,15 +26,24 @@ export const emptyStoreDetails: StoreDetails = {
   customFields: [],
 };
 
-const LOGO_DATA_URL_RE = /^data:image\/(?:png|jpeg|webp);base64,/i;
-const MAX_LOGO_DATA_URL_LENGTH = 1_500_000;
+const LOGO_DATA_URL_RE =
+  /^data:image\/(?:png|jpe?g|webp)(?:;charset=[\w-]+)?;base64,/i;
+/** ~1 MB binary ≈ 1.37 MB base64; leave headroom for prefix / OS variance. */
+const MAX_LOGO_DATA_URL_LENGTH = 2_000_000;
 
 export function normalizeStoreLogoDataUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
+  let trimmed = value.trim();
   if (!trimmed) return undefined;
+
+  // Some file pickers emit image/jpg (non-standard) — normalize to jpeg.
+  trimmed = trimmed.replace(/^data:image\/jpg(;|,)/i, "data:image/jpeg$1");
+
   if (!LOGO_DATA_URL_RE.test(trimmed)) return undefined;
   if (trimmed.length > MAX_LOGO_DATA_URL_LENGTH) return undefined;
+
+  // Canonicalize jpeg token after regex accepted jpg/jpeg.
+  trimmed = trimmed.replace(/^data:image\/jpg;/i, "data:image/jpeg;");
   return trimmed;
 }
 
@@ -190,6 +199,7 @@ function hasCoreStoreValues(details: StoreDetails): boolean {
       details.phone ||
       details.email ||
       details.website ||
+      details.logoDataUrl ||
       details.customFields.length,
   );
 }

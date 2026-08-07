@@ -1841,7 +1841,7 @@ export default function TemplateEditorPage() {
   const [savedSettings, setSavedSettings] = useState<TemplateEditorSettings>(
     () => withNormalizedTotalLabels(data.settings, data.templateId),
   );
-  const [isDirty, setIsDirty] = useState(false);
+  const [logoError, setLogoError] = useState("");
   const [openHeaderPanel, setOpenHeaderPanel] = useState<string | null>(
     "organization",
   );
@@ -1866,11 +1866,23 @@ export default function TemplateEditorPage() {
   const pendingSaveRef = useRef<TemplateEditorSettings | null>(null);
   const handledFetcherDataRef = useRef<unknown>(null);
   const loadedFontsRef = useRef<Set<string>>(new Set());
-  /** Prevents RangeSlider/etc. onChange during Discard from flipping dirty back on. */
-  const suppressDirtyRef = useRef(false);
   // Keep form controls instant; defer the heavy document preview paint.
   const deferredSettings = useDeferredValue(settings);
   const previewPending = deferredSettings !== settings;
+  /** True only when editor values differ from last saved snapshot (not a sticky flag). */
+  const isDirty = useMemo(
+    () => JSON.stringify(settings) !== JSON.stringify(savedSettings),
+    [settings, savedSettings],
+  );
+
+  useEffect(() => {
+    if (isDirty) return;
+    try {
+      shopify?.saveBar?.hide("template-editor-save-bar");
+    } catch {
+      // ignore
+    }
+  }, [isDirty]);
   const previewSettings = useMemo(() => {
     const withStoreBrand = {
       ...deferredSettings,
@@ -1947,11 +1959,17 @@ export default function TemplateEditorPage() {
     handledFetcherDataRef.current = fetcher.data;
 
     if ("saved" in fetcher.data && fetcher.data.saved && pendingSaveRef.current) {
-      setSavedSettings(pendingSaveRef.current);
+      const committed = pendingSaveRef.current;
       pendingSaveRef.current = null;
-      setIsDirty(false);
+      setSavedSettings(committed);
+      setSettings(committed);
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show("Template settings saved");
+      }
+      try {
+        shopify?.saveBar?.hide("template-editor-save-bar");
+      } catch {
+        // ignore
       }
     }
 
@@ -1999,19 +2017,14 @@ export default function TemplateEditorPage() {
           defaultCustomerBlockDetails,
         ),
       };
-      setSavedSettings(next);
+      // Separate clone so Discard can restore without sharing the live object.
+      setSavedSettings(JSON.parse(JSON.stringify(next)) as TemplateEditorSettings);
       return next;
     });
   }, []);
 
-  const markDirty = () => {
-    if (suppressDirtyRef.current) return;
-    setIsDirty(true);
-  };
-
   const updateSettings = (updates: Partial<TemplateEditorSettings>) => {
     setSettings((current) => ({ ...current, ...updates }));
-    markDirty();
   };
 
   const changeTemplateLanguage = (nextLanguage: string) => {
@@ -2027,7 +2040,6 @@ export default function TemplateEditorPage() {
         },
       }),
     );
-    markDirty();
   };
 
   const updateAppearance = (
@@ -2045,7 +2057,6 @@ export default function TemplateEditorPage() {
           appearance: { ...current.appearance, ...nextPatch },
         };
       });
-      markDirty();
     };
     if (options?.urgent) {
       apply();
@@ -2055,7 +2066,10 @@ export default function TemplateEditorPage() {
     startTransition(apply);
   };
 
-  const save = () => {
+  const save = (event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (!isDirty || isSaving) return;
     pendingSaveRef.current = settings;
     fetcher.submit(
       { intent: "save", settings: JSON.stringify(settings) },
@@ -2063,11 +2077,15 @@ export default function TemplateEditorPage() {
     );
   };
 
-  const discard = () => {
-    suppressDirtyRef.current = true;
-    setSettings(savedSettings);
+  const discard = (event?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    // Never save on discard — drop any in-flight "apply save result" payload.
+    pendingSaveRef.current = null;
+    setSettings(
+      JSON.parse(JSON.stringify(savedSettings)) as TemplateEditorSettings,
+    );
     setLogoError("");
-    setIsDirty(false);
     try {
       if (typeof shopify !== "undefined" && shopify.saveBar?.hide) {
         shopify.saveBar.hide("template-editor-save-bar");
@@ -2075,12 +2093,6 @@ export default function TemplateEditorPage() {
     } catch {
       // Admin host may not expose saveBar in some embeds.
     }
-    // Allow one paint cycle so controlled RangeSliders can settle without re-dirtying.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        suppressDirtyRef.current = false;
-      });
-    });
   };
 
   const updateColumn = (
@@ -2476,8 +2488,9 @@ export default function TemplateEditorPage() {
 
   return (
     <AppProvider i18n={enTranslations}>
-      <SaveBar id="template-editor-save-bar" open={isDirty} discardConfirmation>
+      <SaveBar id="template-editor-save-bar" open={isDirty}>
         <button
+          type="button"
           variant="primary"
           onClick={save}
           disabled={!isDirty || isSaving || undefined}
@@ -2485,7 +2498,7 @@ export default function TemplateEditorPage() {
         >
           {isSaving ? "Saving…" : "Save"}
         </button>
-        <button onClick={discard} disabled={isSaving || undefined}>
+        <button type="button" onClick={discard} disabled={isSaving || undefined}>
           Discard
         </button>
       </SaveBar>
