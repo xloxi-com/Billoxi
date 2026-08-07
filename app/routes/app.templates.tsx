@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
@@ -10,18 +10,22 @@ import {
 } from "react-router";
 import { AppProvider, Modal, Text, Card, Button, Badge, BlockStack, InlineStack, Box } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
-import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
 import {
   DEFAULT_SALES_ORDER_TEMPLATE_ID,
+  defaultTemplateSettings,
   getSalesOrderTemplatePreset,
   mergeTemplateSettings,
   paperPaddingCss,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  CREDIT_NOTE_TEMPLATE_PRESETS,
+  PACKING_SLIP_TEMPLATE_PRESETS,
+  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
+  DEFAULT_PACKING_SLIP_TEMPLATE_ID,
   salesOrderTemplateName,
   type TemplateEditorSettings,
 } from "../sales-order-document";
-import { sampleSalesOrderForShop } from "../sales-order-sample";
+import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { requireAdminAuth } from "../shopify-context.server";
 import { resetAllTemplatesToCleanDefaults } from "../sales-order-document.server";
 import {
@@ -32,10 +36,12 @@ import {
 } from "../shop-settings.server";
 import {
   numberingFromSeries,
+  NUMBER_SERIES_MODULES,
   type NumberSeriesEntry,
   type NumberSeriesMap,
 } from "../number-series";
 import type { StoreDetails } from "../store-details";
+import { emptyStoreDetails } from "../store-details";
 import { fetchShopCurrencyCode } from "../store-details.server";
 import prisma from "../db.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
@@ -43,6 +49,12 @@ import { templatePreviewLogoDataUrl } from "../template-preview-logo";
 import "../templates.css";
 import "../template-editor.css";
 import "../sales-order-document.css";
+
+const SalesOrderLiveDocument = lazy(() =>
+  import("../components/sales-order-live-document").then((mod) => ({
+    default: mod.SalesOrderLiveDocument,
+  })),
+);
 
 type DocumentType = "sales-order" | "invoice" | "credit-note" | "packing-slip";
 
@@ -101,66 +113,20 @@ const templates: Record<DocumentType, Template[]> = {
     accent: preset.accent,
     alignment: preset.alignment,
   })),
-  "credit-note": [
-    {
-      id: "credit-standard",
-      name: "Standard",
-      description: "A clear layout for refunds and adjustments.",
-      accent: "#d72c0d",
-      alignment: "left",
-    },
-    {
-      id: "credit-detailed",
-      name: "Detailed",
-      description: "Includes extra space for adjustment notes.",
-      accent: "#8e4b10",
-      alignment: "right",
-    },
-    {
-      id: "credit-simple",
-      name: "Simple",
-      description: "A lightweight credit note layout.",
-      accent: "#2c6ecb",
-      alignment: "center",
-    },
-    {
-      id: "credit-compact",
-      name: "Compact",
-      description: "A concise layout for quick adjustments.",
-      accent: "#6d3f8f",
-      alignment: "left",
-    },
-  ],
-  "packing-slip": [
-    {
-      id: "packing-standard",
-      name: "Standard",
-      description: "A clear packing slip for everyday shipments.",
-      accent: "#202223",
-      alignment: "left",
-    },
-    {
-      id: "packing-branded",
-      name: "Branded",
-      description: "Highlights your brand and delivery details.",
-      accent: "#7c3aed",
-      alignment: "left",
-    },
-    {
-      id: "packing-compact",
-      name: "Compact",
-      description: "A space-saving layout for larger orders.",
-      accent: "#008060",
-      alignment: "center",
-    },
-    {
-      id: "packing-detailed",
-      name: "Detailed",
-      description: "Extra room for shipment and item details.",
-      accent: "#005bd3",
-      alignment: "right",
-    },
-  ],
+  "credit-note": CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    accent: preset.accent,
+    alignment: preset.alignment,
+  })),
+  "packing-slip": PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    accent: preset.accent,
+    alignment: preset.alignment,
+  })),
 };
 
 const isDocumentType = (value: string | null): value is DocumentType => {
@@ -171,13 +137,14 @@ const selectionKey = (documentType: DocumentType) =>
   `invoice-app:selected-template:${documentType}`;
 
 function buildPreviewBundle(args: {
-  documentType: "sales-order" | "invoice";
+  documentType: "sales-order" | "invoice" | "credit-note" | "packing-slip";
   templateId: string;
   customizationSettings: unknown;
   storeDetails: StoreDetails;
   numberSeries: NumberSeriesEntry;
 }): SalesOrderPreviewBundle {
   const templateName = salesOrderTemplateName(args.templateId);
+  const defaults = defaultTemplateSettings(templateName, args.templateId);
   const settings = mergeTemplateSettings(
     args.customizationSettings,
     templateName,
@@ -192,6 +159,33 @@ function buildPreviewBundle(args: {
   ) {
     settings.transactionLabels.organization = args.storeDetails.name;
   }
+  // Pin document-type header + repair stale Sales Order titles without loading
+  // the full multi-language label packs on the gallery client.
+  settings.header = { ...settings.header, ...defaults.header };
+  const title = settings.transactionLabels.documentTitle?.trim() ?? "";
+  const knownTitles = new Set([
+    "SALES ORDER",
+    "INVOICE",
+    "CREDIT NOTE",
+    "PACKING SLIP",
+  ]);
+  const expected =
+    args.documentType === "invoice"
+      ? "INVOICE"
+      : args.documentType === "credit-note"
+        ? "CREDIT NOTE"
+        : args.documentType === "packing-slip"
+          ? "PACKING SLIP"
+          : "SALES ORDER";
+  if (knownTitles.has(title) && title !== expected) {
+    settings.transactionLabels = {
+      ...settings.transactionLabels,
+      documentTitle: defaults.transactionLabels.documentTitle,
+      orderNumber: defaults.transactionLabels.orderNumber,
+      date: defaults.transactionLabels.date,
+      reference: defaults.transactionLabels.reference,
+    };
+  }
   return {
     settings,
     storeDetails: args.storeDetails,
@@ -204,6 +198,22 @@ function buildPreviewBundle(args: {
  * Application Error from rendering ~15 documents on the server).
  */
 export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  // Edit is a child outlet — skip heavy gallery I/O on that path.
+  if (url.pathname.includes("/templates/edit/")) {
+    await requireAdminAuth(request);
+    const emptySeries = Object.fromEntries(
+      NUMBER_SERIES_MODULES.map((mod) => [mod.id, { ...mod.defaults }]),
+    ) as NumberSeriesMap;
+    return {
+      shopCurrencyCode: "USD",
+      selectedTemplates: {} as Record<string, string | null>,
+      storeDetails: { ...emptyStoreDetails },
+      numberSeries: emptySeries,
+      customizationByKey: {} as Record<string, unknown>,
+    };
+  }
+
   const { session, admin } = await requireAdminAuth(request);
 
   try {
@@ -223,7 +233,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
           return await prisma.templateCustomization.findMany({
             where: {
               shop: session.shop,
-              documentType: { in: ["sales-order", "invoice"] },
+              documentType: {
+                in: ["sales-order", "invoice", "credit-note", "packing-slip"],
+              },
             },
             select: { documentType: true, templateId: true, settings: true },
           });
@@ -416,7 +428,9 @@ function SalesOrderCardThumbnail({
   const previewSettings = buildPreviewSettings(preview.settings, templateId);
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
   const previewOrder = {
-    ...sampleSalesOrderForShop(shopCurrencyCode),
+    ...(templateId.startsWith("credit-")
+      ? sampleCreditNoteForShop(shopCurrencyCode)
+      : sampleSalesOrderForShop(shopCurrencyCode)),
     name: "#1008",
     documentNumber,
   };
@@ -432,13 +446,15 @@ function SalesOrderCardThumbnail({
             padding: paperPaddingCss(previewSettings.margins),
           }}
         >
-          <SalesOrderLiveDocument
-            settings={previewSettings}
-            templateId={templateId}
-            storeDetails={preview.storeDetails}
-            showLogoPlaceholder={false}
-            order={previewOrder}
-          />
+          <Suspense fallback={null}>
+            <SalesOrderLiveDocument
+              settings={previewSettings}
+              templateId={templateId}
+              storeDetails={preview.storeDetails}
+              showLogoPlaceholder={false}
+              order={previewOrder}
+            />
+          </Suspense>
         </div>
       </PaperScaleFrame>
     </div>
@@ -511,7 +527,9 @@ function SalesOrderTemplatePreview({
   const previewSettings = buildPreviewSettings(preview.settings, templateId);
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
   const previewOrder = {
-    ...sampleSalesOrderForShop(shopCurrencyCode),
+    ...(templateId.startsWith("credit-")
+      ? sampleCreditNoteForShop(shopCurrencyCode)
+      : sampleSalesOrderForShop(shopCurrencyCode)),
     name: "#1008",
     documentNumber,
   };
@@ -527,13 +545,15 @@ function SalesOrderTemplatePreview({
           padding: paperPaddingCss(previewSettings.margins),
         }}
       >
-        <SalesOrderLiveDocument
-          settings={previewSettings}
-          templateId={templateId}
-          storeDetails={preview.storeDetails}
-          showLogoPlaceholder={false}
-          order={previewOrder}
-        />
+        <Suspense fallback={null}>
+          <SalesOrderLiveDocument
+            settings={previewSettings}
+            templateId={templateId}
+            storeDetails={preview.storeDetails}
+            showLogoPlaceholder={false}
+            order={previewOrder}
+          />
+        </Suspense>
       </div>
       </PaperScaleFrame>
     </div>
@@ -552,6 +572,7 @@ export default function TemplatesPage() {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const isEditRoute = location.pathname.includes("/templates/edit/");
   const requestedType = searchParams.get("type");
   const [activeType, setActiveType] = useState<DocumentType>(
     isDocumentType(requestedType) ? requestedType : "sales-order",
@@ -564,31 +585,29 @@ export default function TemplatesPage() {
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [confirmTemplate, setConfirmTemplate] = useState<Template | null>(null);
 
+  // Only build live previews for the visible document type (~15, not all 60).
   const salesOrderPreviews = useMemo(() => {
+    if (isEditRoute) return {} as Record<string, SalesOrderPreviewBundle>;
     const series = numberSeries as NumberSeriesMap;
     const next: Record<string, SalesOrderPreviewBundle> = {};
-    for (const template of templates["sales-order"]) {
+    for (const template of templates[activeType]) {
       next[template.id] = buildPreviewBundle({
-        documentType: "sales-order",
+        documentType: activeType,
         templateId: template.id,
         customizationSettings:
-          customizationByKey[`sales-order:${template.id}`] ?? null,
+          customizationByKey[`${activeType}:${template.id}`] ?? null,
         storeDetails,
-        numberSeries: series["sales-order"],
-      });
-    }
-    for (const template of templates.invoice) {
-      next[template.id] = buildPreviewBundle({
-        documentType: "invoice",
-        templateId: template.id,
-        customizationSettings:
-          customizationByKey[`invoice:${template.id}`] ?? null,
-        storeDetails,
-        numberSeries: series.invoice,
+        numberSeries: series[activeType],
       });
     }
     return next;
-  }, [customizationByKey, numberSeries, storeDetails]);
+  }, [
+    activeType,
+    customizationByKey,
+    isEditRoute,
+    numberSeries,
+    storeDetails,
+  ]);
 
   useEffect(() => {
     const savedSelections: Partial<Record<DocumentType, string>> = {};
@@ -670,17 +689,24 @@ export default function TemplatesPage() {
     setConfirmTemplate(null);
   };
 
-  if (location.pathname.startsWith("/app/templates/edit/")) {
+  if (isEditRoute) {
     return <Outlet />;
   }
 
   const salesOrderPreview =
     previewTemplate &&
-    (activeType === "sales-order" || activeType === "invoice")
+    (activeType === "sales-order" ||
+      activeType === "invoice" ||
+      activeType === "credit-note" ||
+      activeType === "packing-slip")
       ? salesOrderPreviews[previewTemplate.id] ||
         (activeType === "sales-order"
           ? salesOrderPreviews[DEFAULT_SALES_ORDER_TEMPLATE_ID]
-          : salesOrderPreviews[INVOICE_TEMPLATE_PRESETS[0]!.id])
+          : activeType === "credit-note"
+            ? salesOrderPreviews[DEFAULT_CREDIT_NOTE_TEMPLATE_ID]
+            : activeType === "packing-slip"
+              ? salesOrderPreviews[DEFAULT_PACKING_SLIP_TEMPLATE_ID]
+              : salesOrderPreviews[INVOICE_TEMPLATE_PRESETS[0]!.id])
       : null;
 
   return (
@@ -752,7 +778,9 @@ export default function TemplatesPage() {
                       selectedTemplates[activeType] === template.id;
                     const livePreview =
                       (activeType === "sales-order" ||
-                        activeType === "invoice") &&
+                        activeType === "invoice" ||
+                        activeType === "credit-note" ||
+                        activeType === "packing-slip") &&
                       salesOrderPreviews[template.id]
                         ? salesOrderPreviews[template.id]
                         : null;

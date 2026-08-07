@@ -8,16 +8,15 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
-  DEFAULT_INVOICE_TEMPLATE_ID,
   findTemplatePreset,
   resolveSalesOrderTemplateId,
+  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
 } from "../sales-order-document";
 import {
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
-import { INVOICED_VIEW_INDEX } from "../sales-orders";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -27,38 +26,32 @@ import SalesOrdersListPage, {
 export { action };
 export const links: LinksFunction = salesOrdersLinks;
 
-function resolveInvoiceTemplateId(value: string | null | undefined) {
-  if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
+function resolveCreditNoteTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("credit-")) {
     return value;
   }
-  return DEFAULT_INVOICE_TEMPLATE_ID;
+  return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
 }
 
 /**
- * Invoice list — same Sales Orders table UI, but only orders that were
- * converted to invoice (OrderInvoiceStatus).
+ * Credit note list — same IndexTable UI as Invoice, filtered to orders
+ * marked in OrderCreditNoteStatus.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
   const { admin, session } = await requireAdminAuth(request);
   const url = new URL(request.url);
-  // Invoice list defaults to newest created invoice first.
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
   }
-  const invoicedView =
-    INVOICED_VIEW_INDEX >= 0 ? String(INVOICED_VIEW_INDEX) : "4";
-  url.searchParams.set("view", invoicedView);
 
   const params = parseSalesOrdersSearchParams(url);
-  params.selectedView =
-    INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : params.selectedView;
 
   const [
     shopSelectedTemplateId,
-    shopSelectedInvoiceTemplateId,
+    shopSelectedCreditNoteTemplateId,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
-    loadSelectedTemplateForShop(session.shop, "invoice"),
+    loadSelectedTemplateForShop(session.shop, "credit-note"),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -68,16 +61,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
     session.shop,
     params,
     selectedTemplateId,
+    { listFilter: "credit-note" },
   );
 
   return {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    listMode: "invoice" as const,
-    pageHeading: "Invoice",
-    invoiceTemplateId: resolveInvoiceTemplateId(shopSelectedInvoiceTemplateId),
-    creditNoteTemplateId: null as string | null,
+    listMode: "credit-note" as const,
+    pageHeading: "Credit Note",
+    invoiceTemplateId: null as string | null,
+    creditNoteTemplateId: resolveCreditNoteTemplateId(
+      shopSelectedCreditNoteTemplateId,
+    ),
   };
 }
 

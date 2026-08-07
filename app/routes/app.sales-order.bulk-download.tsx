@@ -6,7 +6,6 @@ import {
   buildSalesOrdersPdfZip,
 } from "../sales-order-bulk-pdf.server";
 import { requireAdminAuth } from "../shopify-context.server";
-import { resolveSalesOrderTemplateId } from "../sales-order-document";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -16,13 +15,17 @@ export async function action({ request }: ActionFunctionArgs) {
     .getAll("orderIds")
     .map((value) => String(value).trim())
     .filter(Boolean);
+  const documentKind = String(formData.get("document") || "sales-order");
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(
     session.shop,
-    "sales-order",
+    documentKind === "invoice"
+      ? "invoice"
+      : documentKind === "credit-note"
+        ? "credit-note"
+        : "sales-order",
   );
-  const templateId = resolveSalesOrderTemplateId(
-    shopSelectedTemplateId || String(formData.get("template") || ""),
-  );
+  const templateId =
+    shopSelectedTemplateId || String(formData.get("template") || "");
   const intent = String(formData.get("intent") || "download");
 
   try {
@@ -32,6 +35,7 @@ export async function action({ request }: ActionFunctionArgs) {
         shop: session.shop,
         orderId: orderIds[0]!,
         templateId,
+        documentKind,
       });
 
       return new Response(Buffer.from(pdf), {
@@ -49,6 +53,7 @@ export async function action({ request }: ActionFunctionArgs) {
       shop: session.shop,
       orderIds,
       templateId,
+      documentKind,
     });
 
     return new Response(Buffer.from(zip), {

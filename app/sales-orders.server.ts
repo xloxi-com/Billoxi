@@ -1,16 +1,23 @@
-import { getSalesOrderDocumentNumbersByOrderGids, allocateSalesOrderDocumentNumber } from "./sales-order-number.server";
+import {
+  getSalesOrderDocumentNumbersByOrderGids,
+} from "./sales-order-number.server";
 import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
 } from "./order-invoice-status.server";
 import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
+import {
+  ensureCreditNoteDocumentNumbers,
+  getAllCreditNoteOrderGids,
+  getCreditNoteMetaByOrderGids,
+  getCreditNoteOrderGids,
+  type CreditNoteOrderMeta,
+} from "./order-credit-note-status.server";
 import { DEFAULT_SALES_ORDER_TEMPLATE_ID } from "./sales-order-document";
 import {
   INVOICED_VIEW_QUERY,
   SALES_ORDER_VIEWS,
 } from "./sales-orders";
-import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
-import { numberingFromSeries } from "./number-series";
 import prisma from "./db.server";
 
 const PAGE_SIZE = 25;
@@ -91,6 +98,11 @@ export type SalesOrderRow = {
   balanceDue: string;
   invoiced: boolean;
   packingSlip: boolean;
+  creditNote: boolean;
+  creditNoteNumber: string;
+  creditNoteAt: string | null;
+  creditNoteReason: string;
+  creditNoteVoided: boolean;
   invoicedAt: string | null;
   invoiceNumber: string;
   paymentStatus: string;
@@ -679,16 +691,26 @@ function toRow(
   packingSlip = false,
   invoicedAt: Date | null = null,
   invoiceNumber = "",
-  /** Invoice list: show editable invoice date (invoicedAt). */
-  useInvoiceDate = false,
+  /** Invoice / credit-note list: show document date instead of order createdAt. */
+  useDocumentDate = false,
   _invoiceCreatedAt: Date | null = null,
+  creditNote = false,
+  creditNoteNumber = "",
+  creditNoteAt: Date | null = null,
+  creditNoteReason = "",
+  creditNoteVoided = false,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
-  const displayDateIso =
-    useInvoiceDate && invoicedAt
-      ? invoicedAt.toISOString()
-      : order.createdAt;
+  const documentDate =
+    useDocumentDate && creditNote && creditNoteAt
+      ? creditNoteAt
+      : useDocumentDate && invoicedAt
+        ? invoicedAt
+        : null;
+  const displayDateIso = documentDate
+    ? documentDate.toISOString()
+    : order.createdAt;
   return {
     id: order.id,
     name: order.name,
@@ -702,6 +724,11 @@ function toRow(
     balanceDue: formatMoney(resolveBalanceDue(order)),
     invoiced,
     packingSlip,
+    creditNote,
+    creditNoteNumber: creditNoteNumber.trim(),
+    creditNoteAt: creditNoteAt ? creditNoteAt.toISOString() : null,
+    creditNoteReason: creditNoteReason.trim(),
+    creditNoteVoided,
     invoicedAt: invoicedAt ? invoicedAt.toISOString() : null,
     invoiceNumber: invoiceNumber.trim(),
     paymentStatus: formatPaymentStatus(order.displayFinancialStatus),
@@ -760,6 +787,7 @@ export async function loadSalesOrdersPage(
   shop: string,
   params: ReturnType<typeof parseSalesOrdersSearchParams>,
   templateId: string = DEFAULT_SALES_ORDER_TEMPLATE_ID,
+  options?: { listFilter?: "invoiced" | "credit-note" },
 ): Promise<SalesOrdersPage> {
   const sortConfig = SORT_OPTIONS[params.sortSelected];
   const availableViews = SALES_ORDER_VIEWS.map((_, index) => index);
@@ -768,7 +796,9 @@ export async function loadSalesOrdersPage(
       ? params.selectedView
       : 0;
   const viewQuery = SALES_ORDER_VIEWS[selectedView]?.query ?? "";
-  const isInvoicedView = viewQuery === INVOICED_VIEW_QUERY;
+  const isInvoicedView =
+    options?.listFilter === "invoiced" || viewQuery === INVOICED_VIEW_QUERY;
+  const isCreditNoteView = options?.listFilter === "credit-note";
 
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
@@ -791,7 +821,11 @@ export async function loadSalesOrdersPage(
     templateId,
     params.after ?? "",
     params.before ?? "",
-    isInvoicedView ? INVOICED_VIEW_QUERY : viewQuery,
+    isCreditNoteView
+      ? "credit-note"
+      : isInvoicedView
+        ? INVOICED_VIEW_QUERY
+        : viewQuery,
     params.query,
     params.paymentStatus,
     params.fulfillmentStatus,
@@ -814,9 +848,16 @@ export async function loadSalesOrdersPage(
     nodes: RawSalesOrder[],
     pageInfo: SalesOrdersPage["pageInfo"],
     forceInvoiced: boolean,
+    forceCreditNote = false,
   ): Promise<SalesOrdersPage> => {
     const orderGids = nodes.map((order) => order.id);
-    const [documentNumbers, invoicedMeta, packingSlipGids] =
+    const [
+      documentNumbers,
+      invoicedMeta,
+      packingSlipGids,
+      creditNoteGids,
+      creditNoteMeta,
+    ] =
       orderGids.length === 0
         ? [
             new Map<string, string>(),
@@ -833,6 +874,8 @@ export async function loadSalesOrdersPage(
               }
             >(),
             new Set<string>(),
+            new Set<string>(),
+            new Map<string, CreditNoteOrderMeta>(),
           ]
         : await Promise.all([
             getSalesOrderDocumentNumbersByOrderGids(
@@ -842,35 +885,37 @@ export async function loadSalesOrdersPage(
             ),
             getInvoicedMetaByOrderGids(shop, orderGids),
             getPackingSlipOrderGids(shop, orderGids),
+            getCreditNoteOrderGids(shop, orderGids),
+            getCreditNoteMetaByOrderGids(shop, orderGids),
           ]);
 
-    // Ensure every row on this page has an SO document number (same UX as before).
-    const missingSoGids = orderGids.filter((gid) => !documentNumbers.get(gid));
-    if (missingSoGids.length > 0) {
-      const numbering = numberingFromSeries(
-        await loadNumberSeriesEntryForShop(shop, "sales-order"),
-      );
-      for (const orderGid of missingSoGids) {
-        const documentNumber = await allocateSalesOrderDocumentNumber(
-          shop,
-          templateId,
-          orderGid,
-          numbering,
-        );
-        documentNumbers.set(orderGid, documentNumber);
-      }
-    }
+    // Keep list reads cheap under load — do not allocate/write SO numbers here.
+    // Install sync + detail/export loaders assign missing numbers.
+    // (Same policy as invoice numbers below.)
 
     // List reads must stay cheap under load — do not allocate/write invoice
     // numbers here. Detail + export loaders still call ensureInvoiceDocumentNumbers.
     const ensuredInvoiceNumbers = new Map<string, string>();
 
+    // Credit note list: backfill missing CN- numbers so the document column
+    // never falls back to the invoice number.
+    const ensuredCreditNoteNumbers = forceCreditNote
+      ? await ensureCreditNoteDocumentNumbers(shop, orderGids)
+      : new Map<string, string>();
+
     return {
       orders: nodes.map((order) => {
         const meta = invoicedMeta.get(order.id) ?? null;
+        const cnMeta = creditNoteMeta.get(order.id) ?? null;
         const invoiceNumber =
           meta?.documentNumber ||
           ensuredInvoiceNumbers.get(order.id) ||
+          "";
+        const isCreditNote =
+          forceCreditNote || creditNoteGids.has(order.id) || Boolean(cnMeta);
+        const creditNoteNumber =
+          cnMeta?.documentNumber ||
+          ensuredCreditNoteNumbers.get(order.id) ||
           "";
         return toRow(
           order,
@@ -879,8 +924,13 @@ export async function loadSalesOrdersPage(
           packingSlipGids.has(order.id),
           meta?.invoicedAt ?? null,
           invoiceNumber,
-          forceInvoiced,
+          forceInvoiced || forceCreditNote,
           meta?.createdAt ?? meta?.invoicedAt ?? null,
+          isCreditNote,
+          creditNoteNumber,
+          cnMeta?.convertedAt ?? null,
+          cnMeta?.reason || "",
+          Boolean(cnMeta?.voidedAt),
         );
       }),
       pageInfo,
@@ -893,30 +943,30 @@ export async function loadSalesOrdersPage(
     };
   };
 
-  // Invoice list: fetch by GID via nodes() — Shopify search `id: OR id:` drops rows.
-  if (isInvoicedView) {
-    const invoicedGids = await getAllInvoicedOrderGids(shop);
-    if (invoicedGids.length === 0) return emptyPage();
+  const filterAndPaginateDocumentOrders = async (
+    sourceGids: string[],
+    metaForSort: Map<string, { sortAt: number; searchNumber?: string }>,
+    forceInvoiced: boolean,
+    forceCreditNote: boolean,
+  ) => {
+    if (sourceGids.length === 0) return emptyPage();
 
-    const gidsToFetch = invoicedGids.slice(0, MAX_INVOICED_FETCH);
-    const [ordersRaw, metaForSort] = await Promise.all([
-      loadOrdersByGids(admin, gidsToFetch),
-      getInvoicedMetaByOrderGids(shop, gidsToFetch),
-    ]);
-    let orders = ordersRaw;
-    // Date column / default sort: editable invoice date (invoicedAt).
-    const invoiceCreatedAtByGid = new Map<string, number>();
-    for (const [gid, meta] of metaForSort) {
-      const invoiceDate = meta.invoicedAt?.getTime() ?? meta.createdAt?.getTime();
-      if (invoiceDate != null) invoiceCreatedAtByGid.set(gid, invoiceDate);
-    }
+    const gidsToFetch = sourceGids.slice(0, MAX_INVOICED_FETCH);
+    let orders = await loadOrdersByGids(admin, gidsToFetch);
 
     if (params.paymentStatus) {
       const wanted = params.paymentStatus.toUpperCase();
-      orders = orders.filter(
-        (order) =>
-          (order.displayFinancialStatus || "").toUpperCase() === wanted,
-      );
+      const unpaidStatuses = new Set([
+        "PENDING",
+        "AUTHORIZED",
+        "PARTIALLY_PAID",
+        "EXPIRED",
+      ]);
+      orders = orders.filter((order) => {
+        const status = (order.displayFinancialStatus || "").toUpperCase();
+        if (wanted === "UNPAID") return unpaidStatuses.has(status);
+        return status === wanted;
+      });
     }
     if (params.fulfillmentStatus) {
       const wanted = params.fulfillmentStatus.toUpperCase();
@@ -934,20 +984,20 @@ export async function loadSalesOrdersPage(
       orders = orders.filter((order) => {
         if (soGids.has(order.id)) return true;
         const meta = metaForSort.get(order.id);
-        const invoiceNumber = (meta?.documentNumber || "").toLowerCase();
+        const docNumber = (meta?.searchNumber || "").toLowerCase();
         const haystack = [
           order.name,
           order.email,
           order.customer?.displayName,
           resolveCompany(order),
-          invoiceNumber,
+          docNumber,
         ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
         return (
           haystack.includes(q) ||
-          invoiceNumber.replace(/\s+/g, "").includes(qCompact)
+          docNumber.replace(/\s+/g, "").includes(qCompact)
         );
       });
     }
@@ -956,16 +1006,69 @@ export async function loadSalesOrdersPage(
       params.sortSelected in SORT_OPTIONS
         ? params.sortSelected
         : ("date desc" as SortSelected);
-    orders = sortRawOrders(orders, sortSelected, invoiceCreatedAtByGid);
+    const dateByGid = new Map<string, number>();
+    for (const [gid, meta] of metaForSort) {
+      dateByGid.set(gid, meta.sortAt);
+    }
+    orders = sortRawOrders(orders, sortSelected, dateByGid);
     const { pageItems, pageInfo } = paginateItems(
       orders,
       params.after,
       params.before,
     );
-    const data = await buildPage(pageItems, pageInfo, true);
+    const data = await buildPage(
+      pageItems,
+      pageInfo,
+      forceInvoiced,
+      forceCreditNote,
+    );
     listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
     pruneCache(now);
     return data;
+  };
+
+  // Credit note list: fetch by GID via nodes().
+  if (isCreditNoteView) {
+    const creditNoteGids = await getAllCreditNoteOrderGids(shop);
+    const meta = await getCreditNoteMetaByOrderGids(shop, creditNoteGids);
+    const metaForSort = new Map<
+      string,
+      { sortAt: number; searchNumber?: string }
+    >();
+    for (const [gid, row] of meta) {
+      metaForSort.set(gid, {
+        sortAt: row.convertedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
+        searchNumber: row.documentNumber || undefined,
+      });
+    }
+    return filterAndPaginateDocumentOrders(
+      creditNoteGids,
+      metaForSort,
+      false,
+      true,
+    );
+  }
+
+  // Invoice list: fetch by GID via nodes() — Shopify search `id: OR id:` drops rows.
+  if (isInvoicedView) {
+    const invoicedGids = await getAllInvoicedOrderGids(shop);
+    const metaForSortRaw = await getInvoicedMetaByOrderGids(shop, invoicedGids);
+    const metaForSort = new Map<
+      string,
+      { sortAt: number; searchNumber?: string }
+    >();
+    for (const [gid, row] of metaForSortRaw) {
+      metaForSort.set(gid, {
+        sortAt: row.invoicedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
+        searchNumber: row.documentNumber || undefined,
+      });
+    }
+    return filterAndPaginateDocumentOrders(
+      invoicedGids,
+      metaForSort,
+      true,
+      false,
+    );
   }
 
   const textSearch = params.query.trim()

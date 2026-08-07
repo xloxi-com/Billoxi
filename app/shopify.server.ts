@@ -20,6 +20,15 @@ const shopify = shopifyApp({
   future: {
     expiringOfflineAccessTokens: true,
   },
+  hooks: {
+    afterAuth: async ({ session, admin }) => {
+      const { ensureSalesOrderNumbersSynced } = await import(
+        "./sales-order-number-sync.server"
+      );
+      // Install / re-auth: number existing Shopify orders (oldest → newest).
+      await ensureSalesOrderNumbersSynced(session.shop, admin);
+    },
+  },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),

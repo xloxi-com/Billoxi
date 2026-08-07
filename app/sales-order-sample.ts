@@ -40,6 +40,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
     email: "xloxi@acme.example",
   },
   terms: "Due on Receipt",
+  orderNote: "Please gift-wrap and include the packing slip.",
   lineItems: [
     {
       title: "Classic Leather Watch",
@@ -123,5 +124,22 @@ export function sampleSalesOrderForShop(
   return {
     ...sampleSalesOrder,
     currencyCode: code,
+  };
+}
+
+/** Sample credit-note preview — shows credit/refund amount on totals. */
+export function sampleCreditNoteForShop(
+  currencyCode?: string | null,
+): SalesOrderDocumentData {
+  const base = sampleSalesOrderForShop(currencyCode);
+  return {
+    ...base,
+    financialStatus: "REFUNDED",
+    paidAmount: "0.00",
+    balanceDue: "0.00",
+    refundedAmount: base.total,
+    shippingPrice: "0.00",
+    // Invoice Ref# on credit notes — never the Shopify order name.
+    referenceNumber: "INV-0001",
   };
 }

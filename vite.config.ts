@@ -64,6 +64,9 @@ export default defineConfig({
           if (id.includes("node_modules/jspdf")) return "jspdf";
           if (id.includes("node_modules/html2canvas")) return "html2canvas";
           if (id.includes("node_modules/jszip")) return "jszip";
+          if (id.includes("node_modules/@shopify/polaris")) return "polaris";
+          if (id.includes("node_modules/@shopify/polaris-icons"))
+            return "polaris-icons";
         },
       },
     },

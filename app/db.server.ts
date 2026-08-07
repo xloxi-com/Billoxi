@@ -9,6 +9,11 @@ function createPrismaClient() {
   return new PrismaClient({
     // Production serverless: avoid query logging overhead under load.
     log: process.env.NODE_ENV === "production" ? ["error"] : ["error", "warn"],
+    // Survive brief Supabase blips (session load must not crash the page).
+    transactionOptions: {
+      maxWait: 10_000,
+      timeout: 20_000,
+    },
   });
 }
 

@@ -530,10 +530,15 @@ function itemColumnLines(item: SalesOrderDocumentData["lineItems"][number]) {
 
 export function salesOrderPdfFileName(
   orderName: string,
-  documentKind: "sales-order" | "invoice" = "sales-order",
+  documentKind: "sales-order" | "invoice" | "credit-note" = "sales-order",
 ) {
   const safeName = orderName.replace(/[^\w.-]+/g, "_");
-  const suffix = documentKind === "invoice" ? "invoice" : "sales-order";
+  const suffix =
+    documentKind === "invoice"
+      ? "invoice"
+      : documentKind === "credit-note"
+        ? "credit-note"
+        : "sales-order";
   return `${safeName}-${suffix}.pdf`;
 }
 

@@ -16,9 +16,16 @@ import {
   formatQuantityDisplay,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  CREDIT_NOTE_TEMPLATE_PRESETS,
+  PACKING_SLIP_TEMPLATE_PRESETS,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
+import {
+  applyTemplateLanguageLabels,
+  isBuiltInTemplateBody,
+  normalizeTemplateLanguage,
+} from "./template-labels";
 import { numberingFromSeries, type NumberSeriesModuleId } from "./number-series";
 import { getSalesOrderDocumentNumbersByOrderGids } from "./sales-order-number.server";
 import { getInvoicedOrderGids } from "./order-invoice-status.server";
@@ -43,6 +50,14 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
     })),
     ...INVOICE_TEMPLATE_PRESETS.map((preset) => ({
       documentType: "invoice" as const,
+      preset,
+    })),
+    ...CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "credit-note" as const,
+      preset,
+    })),
+    ...PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "packing-slip" as const,
       preset,
     })),
   ];
@@ -145,7 +160,7 @@ function personName(
 
 export async function loadDocumentTemplateSettings(
   shop: string,
-  documentType: "sales-order" | "invoice",
+  documentType: "sales-order" | "invoice" | "credit-note" | "packing-slip",
   templateId: string,
   admin: { graphql: (query: string) => Promise<Response> },
   preload?: {
@@ -166,7 +181,13 @@ export async function loadDocumentTemplateSettings(
       : templateId;
   const templateName = salesOrderTemplateName(resolvedId);
   const seriesId: NumberSeriesModuleId =
-    documentType === "invoice" ? "invoice" : "sales-order";
+    documentType === "invoice"
+      ? "invoice"
+      : documentType === "credit-note"
+        ? "credit-note"
+        : documentType === "packing-slip"
+          ? "packing-slip"
+          : "sales-order";
 
   const hasCustomizationPreload =
     preload != null && "customizationSettings" in preload;
@@ -196,7 +217,7 @@ export async function loadDocumentTemplateSettings(
       : loadNumberSeriesEntryForShop(shop, seriesId),
   ]);
 
-  const settings = mergeTemplateSettings(
+  let settings = mergeTemplateSettings(
     customization?.settings,
     templateName,
     resolvedId,
@@ -211,6 +232,18 @@ export async function loadDocumentTemplateSettings(
   ) {
     settings.transactionLabels.organization = storeDetails.name;
   }
+
+  const language = normalizeTemplateLanguage(settings.language);
+  settings = applyTemplateLanguageLabels(settings, language, {
+    documentType,
+    organizationName: settings.transactionLabels.organization,
+    translateBodyText: {
+      notes: isBuiltInTemplateBody(settings.notes),
+      terms: isBuiltInTemplateBody(settings.terms),
+    },
+  });
+  const defaults = defaultTemplateSettings(templateName, resolvedId);
+  settings.header = { ...settings.header, ...defaults.header };
 
   return {
     templateId: resolvedId,
@@ -237,6 +270,7 @@ type OrderNode = {
   id: string;
   name: string;
   createdAt: string;
+  note?: string | null;
   email?: string | null;
   phone?: string | null;
   paymentGatewayNames?: string[] | null;
@@ -500,6 +534,7 @@ export async function fetchSalesOrderDocument(
           id
           name
           createdAt
+          note
           email
           phone
           paymentGatewayNames
@@ -758,6 +793,7 @@ export async function fetchSalesOrderDocument(
       email: order.email || "",
     },
     terms: "Due on Receipt",
+    orderNote: (order.note || "").trim(),
     lineItems,
     subtotal: (() => {
       const net = Number(order.currentSubtotalPriceSet?.shopMoney?.amount ?? 0);

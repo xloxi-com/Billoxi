@@ -19,3 +19,15 @@ export const INVOICED_VIEW_INDEX = SALES_ORDER_VIEWS.findIndex(
 );
 
 export const VIEW_QUERIES = SALES_ORDER_VIEWS.map((view) => view.query);
+
+/** Invoice list tabs — filter by payment status (list is already invoiced-only). */
+export const INVOICE_LIST_VIEWS = [
+  { id: "all", label: "All", payment: "" },
+  { id: "unpaid", label: "Unpaid", payment: "unpaid" },
+  { id: "paid", label: "Paid", payment: "paid" },
+  { id: "voided", label: "Voided", payment: "voided" },
+  { id: "refunded", label: "Refunded", payment: "refunded" },
+] as const;
+
+/** Credit note list tabs — same payment filters as invoice list. */
+export const CREDIT_NOTE_LIST_VIEWS = INVOICE_LIST_VIEWS;

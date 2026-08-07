@@ -58,7 +58,7 @@ async function waitForPaperReady(paper: HTMLElement, timeoutMs = 8000) {
 async function fetchExportPayload(
   orderId: string,
   templateId: string,
-  documentKind: "sales-order" | "invoice" = "sales-order",
+  documentKind: "sales-order" | "invoice" | "credit-note" = "sales-order",
 ): Promise<ExportPayload> {
   const numericId = toNumericOrderId(orderId);
   const params = new URLSearchParams({
@@ -73,11 +73,16 @@ async function fetchExportPayload(
     | { ok: false; error?: string };
 
   if (!response.ok || !payload || payload.ok !== true) {
+    const label =
+      documentKind === "credit-note"
+        ? "credit note"
+        : documentKind === "invoice"
+          ? "invoice"
+          : "sales order";
     throw new Error(
       !payload || payload.ok === true
-        ? `Failed to load ${documentKind === "invoice" ? "invoice" : "sales order"} for PDF`
-        : payload.error ||
-            `Failed to load ${documentKind === "invoice" ? "invoice" : "sales order"} for PDF`,
+        ? `Failed to load ${label} for PDF`
+        : payload.error || `Failed to load ${label} for PDF`,
     );
   }
 
@@ -140,7 +145,7 @@ function mountOffscreenPaper(payload: ExportPayload): {
 async function withOffscreenPaper<T>(
   orderId: string,
   templateId: string,
-  documentKind: "sales-order" | "invoice",
+  documentKind: "sales-order" | "invoice" | "credit-note",
   run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
 ): Promise<T> {
   const payload = await fetchExportPayload(orderId, templateId, documentKind);
@@ -158,7 +163,7 @@ async function withOffscreenPaper<T>(
 export async function downloadSalesOrderDomPdfFromList(args: {
   orderId: string;
   templateId: string;
-  documentKind?: "sales-order" | "invoice";
+  documentKind?: "sales-order" | "invoice" | "credit-note";
 }) {
   const documentKind = args.documentKind ?? "sales-order";
   await withOffscreenPaper(
@@ -179,7 +184,7 @@ export async function downloadSalesOrderDomPdfFromList(args: {
           margins: payload.settings.margins,
         },
         payload.order.documentNumber || payload.order.name,
-        documentKind,
+        documentKind === "credit-note" ? "invoice" : documentKind,
       );
     },
   );
@@ -188,7 +193,7 @@ export async function downloadSalesOrderDomPdfFromList(args: {
 export async function printSalesOrderDomPdfFromList(args: {
   orderId: string;
   templateId: string;
-  documentKind?: "sales-order" | "invoice";
+  documentKind?: "sales-order" | "invoice" | "credit-note";
 }) {
   const documentKind = args.documentKind ?? "sales-order";
   await withOffscreenPaper(

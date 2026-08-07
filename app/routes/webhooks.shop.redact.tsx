@@ -27,6 +27,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     db.orderInvoiceStatus.deleteMany({ where: { shop } }),
     db.orderPackingSlipStatus.deleteMany({ where: { shop } }),
   ]);
+  try {
+    await db.$executeRaw`
+      DELETE FROM "OrderCreditNoteStatus" WHERE shop = ${shop}
+    `;
+  } catch {
+    // Table may not exist yet on older installs.
+  }
 
   // TODO: Delete any additional shop-scoped data stored outside Prisma
   // (files, object storage, caches, third-party services, logs, etc.).

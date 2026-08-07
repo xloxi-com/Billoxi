@@ -117,6 +117,22 @@
   background: #2c6ecb;
 }
 
+.sales-order-status-ribbon--paid span {
+  background: #2da44e;
+}
+
+.sales-order-status-ribbon--pending span {
+  background: #b98900;
+}
+
+.sales-order-status-ribbon--refunded span {
+  background: #6d7175;
+}
+
+.sales-order-status-ribbon--partial span {
+  background: #b98900;
+}
+
 .sales-order-status-ribbon--voided span {
   background: #1a1a1a;
 }

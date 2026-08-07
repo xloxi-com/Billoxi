@@ -1,26 +1,3 @@
-/* Polaris native bulk actions — keep selection bar roomy next to tabs */
-.sales-orders-page .Polaris-BulkActions__BulkActionsWrapper,
-.sales-orders-page .Polaris-BulkActions__BulkActionsLayout {
-  min-height: 2.75rem;
-}
-
-.sales-orders-page .Polaris-BulkActions__BulkActionsPromotedActionsWrapper {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--p-space-200, 8px);
-  min-width: 0;
-}
-
-.sales-orders-page .Polaris-BulkActions__BulkActionsSelectAllWrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--p-space-300, 12px);
-  flex: 0 1 auto;
-  min-width: 0;
-  padding-block: var(--p-space-150, 6px);
-}
-
 /* Polaris IndexFilters — keep search/filter toolbar flush with the table card */
 .sales-orders-page .Polaris-IndexFilters__IndexFiltersWrapper {
   border-block-end: var(--p-border-width-025) solid var(--p-color-border-secondary);
@@ -29,8 +6,7 @@
 /*
  * Keep all view tabs visible (All, Unpaid, Paid, …).
  * Polaris TabMeasurer often reads width 0 on first paint in the admin iframe,
- * which collapses tabs into "More views". Give the measurer a real width and
- * never stretch a single tab across the bar.
+ * which collapses tabs into "More views".
  */
 .sales-orders-page .Polaris-IndexFilters__TabsWrapper,
 .sales-orders-page .Polaris-Tabs__Outer {
@@ -39,10 +15,16 @@
 }
 
 .sales-orders-page .Polaris-Tabs__TabsMeasurer {
+  /* Always hide measurer — without Polaris CSS this node paints as a 2nd tab bar. */
+  position: absolute !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
   width: 100% !important;
-  /* Enough for All + Unpaid + Paid + Voided + Invoiced + Open + disclosure */
   min-width: 32rem;
 }
+
 
 .sales-orders-page .Polaris-Tabs--fillSpace .Polaris-Tabs__TabContainer {
   flex: 0 0 auto !important;
@@ -52,12 +34,67 @@
   flex: 0 0 auto;
 }
 
+/*
+ * Bulk selection bar — "N selected" + all promoted actions visible.
+ * Avoid tiny min-widths: Polaris measures that and collapses buttons into a
+ * broken/empty disclosure (only "Convert to invoice" remained).
+ */
+.sales-orders-page .Polaris-BulkActions__BulkActionsSelectAllWrapper {
+  flex: 0 0 auto;
+}
+
+.sales-orders-page .Polaris-BulkActions__BulkActionsPromotedActionsWrapper {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+}
+
+.sales-orders-page .Polaris-BulkActions__BulkActionsOuterLayout {
+  position: relative;
+  width: 100%;
+  min-width: min(100%, 42rem);
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+
+.sales-orders-page .Polaris-BulkActions__BulkActionsLayout,
+.sales-orders-page .Polaris-BulkActions__BulkActionsMeasurerLayout {
+  justify-content: flex-start !important;
+  flex-wrap: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+.sales-orders-page .Polaris-BulkActions__BulkActionButton,
+.sales-orders-page .Polaris-BulkActions__BulkActionsLayout > * {
+  flex: 0 0 auto;
+}
+
+.sales-orders-page .Polaris-IndexTable__BulkActionsWrapperVisible {
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* Keep the measurer off-screen but wide enough to fit all promoted actions */
+.sales-orders-page .Polaris-BulkActions__BulkActionsMeasurer {
+  width: max-content !important;
+  min-width: 42rem !important;
+}
+
 .sales-orders-page .Polaris-Filters__Container {
   background: var(--p-color-bg-surface);
 }
 
 .sales-orders-page .Polaris-TextField__Input {
   min-height: var(--p-height-800, 32px);
+}
+
+.sales-orders-page .Polaris-IndexTable__TableCell {
+  vertical-align: middle;
+}
+
+.sales-orders-page .Polaris-IndexTable__TableHeading {
+  white-space: nowrap;
 }
 
 /* Remove blue focus ring on Sales Order # click (mouse); keep keyboard focus-visible */
@@ -74,3 +111,60 @@
   outline: none !important;
   box-shadow: none !important;
 }
+
+
+/* Columns picker (Shopify Orders-style) */
+.sales-orders-columns-mount {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sales-orders-columns-list {
+  max-height: 320px;
+  overflow: auto;
+  padding-block-end: 8px;
+}
+
+.sales-orders-columns-row {
+  padding: 6px 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.sales-orders-columns-row:hover {
+  background: var(--p-color-bg-surface-hover);
+}
+
+.sales-orders-columns-row--dragging {
+  opacity: 0.55;
+}
+
+.sales-orders-columns-row--hidden .Polaris-Text {
+  color: var(--p-color-text-secondary);
+}
+
+.sales-orders-columns-drag {
+  display: inline-flex;
+  cursor: grab;
+}
+
+.sales-orders-columns-visibility {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--p-border-radius-100);
+}
+
+.sales-orders-columns-visibility:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.sales-orders-columns-visibility:not(:disabled):hover {
+  background: var(--p-color-bg-fill-transparent-hover);
+}
+

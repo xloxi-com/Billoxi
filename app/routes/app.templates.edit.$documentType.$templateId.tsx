@@ -68,6 +68,7 @@ import { numberingFromSeries } from "../number-series";
 import { fetchShopCurrencyCode } from "../store-details.server";
 import {
   defaultColumnsForPreset,
+  defaultTemplateSettings,
   findTemplatePreset,
   getSalesOrderTemplatePreset,
   getTemplateAdminCapabilities,
@@ -79,17 +80,20 @@ import {
   PREMIUM_DESIGN_VERSION,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  CREDIT_NOTE_TEMPLATE_PRESETS,
+  PACKING_SLIP_TEMPLATE_PRESETS,
   salesOrderLogoPosition,
   salesOrderMetaStyle,
   type PaymentStatusStyle,
   type SalesOrderLogoPosition,
   type SalesOrderMetaStyle,
+  resolveDocumentNotes,
 } from "../sales-order-document";
 import {
   syncNumberCounter,
 } from "../sales-order-number.server";
 import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
-import { sampleSalesOrderForShop } from "../sales-order-sample";
+import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { templatePreviewLogoDataUrl } from "../template-preview-logo";
 import {
@@ -299,6 +303,7 @@ type TemplateEditorSettings = {
   };
   notesLabel: string;
   notes: string;
+  preferShopifyOrderNote: boolean;
   termsLabel: string;
   terms: string;
   showSignature: boolean;
@@ -598,14 +603,18 @@ const templateDefinitions: Record<
       { documentType: "invoice", name: preset.name },
     ]),
   ),
-  "credit-standard": { documentType: "credit-note", name: "Standard" },
-  "credit-detailed": { documentType: "credit-note", name: "Detailed" },
-  "credit-simple": { documentType: "credit-note", name: "Simple" },
-  "credit-compact": { documentType: "credit-note", name: "Compact" },
-  "packing-standard": { documentType: "packing-slip", name: "Standard" },
-  "packing-branded": { documentType: "packing-slip", name: "Branded" },
-  "packing-compact": { documentType: "packing-slip", name: "Compact" },
-  "packing-detailed": { documentType: "packing-slip", name: "Detailed" },
+  ...Object.fromEntries(
+    CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => [
+      preset.id,
+      { documentType: "credit-note", name: preset.name },
+    ]),
+  ),
+  ...Object.fromEntries(
+    PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => [
+      preset.id,
+      { documentType: "packing-slip", name: preset.name },
+    ]),
+  ),
 };
 
 const removedColumnKeys = new Set([
@@ -841,115 +850,88 @@ function createDefaultSettings(
   name: string,
   templateId?: string,
 ): TemplateEditorSettings {
-  const preset = templateId ? findTemplatePreset(templateId) ?? null : null;
-  const isPremium = Boolean(templateId && isPremiumTemplatePreset(templateId));
-  const isInvoice = Boolean(templateId?.startsWith("invoice-"));
-  return {
-    name,
-    language: "en",
-    paperSize: "A4",
-    orientation: "portrait",
-    designVersion: isPremium ? PREMIUM_DESIGN_VERSION : 1,
-    margins: {
-      top: 1,
-      bottom: 1,
-      left: 1,
-      right: 1,
+  return defaultTemplateSettings(name, templateId ?? "sales-standard");
+}
+
+function expectedDocumentTitle(documentType: string): string {
+  switch (documentType) {
+    case "invoice":
+      return "INVOICE";
+    case "credit-note":
+      return "CREDIT NOTE";
+    case "packing-slip":
+      return "PACKING SLIP";
+    default:
+      return "SALES ORDER";
+  }
+}
+
+function reconcileSettingsForDocumentType(
+  settings: TemplateEditorSettings,
+  documentType: string,
+  templateName: string,
+  templateId: string,
+): TemplateEditorSettings {
+  const defaults = defaultTemplateSettings(templateName, templateId);
+  const language = normalizeTemplateLanguage(settings.language);
+  let next = applyTemplateLanguageLabels(settings, language, {
+    documentType,
+    organizationName: settings.transactionLabels.organization,
+    translateBodyText: {
+      notes: isBuiltInTemplateBody(settings.notes),
+      terms: isBuiltInTemplateBody(settings.terms),
     },
-    taxSummary: {
-      enabled: preset?.showTaxSummary === true,
-      title: "Tax Summary",
-      detailsLabel: "Tax Details",
-      showTaxableAmount: true,
-      taxableAmountLabel: "Taxable Amount ({currency})",
-      showTaxAmount: true,
-      taxAmountLabel: "Tax Amount ({currency})",
-      showTotalAmount: true,
-      totalAmountLabel: "Total Amount ({currency})",
-      totalLabel: "Total",
-    },
-    fontFamily: preset?.fontFamily ?? defaultFontFamily,
-    backgroundColor: preset?.backgroundColor ?? "#ffffff",
-    appearance: {
-      ...baseDefaultAppearance,
-      ...(preset?.appearance ?? {}),
-    },
-    logoSize: preset?.logoSize ?? 46,
-    logoPosition: preset?.logoPosition ?? "left",
-    metaStyle: preset?.metaStyle ?? "boxed",
-    header: {
-      showLogo: true,
-      showOrganization: true,
-      showCustomer: true,
-      showBilling: true,
-      showShipping: true,
-      showCustomerDetails: true,
-      showDocumentTitle: true,
-      showOrderNumber: true,
-      showDate: true,
-      showExpectedShipmentDate: false,
-      showPaymentMethod: true,
-    },
-    billingDetails: defaultBillingDetails.map((field) => ({ ...field })),
-    shippingDetails: defaultShippingDetails.map((field) => ({ ...field })),
-    customerBlockDetails: defaultCustomerBlockDetails.map((field) => ({
-      ...field,
-    })),
-    transactionLabels: {
-      organization: "Northstar Commerce",
-      customer: "Bill To",
-      shipping: "Ship To",
-      customerDetails: "Customer Details",
-      documentTitle: isInvoice ? "INVOICE" : "SALES ORDER",
-      orderNumber: isInvoice ? "Invoice#" : "Sales Order#",
-      date: isInvoice ? "Invoice Date" : "Order Date",
-      reference: "Ref#",
-      expectedShipmentDate: "Expected Shipment Date",
-      paymentMethod: "Payment Method",
-    },
-    numbering: {
-      prefix: isInvoice ? "INV-" : "SO-",
-      startingNumber: "0001",
-      suffix: "",
-    },
-    columns: preset
-      ? defaultColumnsForPreset(preset)
-      : defaultColumns.map((column) => ({ ...column })),
-    selectedCustomFields: [],
-    totals: {
-      showSubtotal: true,
-      subtotalLabel: "Sub Total",
-      showQuantity: false,
-      itemsInTotalLabel: "Items in Total",
-      showTaxLines: Boolean(
-        preset &&
-          templateId !== "sales-standard" &&
-          !String(templateId || "").startsWith("invoice-"),
-      ),
-      showDiscountAmount: true,
-      discountAmountLabel: "Discount",
-      showShippingPrice: true,
-      shippingPriceLabel: "Shipping Charge",
-      showVatAmount: true,
-      vatAmountLabel: "Total Tax",
-      showPaidAmount: preset?.showPaidAmount === true,
-      paidAmountLabel: "Paid Amount",
-      showBalanceDue:
-        !templateId || templateId === "sales-standard"
-          ? true
-          : preset?.showBalanceDue === true,
-      balanceDueLabel: "Balance Due",
-      refundedAmountLabel: "Refunded Amount",
-      paymentStatusStyle: preset?.paymentStatusStyle ?? "inTotals",
-      totalLabel: "Total",
-    },
-    notesLabel: "Notes",
-    notes: "Thanks for your business.",
-    termsLabel: "Terms & Conditions",
-    terms: "Payment is due on receipt.",
-    showSignature: false,
-    showStamp: false,
+  });
+
+  // Always pin document-type header defaults (billing/shipping/payment toggles).
+  next = {
+    ...next,
+    header: { ...next.header, ...defaults.header },
   };
+
+  // Repair stale saves where title/order labels belong to another document type.
+  const expectedEn = expectedDocumentTitle(documentType);
+  const title = settings.transactionLabels.documentTitle?.trim() ?? "";
+  const orderLabel = settings.transactionLabels.orderNumber?.trim() ?? "";
+  const knownTitles = new Set([
+    "SALES ORDER",
+    "INVOICE",
+    "CREDIT NOTE",
+    "PACKING SLIP",
+  ]);
+  const titleMismatch =
+    knownTitles.has(title) && title !== expectedEn;
+  const orderMismatch =
+    (orderLabel === "Sales Order#" && documentType !== "sales-order") ||
+    (orderLabel === "Invoice#" && documentType !== "invoice") ||
+    (orderLabel === "Credit Note#" && documentType !== "credit-note") ||
+    (orderLabel === "Packing Slip#" && documentType !== "packing-slip");
+
+  if (titleMismatch || orderMismatch) {
+    next = {
+      ...next,
+      totals: { ...next.totals, ...defaults.totals },
+      columns: defaults.columns.map((column, index) => {
+        const saved = next.columns[index];
+        return saved ? { ...column, ...saved, key: column.key } : column;
+      }),
+    };
+    // Re-apply language after repairing totals so CN/PS totals stay translated.
+    next = applyTemplateLanguageLabels(next, language, {
+      documentType,
+      organizationName: next.transactionLabels.organization,
+      translateBodyText: {
+        notes: isBuiltInTemplateBody(next.notes),
+        terms: isBuiltInTemplateBody(next.terms),
+      },
+    });
+    next = {
+      ...next,
+      header: { ...next.header, ...defaults.header },
+    };
+  }
+
+  return next;
 }
 
 function mergeSettings(
@@ -1003,6 +985,7 @@ function mergeSettings(
     showTaxSummaryTable: undefined,
     showSignature: restInput.showSignature === true,
     showStamp: restInput.showStamp === true,
+    preferShopifyOrderNote: restInput.preferShopifyOrderNote === true,
     logoPosition: needsLookUpgrade
       ? defaults.logoPosition
       : salesOrderLogoPosition(
@@ -1633,11 +1616,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       fetchShopCurrencyCode(admin, session.shop),
       loadNumberSeriesEntryForShop(
         session.shop,
-        params.documentType === "invoice" ? "invoice" : "sales-order",
+        params.documentType === "invoice"
+          ? "invoice"
+          : params.documentType === "credit-note"
+            ? "credit-note"
+            : params.documentType === "packing-slip"
+              ? "packing-slip"
+              : "sales-order",
       ),
     ]);
 
-  const settings = mergeSettings(
+  let settings = mergeSettings(
     customization?.settings,
     template.name,
     params.templateId,
@@ -1650,6 +1639,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   ) {
     settings.transactionLabels.organization = storeDetails.name;
   }
+  settings = reconcileSettingsForDocumentType(
+    settings,
+    params.documentType,
+    template.name,
+    params.templateId,
+  );
 
   return {
     documentType: params.documentType,
@@ -1791,11 +1786,34 @@ export default function TemplateEditorPage() {
             productImages: true,
             logoPosition: false,
             metaStyle: false,
-            taxSummary: true,
-            paymentAmounts: true,
+            taxSummary:
+              data.documentType !== "credit-note" &&
+              data.documentType !== "packing-slip",
+            paymentAmounts:
+              data.documentType !== "credit-note" &&
+              data.documentType !== "packing-slip",
           },
-    [data.templateId],
+    [data.documentType, data.templateId],
   );
+  const isCreditNoteEditor = data.documentType === "credit-note";
+  const isPackingSlipEditor = data.documentType === "packing-slip";
+  const packingMoneyColumnKeys = new Set([
+    "rate",
+    "discount",
+    "discountPercentage",
+    "taxPercentage",
+    "taxAmount",
+    "amount",
+  ]);
+  const documentTypeBreadcrumb =
+    (
+      {
+        "sales-order": "SALES ORDER",
+        invoice: "INVOICE",
+        "credit-note": "CREDIT NOTE",
+        "packing-slip": "PACKING SLIP",
+      } as Record<string, string>
+    )[data.documentType] || data.documentType.toUpperCase();
   const paymentStyleOptions = useMemo(() => {
     const allowed = adminCaps.paymentStatusStyles;
     if (!allowed || allowed.length === 0) return PAYMENT_STATUS_STYLES;
@@ -1892,19 +1910,34 @@ export default function TemplateEditorPage() {
   );
   const previewOrder = useMemo(
     () => ({
-      ...sampleSalesOrderForShop(data.shopCurrencyCode),
+      ...(data.documentType === "credit-note"
+        ? sampleCreditNoteForShop(data.shopCurrencyCode)
+        : sampleSalesOrderForShop(data.shopCurrencyCode)),
       documentNumber: formatTransactionNumber(
         previewSettings.numbering,
         nextSequence,
       ),
     }),
     [
+      data.documentType,
       data.shopCurrencyCode,
       previewSettings.numbering.prefix,
       previewSettings.numbering.startingNumber,
       previewSettings.numbering.suffix,
       nextSequence,
     ],
+  );
+  const previewDocumentSettings = useMemo(
+    () => ({
+      ...previewSettings,
+      notes: resolveDocumentNotes({
+        savedNote: null,
+        orderNote: previewOrder.orderNote,
+        defaultNotes: previewSettings.notes,
+        preferShopifyOrderNote: previewSettings.preferShopifyOrderNote,
+      }),
+    }),
+    [previewOrder.orderNote, previewSettings],
   );
 
   useEffect(() => {
@@ -2454,11 +2487,14 @@ export default function TemplateEditorPage() {
         </button>
       </SaveBar>
       <s-page heading="Edit Template" inlineSize="large">
+        <s-link slot="breadcrumb-actions" href="/app/templates">
+          Templates
+        </s-link>
         <s-link
           slot="breadcrumb-actions"
-          href={`/app/templates?type=${data.documentType}`}
+          href={`/app/templates?type=${encodeURIComponent(data.documentType)}`}
         >
-          Templates
+          {documentTypeBreadcrumb}
         </s-link>
         <BlockStack gap="400">
           <div className="template-editor-shell">
@@ -3217,7 +3253,9 @@ export default function TemplateEditorPage() {
                                   Details box style
                                 </Text>
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  Order Date, Ref#, and Payment Method block.
+                                  {isPackingSlipEditor
+                                    ? "Order Date and Ref# block."
+                                    : "Order Date, Ref#, and Payment Method block."}
                                 </Text>
                                 <BlockStack gap="100">
                                   {metaStyleOptions.map((option) => (
@@ -3244,8 +3282,15 @@ export default function TemplateEditorPage() {
                       </Collapsible>
                     </Card>
 
-                    {renderAddressSectionPanel("billing", "Billing details")}
-                    {renderAddressSectionPanel("shipping", "Shipping details")}
+                    {!isPackingSlipEditor
+                      ? renderAddressSectionPanel("billing", "Billing details")
+                      : null}
+                    {!isCreditNoteEditor
+                      ? renderAddressSectionPanel(
+                          "shipping",
+                          "Shipping details",
+                        )
+                      : null}
                     {renderAddressSectionPanel("customer", "Customer details")}
 
                     <Card padding="0">
@@ -3271,11 +3316,22 @@ export default function TemplateEditorPage() {
                                   ["orderNumber", "Order number label"],
                                   ["date", "Date label"],
                                   ["reference", "Reference label"],
-                                  [
-                                    "expectedShipmentDate",
-                                    "Expected shipment date label",
-                                  ],
-                                  ["paymentMethod", "Payment method label"],
+                                  ...(!isCreditNoteEditor
+                                    ? ([
+                                        [
+                                          "expectedShipmentDate",
+                                          "Expected shipment date label",
+                                        ],
+                                      ] as const)
+                                    : []),
+                                  ...(!isCreditNoteEditor && !isPackingSlipEditor
+                                    ? ([
+                                        [
+                                          "paymentMethod",
+                                          "Payment method label",
+                                        ],
+                                      ] as const)
+                                    : []),
                                 ] as const
                               ).map(([key, label]) => (
                                 <TextField
@@ -3293,32 +3349,36 @@ export default function TemplateEditorPage() {
                                   autoComplete="off"
                                 />
                               ))}
-                              <Checkbox
-                                label="Show Expected Shipment Date"
-                                checked={
-                                  settings.header.showExpectedShipmentDate
-                                }
-                                onChange={(showExpectedShipmentDate) =>
-                                  updateSettings({
-                                    header: {
-                                      ...settings.header,
-                                      showExpectedShipmentDate,
-                                    },
-                                  })
-                                }
-                              />
-                              <Checkbox
-                                label="Show Payment Method"
-                                checked={settings.header.showPaymentMethod}
-                                onChange={(showPaymentMethod) =>
-                                  updateSettings({
-                                    header: {
-                                      ...settings.header,
-                                      showPaymentMethod,
-                                    },
-                                  })
-                                }
-                              />
+                              {!isCreditNoteEditor ? (
+                                <Checkbox
+                                  label="Show Expected Shipment Date"
+                                  checked={
+                                    settings.header.showExpectedShipmentDate
+                                  }
+                                  onChange={(showExpectedShipmentDate) =>
+                                    updateSettings({
+                                      header: {
+                                        ...settings.header,
+                                        showExpectedShipmentDate,
+                                      },
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {!isCreditNoteEditor && !isPackingSlipEditor ? (
+                                <Checkbox
+                                  label="Show Payment Method"
+                                  checked={settings.header.showPaymentMethod}
+                                  onChange={(showPaymentMethod) =>
+                                    updateSettings({
+                                      header: {
+                                        ...settings.header,
+                                        showPaymentMethod,
+                                      },
+                                    })
+                                  }
+                                />
+                              ) : null}
                             </FormLayout>
                           </BlockStack>
                         </div>
@@ -3337,7 +3397,9 @@ export default function TemplateEditorPage() {
                       <span>Width (%)</span>
                       <span>Label</span>
                     </div>
-                    {settings.columns.map((column, index) => (
+                    {settings.columns.map((column, index) =>
+                      isPackingSlipEditor &&
+                      packingMoneyColumnKeys.has(column.key) ? null : (
                       <div key={column.key}>
                         <div className="template-editor__column-row">
                           <Checkbox
@@ -3520,9 +3582,12 @@ export default function TemplateEditorPage() {
                     <Text as="h2" variant="headingLg">
                       Total Properties
                     </Text>
-                    {[
-                      ["showSubtotal", "subtotalLabel", "Sub Total"],
-                    ].map(([showKey, labelKey, fallback]) => (
+                    {!isPackingSlipEditor
+                      ? (
+                          [
+                            ["showSubtotal", "subtotalLabel", "Sub Total"],
+                          ] as const
+                        ).map(([showKey, labelKey, fallback]) => (
                       <div className="template-editor__toggle-label" key={showKey}>
                         <Checkbox
                           label={fallback}
@@ -3560,10 +3625,15 @@ export default function TemplateEditorPage() {
                           autoComplete="off"
                         />
                       </div>
-                    ))}
+                    ))
+                      : null}
                     <div className="template-editor__toggle-label">
                       <Checkbox
-                        label="Show quantity"
+                        label={
+                          isPackingSlipEditor
+                            ? "Show items packed"
+                            : "Show quantity"
+                        }
                         checked={Boolean(settings.totals.showQuantity)}
                         onChange={(showQuantity) =>
                           updateSettings({
@@ -3572,11 +3642,17 @@ export default function TemplateEditorPage() {
                         }
                       />
                       <TextField
-                        label="Items in Total label"
+                        label={
+                          isPackingSlipEditor
+                            ? "Items packed label"
+                            : "Items in Total label"
+                        }
                         labelHidden
                         value={displayTotalLabel(
                           settings.totals.itemsInTotalLabel,
-                          "Items in Total",
+                          isPackingSlipEditor
+                            ? "Items packed"
+                            : "Items in Total",
                         )}
                         onChange={(itemsInTotalLabel) =>
                           updateSettings({
@@ -3589,20 +3665,37 @@ export default function TemplateEditorPage() {
                         autoComplete="off"
                       />
                     </div>
-                    <Checkbox
-                      label="Show tax details"
-                      checked={Boolean(settings.totals.showTaxLines)}
-                      onChange={(showTaxLines) =>
-                        updateSettings({
-                          totals: { ...settings.totals, showTaxLines },
-                        })
-                      }
-                    />
-                    {[
-                      ["showDiscountAmount", "discountAmountLabel", "Discount"],
-                      ["showShippingPrice", "shippingPriceLabel", "Shipping"],
-                      ["showVatAmount", "vatAmountLabel", "Total Tax"],
-                    ].map(([showKey, labelKey, fallback]) => (
+                    {!isPackingSlipEditor ? (
+                      <Checkbox
+                        label="Show tax details"
+                        checked={Boolean(settings.totals.showTaxLines)}
+                        onChange={(showTaxLines) =>
+                          updateSettings({
+                            totals: { ...settings.totals, showTaxLines },
+                          })
+                        }
+                      />
+                    ) : null}
+                    {!isPackingSlipEditor
+                      ? (
+                          [
+                            [
+                              "showDiscountAmount",
+                              "discountAmountLabel",
+                              "Discount",
+                            ],
+                            ...(!isCreditNoteEditor
+                              ? ([
+                                  [
+                                    "showShippingPrice",
+                                    "shippingPriceLabel",
+                                    "Shipping",
+                                  ],
+                                ] as const)
+                              : []),
+                            ["showVatAmount", "vatAmountLabel", "Total Tax"],
+                          ] as const
+                        ).map(([showKey, labelKey, fallback]) => (
                       <div className="template-editor__toggle-label" key={showKey}>
                         <Checkbox
                           label={fallback}
@@ -3640,17 +3733,20 @@ export default function TemplateEditorPage() {
                           autoComplete="off"
                         />
                       </div>
-                    ))}
-                    <TextField
-                      label="Total label"
-                      value={settings.totals.totalLabel}
-                      onChange={(totalLabel) =>
-                        updateSettings({
-                          totals: { ...settings.totals, totalLabel },
-                        })
-                      }
-                      autoComplete="off"
-                    />
+                    ))
+                      : null}
+                    {!isPackingSlipEditor ? (
+                      <TextField
+                        label="Total label"
+                        value={settings.totals.totalLabel}
+                        onChange={(totalLabel) =>
+                          updateSettings({
+                            totals: { ...settings.totals, totalLabel },
+                          })
+                        }
+                        autoComplete="off"
+                      />
+                    ) : null}
                     {adminCaps.paymentAmounts !== false
                       ? (
                           [
@@ -3727,7 +3823,7 @@ export default function TemplateEditorPage() {
                       </BlockStack>
                     ) : null}
 
-                    <Divider />
+                    {!isPackingSlipEditor ? <Divider /> : null}
 
                     {adminCaps.taxSummary !== false ? (
                       <>
@@ -3873,8 +3969,17 @@ export default function TemplateEditorPage() {
                       onChange={(notesLabel) => updateSettings({ notesLabel })}
                       autoComplete="off"
                     />
+                    <Checkbox
+                      label="Prefer Shopify order note"
+                      helpText="When enabled, the note from the Shopify order is shown in Notes. Default notes are used only when the order has no note."
+                      checked={settings.preferShopifyOrderNote === true}
+                      onChange={(preferShopifyOrderNote) =>
+                        updateSettings({ preferShopifyOrderNote })
+                      }
+                    />
                     <TextField
                       label="Default notes"
+                      helpText="Fallback text when Prefer Shopify order note is off, or the order has no note."
                       value={settings.notes}
                       onChange={(notes) => updateSettings({ notes })}
                       multiline={4}
@@ -3936,7 +4041,7 @@ export default function TemplateEditorPage() {
                 }}
               >
                 <SalesOrderLiveDocument
-                  settings={previewSettings}
+                  settings={previewDocumentSettings}
                   templateId={data.templateId}
                   storeDetails={data.storeDetails}
                   order={previewOrder}

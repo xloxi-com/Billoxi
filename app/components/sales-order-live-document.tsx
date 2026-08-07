@@ -137,6 +137,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const styleName = salesOrderLayoutStyle(templateId);
   const logoPosition = salesOrderLogoPosition(templateId, settings);
   const metaStyle = salesOrderMetaStyle(templateId, settings);
+  const isPackingSlip = templateId.startsWith("packing-");
   const orderDate = formatOrderDate(order.documentDate || order.createdAt);
   const documentNumber =
     order.documentNumber ||
@@ -395,7 +396,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
 
   return (
     <div
-      className={`live-document live-document--${styleName} live-document--logo-${logoPosition} live-document--meta-${metaStyle}`}
+      className={`live-document live-document--${styleName} live-document--logo-${logoPosition} live-document--meta-${metaStyle}${isPackingSlip ? " live-document--packing-slip" : ""}`}
       style={appearanceCssVars(
         settings.appearance ?? defaultTemplateAppearance,
       )}

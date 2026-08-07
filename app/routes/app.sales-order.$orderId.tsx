@@ -16,11 +16,9 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   AppProvider,
   Modal,
-  RadioButton,
   Text,
-  TextField,
+  RadioButton,
   BlockStack,
-  Box,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
@@ -37,20 +35,22 @@ import {
   getSalesOrderDocumentDetails,
   updateSalesOrderDocumentDetails,
 } from "../sales-order-number.server";
+import { numberingFromSeries } from "../number-series";
 import {
+  DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
   DEFAULT_INVOICE_TEMPLATE_ID,
   findTemplatePreset,
   formatOrderDate,
   paperPaddingCss,
+  resolveDocumentNotes,
   resolveSalesOrderTemplateId,
   SALES_ORDER_TEMPLATE_STORAGE_KEY,
   toOrderGid,
 } from "../sales-order-document";
 import {
+  loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
   loadSelectedTemplatesForShop,
-  saveNumberSeriesEntryMode,
-  loadNumberSeriesEntryForShop,
 } from "../shop-settings.server";
 import {
   ensureInvoiceDocumentNumbers,
@@ -60,16 +60,25 @@ import {
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
 import { markOrderPackingSlip } from "../order-packing-slip-status.server";
+import {
+  getCreditNoteMetaByOrderGids,
+  getAllCreditNoteOrderGids,
+  getCreditNoteOrderGids,
+  ensureCreditNoteDocumentNumbers,
+  updateCreditNoteDocumentDetails,
+  unmarkOrdersCreditNote,
+} from "../order-credit-note-status.server";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
-type DocumentMode = "sales-order" | "invoice";
+type DocumentMode = "sales-order" | "invoice" | "credit-note";
 
 function resolveDocumentMode(requestUrl: string): DocumentMode {
   try {
     const pathname = new URL(requestUrl).pathname;
+    if (pathname.includes("/app/credit-note/")) return "credit-note";
     return pathname.includes("/app/invoice/") ? "invoice" : "sales-order";
   } catch {
     return "sales-order";
@@ -81,6 +90,17 @@ function resolveInvoiceTemplateId(value: string | null | undefined) {
     return value;
   }
   return DEFAULT_INVOICE_TEMPLATE_ID;
+}
+
+function resolveCreditNoteTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("credit-")) {
+    return value;
+  }
+  // Fall back to invoice layout if credit presets aren't registered yet.
+  if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
+    return value;
+  }
+  return DEFAULT_CREDIT_NOTE_TEMPLATE_ID;
 }
 
 function resolveDocumentFontFamily(value: string | undefined): string {
@@ -156,35 +176,43 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   const documentMode = resolveDocumentMode(request.url);
   const isInvoice = documentMode === "invoice";
+  const isCreditNote = documentMode === "credit-note";
+  const isIssuedDocument = isInvoice || isCreditNote;
   const url = new URL(request.url);
 
   const selectedMap = await loadSelectedTemplatesForShop(session.shop);
   const shopSelectedTemplateId =
-    selectedMap[isInvoice ? "invoice" : "sales-order"] || null;
+    selectedMap[
+      isCreditNote ? "credit-note" : isInvoice ? "invoice" : "sales-order"
+    ] || null;
   const shopSelectedSalesOrderTemplateId = selectedMap["sales-order"] || null;
 
   // Shop Active template wins over a stale ?template= query (e.g. after
   // switching Classic on Templates while an old Studio URL is still open).
-  const templateId = isInvoice
-    ? resolveInvoiceTemplateId(
+  const templateId = isCreditNote
+    ? resolveCreditNoteTemplateId(
         shopSelectedTemplateId || url.searchParams.get("template"),
       )
-    : resolveSalesOrderTemplateId(
-        shopSelectedTemplateId || url.searchParams.get("template"),
-      );
+    : isInvoice
+      ? resolveInvoiceTemplateId(
+          shopSelectedTemplateId || url.searchParams.get("template"),
+        )
+      : resolveSalesOrderTemplateId(
+          shopSelectedTemplateId || url.searchParams.get("template"),
+        );
   const orderGid = toOrderGid(decodeURIComponent(orderId));
 
   // Sidebar list still uses sales-order template ids for SO document numbers.
-  const salesOrderTemplateId = isInvoice
+  const salesOrderTemplateId = isIssuedDocument
     ? resolveSalesOrderTemplateId(shopSelectedSalesOrderTemplateId)
     : templateId;
 
-  const [order, template, salesOrders, numberSeries] = await Promise.all([
+  const [order, template, salesOrders] = await Promise.all([
     fetchSalesOrderDocument(admin, orderGid),
-    isInvoice
+    isIssuedDocument
       ? loadDocumentTemplateSettings(
           session.shop,
-          "invoice",
+          isCreditNote ? "credit-note" : "invoice",
           templateId,
           admin,
         )
@@ -193,10 +221,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       shop: session.shop,
       templateId: salesOrderTemplateId,
     }),
-    loadNumberSeriesEntryForShop(
-      session.shop,
-      isInvoice ? "invoice" : "sales-order",
-    ),
   ]);
 
   if (!order) {
@@ -208,15 +232,81 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let documentDate: string | undefined;
   let invoiceCustomerNote: string | null = null;
   let invoiceTerms: string | null = null;
+  let creditNoteReason: string | null = null;
+  let creditNoteVoided = false;
+  let hasCreditNote = false;
   let sidebarOrders = salesOrders;
 
-  if (isInvoice) {
-    const invoiceMeta = await getInvoicedMetaByOrderGids(
-      session.shop,
-      salesOrders.map((item) => item.id),
-    );
+  if (isCreditNote) {
+    const [creditMeta, invoiceMeta] = await Promise.all([
+      getCreditNoteMetaByOrderGids(
+        session.shop,
+        salesOrders.map((item) => item.id),
+      ),
+      getInvoicedMetaByOrderGids(
+        session.shop,
+        salesOrders.map((item) => item.id),
+      ),
+    ]);
+    const creditGids = await getAllCreditNoteOrderGids(session.shop);
+    const creditGidSet = new Set(creditGids);
+    sidebarOrders = salesOrders.filter((item) => creditGidSet.has(item.id));
+    const currentMeta = creditMeta.get(order.id);
+    const currentInvoice = invoiceMeta.get(order.id);
+
+    // Credit Note# must be CN-… — never fall back to invoice number.
+    let creditNoteNumber = currentMeta?.documentNumber?.trim() || "";
+    if (!creditNoteNumber && currentMeta) {
+      const ensuredCn = await ensureCreditNoteDocumentNumbers(session.shop, [
+        order.id,
+      ]);
+      creditNoteNumber = ensuredCn.get(order.id)?.trim() || "";
+    }
+    documentNumber = creditNoteNumber || order.name;
+    documentDate =
+      currentMeta?.convertedAt?.toISOString() || order.createdAt;
+    creditNoteReason = currentMeta?.reason ?? null;
+    creditNoteVoided = Boolean(currentMeta?.voidedAt);
+    hasCreditNote = Boolean(currentMeta);
+    // Keep reason and customer note separate — never copy reason into customerNote.
+    invoiceCustomerNote = currentMeta?.customerNote ?? null;
+    invoiceTerms = currentMeta?.terms ?? currentInvoice?.terms ?? null;
+
+    // Invoice Ref# must be the invoice document number (INV-…), not SO / order name.
+    let invoiceRef = currentInvoice?.documentNumber?.trim() || "";
+    if (!invoiceRef && currentInvoice) {
+      const ensured = await ensureInvoiceDocumentNumbers(session.shop, [
+        order.id,
+      ]);
+      invoiceRef = ensured.get(order.id)?.trim() || "";
+    }
+    referenceNumber = invoiceRef || undefined;
+
+    sidebarOrders = sidebarOrders.map((item) => {
+      const meta = creditMeta.get(item.id);
+      return {
+        ...item,
+        documentNumber:
+          meta?.documentNumber ||
+          (item.id === order.id ? documentNumber : item.documentNumber),
+        createdAt: meta?.convertedAt?.toISOString() || item.createdAt,
+        creditNoteVoided: Boolean(meta?.voidedAt),
+      };
+    });
+  } else if (isInvoice) {
+    const [invoiceMeta, creditNoteGids] = await Promise.all([
+      getInvoicedMetaByOrderGids(
+        session.shop,
+        salesOrders.map((item) => item.id),
+      ),
+      getCreditNoteOrderGids(
+        session.shop,
+        salesOrders.map((item) => item.id),
+      ),
+    ]);
     sidebarOrders = salesOrders.filter((item) => invoiceMeta.has(item.id));
     const currentMeta = invoiceMeta.get(order.id);
+    hasCreditNote = creditNoteGids.has(order.id);
     const ensured =
       currentMeta && !currentMeta.documentNumber
         ? await ensureInvoiceDocumentNumbers(session.shop, [order.id])
@@ -235,18 +325,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     )?.documentNumber;
     if (existingSalesOrderNumber) {
       referenceNumber = existingSalesOrderNumber;
-    } else {
-      const salesOrderSettings = await loadSalesOrderTemplateSettings(
-        session.shop,
-        salesOrderTemplateId,
-        admin,
-      );
-      referenceNumber = await allocateSalesOrderDocumentNumber(
-        session.shop,
-        salesOrderTemplateId,
-        order.id,
-        salesOrderSettings.settings.numbering,
-      );
     }
 
     sidebarOrders = sidebarOrders.map((item) => {
@@ -261,17 +339,32 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       };
     });
   } else {
-    documentNumber = await allocateSalesOrderDocumentNumber(
-      session.shop,
-      template.templateId,
-      order.id,
-      template.settings.numbering,
-    );
-    const soDetails = await getSalesOrderDocumentDetails(
+    let soDetails = await getSalesOrderDocumentDetails(
       session.shop,
       template.templateId,
       order.id,
     );
+    if (!soDetails?.documentNumber) {
+      const soSeries = await loadNumberSeriesEntryForShop(
+        session.shop,
+        "sales-order",
+      );
+      if (soSeries.entryMode !== "manual") {
+        const assigned = await allocateSalesOrderDocumentNumber(
+          session.shop,
+          template.templateId,
+          order.id,
+          numberingFromSeries(soSeries),
+        );
+        soDetails = {
+          documentNumber: assigned,
+          documentDate: soDetails?.documentDate ?? null,
+          customerNote: soDetails?.customerNote ?? null,
+          terms: soDetails?.terms ?? null,
+        };
+      }
+    }
+    documentNumber = soDetails?.documentNumber ?? "";
     documentDate =
       soDetails?.documentDate?.toISOString() || order.createdAt;
     invoiceCustomerNote = soDetails?.customerNote ?? null;
@@ -292,11 +385,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     settings: template.settings,
     storeDetails: template.storeDetails,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    invoiceEntryMode: (numberSeries?.entryMode === "manual"
-      ? "manual"
-      : "auto") as "auto" | "manual",
     invoiceCustomerNote,
     invoiceTerms,
+    creditNoteReason,
+    creditNoteVoided,
+    hasCreditNote,
     // Status ribbons (Invoiced / Confirmed / Voided) are for admin app staff only (never included in print/PDF).
     isAdmin: true,
   };
@@ -312,28 +405,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
   const orderGid = toOrderGid(decodeURIComponent(orderId));
-
-  if (
-    intent === "set-invoice-entry-mode" ||
-    intent === "set-sales-order-entry-mode"
-  ) {
-    const mode = String(formData.get("entryMode") || "");
-    if (mode !== "auto" && mode !== "manual") {
-      return Response.json(
-        { ok: false, error: "Invalid number entry mode" },
-        { status: 400 },
-      );
-    }
-    const moduleId =
-      intent === "set-sales-order-entry-mode" ? "sales-order" : "invoice";
-    await saveNumberSeriesEntryMode(session.shop, moduleId, mode);
-    return Response.json({
-      ok: true,
-      document: "document-entry-mode" as const,
-      moduleId,
-      entryMode: mode,
-    });
-  }
 
   if (intent === "convert-to-invoice") {
     await markOrderInvoiced(session.shop, orderGid);
@@ -354,12 +425,87 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   if (intent === "delete-invoice") {
+    const creditNoteGids = await getCreditNoteOrderGids(session.shop, [
+      orderGid,
+    ]);
+    if (creditNoteGids.has(orderGid)) {
+      return Response.json(
+        {
+          ok: false,
+          error:
+            "Delete the credit note first. Invoices with a credit note cannot be deleted.",
+        },
+        { status: 400 },
+      );
+    }
     const deleted = await unmarkOrdersInvoiced(session.shop, [orderGid]);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
       deleted,
       document: "delete-invoice" as const,
+    });
+  }
+
+  if (intent === "delete-credit-note") {
+    const deleted = await unmarkOrdersCreditNote(session.shop, [orderGid]);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-credit-note" as const,
+    });
+  }
+
+  if (intent === "update-credit-note-details") {
+    const documentNumber = String(formData.get("documentNumber") || "").trim();
+    const creditDateRaw = String(formData.get("creditDate") || "").trim();
+    const reason = String(formData.get("reason") || "");
+    const customerNote = String(formData.get("customerNote") || "");
+    const terms = String(formData.get("terms") || "");
+    if (!documentNumber) {
+      return Response.json(
+        { ok: false, error: "Credit note number is required" },
+        { status: 400 },
+      );
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(creditDateRaw)) {
+      return Response.json(
+        { ok: false, error: "Credit note date is required" },
+        { status: 400 },
+      );
+    }
+    const convertedAt = new Date(`${creditDateRaw}T12:00:00.000Z`);
+    if (Number.isNaN(convertedAt.getTime())) {
+      return Response.json(
+        { ok: false, error: "Invalid credit note date" },
+        { status: 400 },
+      );
+    }
+
+    const result = await updateCreditNoteDocumentDetails(
+      session.shop,
+      orderGid,
+      {
+        documentNumber,
+        convertedAt,
+        reason,
+        customerNote,
+        terms,
+      },
+    );
+    if (!result.ok) {
+      return Response.json(
+        { ok: false, error: result.error },
+        { status: 400 },
+      );
+    }
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "update-credit-note" as const,
+      documentNumber,
+      creditDate: creditDateRaw,
     });
   }
 
@@ -447,6 +593,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         documentDate,
         customerNote,
         terms,
+        numberMode:
+          String(formData.get("numberMode") || "") === "manual"
+            ? "manual"
+            : "continue",
       },
     );
     if (!result.ok) {
@@ -475,8 +625,6 @@ export default function SalesOrderDocumentPage() {
     ok: boolean;
     error?: string;
     document?: string;
-    moduleId?: string;
-    entryMode?: string;
   }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const paperRef = useRef<HTMLDivElement>(null);
@@ -486,8 +634,14 @@ export default function SalesOrderDocumentPage() {
   const [isPrinting, setIsPrinting] = useState(false);
   const isConverting = convertFetcher.state !== "idle";
   const isInvoice = data.documentMode === "invoice";
-  const listPath = isInvoice ? "/app/invoice" : "/app/sales-order";
-  const documentBasePath = isInvoice ? "/app/invoice" : "/app/sales-order";
+  const isCreditNote = data.documentMode === "credit-note";
+  const isIssuedDocument = isInvoice || isCreditNote;
+  const listPath = isCreditNote
+    ? "/app/credit-note"
+    : isInvoice
+      ? "/app/invoice"
+      : "/app/sales-order";
+  const documentBasePath = listPath;
   const templateQuery = useMemo(
     () => `?template=${encodeURIComponent(data.templateId)}`,
     [data.templateId],
@@ -499,22 +653,30 @@ export default function SalesOrderDocumentPage() {
     toDateInputValue(data.order.documentDate || data.order.createdAt),
   );
   const [editCustomerNote, setEditCustomerNote] = useState(
-    data.invoiceCustomerNote ?? data.settings.notes ?? "",
+    isCreditNote
+      ? data.invoiceCustomerNote ?? ""
+      : resolveDocumentNotes({
+          savedNote: data.invoiceCustomerNote,
+          orderNote: data.order.orderNote,
+          defaultNotes: data.settings.notes ?? "",
+          preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+        }),
   );
   const [editTerms, setEditTerms] = useState(
     data.invoiceTerms ?? data.settings.terms ?? "",
   );
-  const [invoiceEntryMode, setInvoiceEntryMode] = useState<"auto" | "manual">(
-    data.invoiceEntryMode ?? "auto",
+  const [editCreditReason, setEditCreditReason] = useState(
+    data.creditNoteReason ?? "",
   );
-  const [numberPrefOpen, setNumberPrefOpen] = useState(false);
-  const [numberPrefChoice, setNumberPrefChoice] = useState<
-    "continue-auto" | "manual" | "once"
-  >("once");
+
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
   const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
-  const numberPrefHandledRef = useRef(false);
-  const originalInvoiceNumber = data.order.documentNumber || "";
+  const [numberMode, setNumberMode] = useState<"continue" | "manual">(
+    "continue",
+  );
+  const originalDocumentNumber = data.order.documentNumber || "";
+  const numberChanged =
+    editInvoiceNumber.trim() !== originalDocumentNumber.trim();
 
   useEffect(() => {
     setEditInvoiceNumber(data.order.documentNumber || "");
@@ -522,22 +684,32 @@ export default function SalesOrderDocumentPage() {
       toDateInputValue(data.order.documentDate || data.order.createdAt),
     );
     setEditCustomerNote(
-      data.invoiceCustomerNote ?? data.settings.notes ?? "",
+      isCreditNote
+        ? data.invoiceCustomerNote ?? ""
+        : resolveDocumentNotes({
+            savedNote: data.invoiceCustomerNote,
+            orderNote: data.order.orderNote,
+            defaultNotes: data.settings.notes ?? "",
+            preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+          }),
     );
     setEditTerms(data.invoiceTerms ?? data.settings.terms ?? "");
-    setInvoiceEntryMode(data.invoiceEntryMode ?? "auto");
-    numberPrefHandledRef.current = false;
+    setEditCreditReason(data.creditNoteReason ?? "");
+    setNumberMode("continue");
     setInvoiceEditOpen(false);
   }, [
+    data.creditNoteReason,
     data.invoiceCustomerNote,
-    data.invoiceEntryMode,
     data.invoiceTerms,
     data.order.createdAt,
     data.order.documentDate,
     data.order.documentNumber,
     data.order.id,
+    data.order.orderNote,
     data.settings.notes,
+    data.settings.preferShopifyOrderNote,
     data.settings.terms,
+    isCreditNote,
   ]);
 
   const previewOrder = useMemo(() => {
@@ -559,29 +731,53 @@ export default function SalesOrderDocumentPage() {
 
   const previewSettings = useMemo(() => {
     if (invoiceEditOpen) {
+      const liveNote =
+        isCreditNote && !editCustomerNote.trim() && editCreditReason.trim()
+          ? editCreditReason
+          : editCustomerNote;
       return {
         ...data.settings,
-        notes: editCustomerNote,
+        notes: liveNote,
         terms: editTerms,
       };
     }
+    // Document Notes: customer note first; reason only as display fallback.
+    const creditNoteDisplayNote = isCreditNote
+      ? data.invoiceCustomerNote || data.creditNoteReason || null
+      : data.invoiceCustomerNote;
     return {
       ...data.settings,
-      notes: data.invoiceCustomerNote ?? data.settings.notes,
+      notes: resolveDocumentNotes({
+        savedNote: creditNoteDisplayNote,
+        orderNote: data.order.orderNote,
+        defaultNotes: data.settings.notes ?? "",
+        preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+      }),
       terms: data.invoiceTerms ?? data.settings.terms,
     };
   }, [
+    data.creditNoteReason,
     data.invoiceCustomerNote,
     data.invoiceTerms,
+    data.order.orderNote,
     data.settings,
+    editCreditReason,
     editCustomerNote,
     editTerms,
     invoiceEditOpen,
+    isCreditNote,
   ]);
 
-  const savedCustomerNote =
-    data.invoiceCustomerNote ?? data.settings.notes ?? "";
+  const savedCustomerNote = isCreditNote
+    ? data.invoiceCustomerNote ?? ""
+    : resolveDocumentNotes({
+        savedNote: data.invoiceCustomerNote,
+        orderNote: data.order.orderNote,
+        defaultNotes: data.settings.notes ?? "",
+        preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+      });
   const savedTerms = data.invoiceTerms ?? data.settings.terms ?? "";
+  const savedCreditReason = data.creditNoteReason ?? "";
 
   const invoiceDetailsDirty =
     invoiceEditOpen &&
@@ -589,107 +785,12 @@ export default function SalesOrderDocumentPage() {
       editInvoiceDate !==
         toDateInputValue(data.order.documentDate || data.order.createdAt) ||
       editCustomerNote !== savedCustomerNote ||
-      editTerms !== savedTerms);
-
-  const maybePromptNumberPref = useCallback(() => {
-    if (numberPrefHandledRef.current || numberPrefOpen) {
-      return false;
-    }
-    if (editInvoiceNumber.trim() === originalInvoiceNumber.trim()) {
-      return false;
-    }
-    setNumberPrefChoice(invoiceEntryMode === "manual" ? "manual" : "once");
-    setNumberPrefOpen(true);
-    return true;
-  }, [
-    editInvoiceNumber,
-    invoiceEntryMode,
-    numberPrefOpen,
-    originalInvoiceNumber,
-  ]);
+      editTerms !== savedTerms ||
+      (isCreditNote && editCreditReason !== savedCreditReason));
 
   const handleInvoiceNumberInput = useCallback((event: Event) => {
     setEditInvoiceNumber(fieldValue(event));
-    // Allow the 3 preference options again after another number edit.
-    numberPrefHandledRef.current = false;
   }, []);
-
-  const handleInvoiceNumberBlur = useCallback(() => {
-    maybePromptNumberPref();
-  }, [maybePromptNumberPref]);
-
-  const closeNumberPrefModal = useCallback((revert: boolean) => {
-    setNumberPrefOpen(false);
-    if (revert) {
-      setEditInvoiceNumber(originalInvoiceNumber);
-      numberPrefHandledRef.current = false;
-    } else {
-      numberPrefHandledRef.current = true;
-    }
-  }, [originalInvoiceNumber]);
-
-  const confirmNumberPref = useCallback(() => {
-    if (numberPrefChoice === "continue-auto") {
-      if (invoiceEntryMode !== "auto") {
-        const formData = new FormData();
-        formData.set(
-          "intent",
-          isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
-        );
-        formData.set("entryMode", "auto");
-        convertFetcher.submit(formData, { method: "post" });
-        setInvoiceEntryMode("auto");
-      }
-      closeNumberPrefModal(true);
-      return;
-    }
-
-    if (numberPrefChoice === "manual") {
-      if (!editInvoiceNumber.trim()) {
-        if (typeof shopify !== "undefined" && shopify.toast) {
-          shopify.toast.show(
-            isInvoice
-              ? "Enter an invoice number"
-              : "Enter a sales order number",
-            { isError: true },
-          );
-        }
-        return;
-      }
-      if (invoiceEntryMode !== "manual") {
-        const formData = new FormData();
-        formData.set(
-          "intent",
-          isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
-        );
-        formData.set("entryMode", "manual");
-        convertFetcher.submit(formData, { method: "post" });
-        setInvoiceEntryMode("manual");
-      }
-      closeNumberPrefModal(false);
-      return;
-    }
-
-    // once: keep this edited number, stay on / switch to auto for future documents
-    if (invoiceEntryMode !== "auto") {
-      const formData = new FormData();
-      formData.set(
-        "intent",
-        isInvoice ? "set-invoice-entry-mode" : "set-sales-order-entry-mode",
-      );
-      formData.set("entryMode", "auto");
-      convertFetcher.submit(formData, { method: "post" });
-      setInvoiceEntryMode("auto");
-    }
-    closeNumberPrefModal(false);
-  }, [
-    closeNumberPrefModal,
-    convertFetcher,
-    editInvoiceNumber,
-    invoiceEntryMode,
-    isInvoice,
-    numberPrefChoice,
-  ]);
 
   const closeInvoiceEdit = useCallback(() => {
     setEditInvoiceNumber(data.order.documentNumber || "");
@@ -697,27 +798,32 @@ export default function SalesOrderDocumentPage() {
       toDateInputValue(data.order.documentDate || data.order.createdAt),
     );
     setEditCustomerNote(
-      data.invoiceCustomerNote ?? data.settings.notes ?? "",
+      isCreditNote
+        ? data.invoiceCustomerNote ?? ""
+        : resolveDocumentNotes({
+            savedNote: data.invoiceCustomerNote,
+            orderNote: data.order.orderNote,
+            defaultNotes: data.settings.notes ?? "",
+            preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+          }),
     );
     setEditTerms(data.invoiceTerms ?? data.settings.terms ?? "");
-    numberPrefHandledRef.current = false;
-    setNumberPrefOpen(false);
+    setEditCreditReason(data.creditNoteReason ?? "");
+    setNumberMode("continue");
     setInvoiceEditOpen(false);
   }, [
+    data.creditNoteReason,
     data.invoiceCustomerNote,
     data.invoiceTerms,
     data.order.createdAt,
     data.order.documentDate,
     data.order.documentNumber,
+    data.order.orderNote,
     data.settings.notes,
+    data.settings.preferShopifyOrderNote,
     data.settings.terms,
+    isCreditNote,
   ]);
-
-  const requestCloseInvoiceEdit = useCallback(() => {
-    // Click-outside / dismiss: if number changed, show the 3 preference options first.
-    if (maybePromptNumberPref()) return;
-    closeInvoiceEdit();
-  }, [closeInvoiceEdit, maybePromptNumberPref]);
 
   const openInvoiceEdit = useCallback(() => {
     setEditInvoiceNumber(data.order.documentNumber || "");
@@ -725,26 +831,44 @@ export default function SalesOrderDocumentPage() {
       toDateInputValue(data.order.documentDate || data.order.createdAt),
     );
     setEditCustomerNote(
-      data.invoiceCustomerNote ?? data.settings.notes ?? "",
+      isCreditNote
+        ? data.invoiceCustomerNote ?? ""
+        : resolveDocumentNotes({
+            savedNote: data.invoiceCustomerNote,
+            orderNote: data.order.orderNote,
+            defaultNotes: data.settings.notes ?? "",
+            preferShopifyOrderNote: data.settings.preferShopifyOrderNote,
+          }),
     );
     setEditTerms(data.invoiceTerms ?? data.settings.terms ?? "");
-    numberPrefHandledRef.current = false;
+    setEditCreditReason(data.creditNoteReason ?? "");
+    setNumberMode("continue");
     setInvoiceEditOpen(true);
   }, [
+    data.creditNoteReason,
     data.invoiceCustomerNote,
     data.invoiceTerms,
     data.order.createdAt,
     data.order.documentDate,
     data.order.documentNumber,
+    data.order.orderNote,
     data.settings.notes,
+    data.settings.preferShopifyOrderNote,
     data.settings.terms,
+    isCreditNote,
   ]);
 
   const handleSaveInvoiceDetails = useCallback(() => {
     if (!invoiceEditOpen || isConverting) return;
-    if (maybePromptNumberPref()) return;
     const formData = new FormData();
-    if (isInvoice) {
+    if (isCreditNote) {
+      formData.set("intent", "update-credit-note-details");
+      formData.set("documentNumber", editInvoiceNumber.trim());
+      formData.set("creditDate", editInvoiceDate);
+      formData.set("reason", editCreditReason);
+      formData.set("customerNote", editCustomerNote);
+      formData.set("terms", editTerms);
+    } else if (isInvoice) {
       formData.set("intent", "update-invoice-details");
       formData.set("documentNumber", editInvoiceNumber.trim());
       formData.set("invoiceDate", editInvoiceDate);
@@ -757,19 +881,25 @@ export default function SalesOrderDocumentPage() {
       formData.set("orderDate", editInvoiceDate);
       formData.set("customerNote", editCustomerNote);
       formData.set("terms", editTerms);
+      if (numberChanged) {
+        formData.set("numberMode", numberMode);
+      }
     }
     convertFetcher.submit(formData, { method: "post" });
   }, [
     convertFetcher,
     data.templateId,
+    editCreditReason,
     editCustomerNote,
     editInvoiceDate,
     editInvoiceNumber,
     editTerms,
     invoiceEditOpen,
     isConverting,
+    isCreditNote,
     isInvoice,
-    maybePromptNumberPref,
+    numberChanged,
+    numberMode,
   ]);
 
   useEffect(() => {
@@ -898,7 +1028,7 @@ export default function SalesOrderDocumentPage() {
           margins: data.settings.margins,
         },
         previewOrder.documentNumber || data.order.name,
-        isInvoice ? "invoice" : "sales-order",
+        isIssuedDocument ? "invoice" : "sales-order",
       );
 
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -930,7 +1060,11 @@ export default function SalesOrderDocumentPage() {
       return;
     }
 
-    const label = isInvoice ? "Invoice" : "Sales Order";
+    const label = isCreditNote
+      ? "Credit Note"
+      : isInvoice
+        ? "Invoice"
+        : "Sales Order";
     const docNo = data.order.documentNumber || data.order.name;
     const subject = encodeURIComponent(`${label} ${docNo}`);
     const body = encodeURIComponent(
@@ -1027,18 +1161,64 @@ export default function SalesOrderDocumentPage() {
   const activeListItem = data.salesOrders.find(
     (item) => item.id === data.order.id,
   );
+  const creditNoteVoided = Boolean(data.creditNoteVoided);
   const paymentStatus = activeListItem?.paymentStatus ?? null;
-  const paymentLabel = formatStatus(paymentStatus);
-  const paymentStatusKey = (paymentStatus || "").toLowerCase();
+  // Credit-note lifecycle status wins over Shopify order payment status.
+  const headerStatus =
+    isCreditNote && creditNoteVoided ? "VOIDED" : paymentStatus;
+  const paymentLabel = formatStatus(headerStatus);
+  const paymentStatusKey = (paymentStatus || "").toUpperCase();
   const isCancelledOrder =
-    paymentStatusKey === "voided" || paymentStatusKey.includes("cancel");
+    paymentStatusKey === "VOIDED" ||
+    paymentStatusKey.includes("CANCEL");
   const alreadyInvoiced = Boolean(activeListItem?.invoiced);
-  const isPaidOrder = paymentStatusKey === "paid";
-  const showVoidedBadge = data.isAdmin && isCancelledOrder;
-  const showInvoicedBadge =
-    data.isAdmin && alreadyInvoiced && !isCancelledOrder && !isInvoice;
-  const showConfirmedBadge =
-    data.isAdmin && isPaidOrder && !isCancelledOrder && !alreadyInvoiced;
+  const isPaidOrder = paymentStatusKey === "PAID";
+
+  const documentStatusRibbon = (() => {
+    if (!data.isAdmin) return null;
+
+    if (isIssuedDocument) {
+      if (isCreditNote && creditNoteVoided) {
+        return { label: "Voided", variant: "voided" as const };
+      }
+      if (isCancelledOrder) {
+        return { label: "Voided", variant: "voided" as const };
+      }
+      if (paymentStatusKey === "REFUNDED") {
+        return { label: "Refunded", variant: "refunded" as const };
+      }
+      if (paymentStatusKey === "PARTIALLY_REFUNDED") {
+        return { label: "Partial refund", variant: "partial" as const };
+      }
+      if (paymentStatusKey === "PAID") {
+        return { label: "Paid", variant: "paid" as const };
+      }
+      if (paymentStatusKey === "PARTIALLY_PAID") {
+        return { label: "Partial paid", variant: "partial" as const };
+      }
+      if (
+        paymentStatusKey === "PENDING" ||
+        paymentStatusKey === "AUTHORIZED" ||
+        paymentStatusKey === "UNPAID" ||
+        paymentStatusKey === "EXPIRED" ||
+        !paymentStatusKey
+      ) {
+        return { label: "Pending", variant: "pending" as const };
+      }
+      return null;
+    }
+
+    if (isCancelledOrder) {
+      return { label: "Voided", variant: "voided" as const };
+    }
+    if (alreadyInvoiced) {
+      return { label: "Invoiced", variant: "invoiced" as const };
+    }
+    if (isPaidOrder) {
+      return { label: "Confirmed", variant: "confirmed" as const };
+    }
+    return null;
+  })();
 
   const handleConvertToInvoice = useCallback(() => {
     if (isConverting || isCancelledOrder) return;
@@ -1057,10 +1237,35 @@ export default function SalesOrderDocumentPage() {
   }, [convertFetcher, isCancelledOrder, isConverting]);
 
   const handleDeleteInvoice = useCallback(() => {
-    if (!isInvoice || isConverting) return;
+    if (isConverting) return;
+    if (isCreditNote) {
+      setDeleteInvoiceOpen(false);
+      convertFetcher.submit(
+        { intent: "delete-credit-note" },
+        { method: "post" },
+      );
+      return;
+    }
+    if (!isInvoice) return;
+    if (data.hasCreditNote) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(
+          "Delete the credit note first. Invoices with a credit note cannot be deleted.",
+          { isError: true },
+        );
+      }
+      setDeleteInvoiceOpen(false);
+      return;
+    }
     setDeleteInvoiceOpen(false);
     convertFetcher.submit({ intent: "delete-invoice" }, { method: "post" });
-  }, [convertFetcher, isConverting, isInvoice]);
+  }, [
+    convertFetcher,
+    data.hasCreditNote,
+    isConverting,
+    isCreditNote,
+    isInvoice,
+  ]);
 
   useEffect(() => {
     if (convertFetcher.state !== "idle" || !convertFetcher.data) return;
@@ -1081,41 +1286,30 @@ export default function SalesOrderDocumentPage() {
     }
 
     if (typeof shopify !== "undefined" && shopify.toast) {
-      if (result.document === "update-invoice") {
+      if (result.document === "update-credit-note") {
+        shopify.toast.show("Credit note details saved");
+        setInvoiceEditOpen(false);
+      } else if (result.document === "update-invoice") {
         shopify.toast.show("Invoice details saved");
         setInvoiceEditOpen(false);
       } else if (result.document === "update-sales-order") {
         shopify.toast.show("Sales order details saved");
         setInvoiceEditOpen(false);
+      } else if (result.document === "delete-credit-note") {
+        shopify.toast.show("Credit note deleted");
+        navigate(listPath);
+        return;
       } else if (result.document === "delete-invoice") {
         shopify.toast.show("Invoice deleted");
         navigate(listPath);
         return;
-      } else if (result.document === "document-entry-mode") {
-        const isSo = result.moduleId === "sales-order";
-        shopify.toast.show(
-          result.entryMode === "manual"
-            ? `${isSo ? "Sales order" : "Invoice"} numbers set to manual entry`
-            : `${isSo ? "Sales order" : "Invoice"} numbers set to auto-generate`,
-        );
-      } else if (result.document === "invoice-entry-mode") {
-        shopify.toast.show(
-          result.entryMode === "manual"
-            ? "Invoice numbers set to manual entry"
-            : "Invoice numbers set to auto-generate",
-        );
       } else if (result.document === "packing-slip") {
         shopify.toast.show("Converted to packing slip");
       } else if (result.document === "invoice") {
         shopify.toast.show("Converted to invoice");
       }
     }
-    if (
-      result.document !== "document-entry-mode" &&
-      result.document !== "invoice-entry-mode"
-    ) {
-      revalidator.revalidate();
-    }
+    revalidator.revalidate();
   }, [
     convertFetcher.data,
     convertFetcher.state,
@@ -1130,10 +1324,10 @@ export default function SalesOrderDocumentPage() {
       inlineSize="large"
     >
       <s-link slot="breadcrumb-actions" href={listPath}>
-        {isInvoice ? "Invoice" : "Sales Orders"}
+        {isCreditNote ? "Credit Note" : isInvoice ? "Invoice" : "Sales Orders"}
       </s-link>
-      {paymentStatus ? (
-        <s-badge slot="accessory" tone={paymentBadgeTone(paymentStatus)}>
+      {headerStatus ? (
+        <s-badge slot="accessory" tone={paymentBadgeTone(headerStatus)}>
           {paymentLabel}
         </s-badge>
       ) : null}
@@ -1159,7 +1353,7 @@ export default function SalesOrderDocumentPage() {
       </s-button>
       {!isCancelledOrder ? (
         <>
-          {!isInvoice && !alreadyInvoiced ? (
+          {!isIssuedDocument && !alreadyInvoiced ? (
             <s-button
               slot="secondary-actions"
               loading={
@@ -1174,7 +1368,7 @@ export default function SalesOrderDocumentPage() {
               Convert to invoice
             </s-button>
           ) : null}
-          {!isInvoice && !activeListItem?.packingSlip ? (
+          {!isIssuedDocument && !activeListItem?.packingSlip ? (
             <s-button
               slot="secondary-actions"
               loading={
@@ -1210,17 +1404,21 @@ export default function SalesOrderDocumentPage() {
       >
         {isPrinting ? "Preparing…" : "Print"}
       </s-button>
-      {isInvoice ? (
+      {isInvoice || isCreditNote ? (
         <s-button
           slot="secondary-actions"
           icon="delete"
           tone="critical"
           loading={
             (isConverting &&
-              convertFetcher.formData?.get("intent") === "delete-invoice") ||
+              (convertFetcher.formData?.get("intent") === "delete-invoice" ||
+                convertFetcher.formData?.get("intent") ===
+                  "delete-credit-note")) ||
             undefined
           }
-          disabled={isConverting || undefined}
+          disabled={
+            isConverting || (isInvoice && data.hasCreditNote) || undefined
+          }
           onClick={() => setDeleteInvoiceOpen(true)}
         >
           Delete
@@ -1234,7 +1432,15 @@ export default function SalesOrderDocumentPage() {
           alignItems="start"
         >
           <aside className="sales-order-document-sidebar no-print">
-            <s-section heading={isInvoice ? "Invoices" : "Sales orders"}>
+            <s-section
+              heading={
+                isCreditNote
+                  ? "Credit notes"
+                  : isInvoice
+                    ? "Invoices"
+                    : "Sales orders"
+              }
+            >
               <s-button
                 slot="secondary-actions"
                 variant="tertiary"
@@ -1253,6 +1459,17 @@ export default function SalesOrderDocumentPage() {
                     const isActive = item.id === data.order.id;
                     const salesOrderLabel =
                       item.documentNumber || item.name;
+                    const itemCreditNoteVoided = Boolean(
+                      (
+                        item as {
+                          creditNoteVoided?: boolean;
+                        }
+                      ).creditNoteVoided,
+                    );
+                    const sidebarBadgeStatus =
+                      isCreditNote && itemCreditNoteVoided
+                        ? "VOIDED"
+                        : item.paymentStatus;
                     return (
                       <div key={item.id}>
                         {index > 0 ? (
@@ -1306,14 +1523,14 @@ export default function SalesOrderDocumentPage() {
                               gap="small-200"
                               alignItems="center"
                             >
-                              {item.paymentStatus ? (
+                              {sidebarBadgeStatus ? (
                                 <s-badge
-                                  tone={paymentBadgeTone(item.paymentStatus)}
+                                  tone={paymentBadgeTone(sidebarBadgeStatus)}
                                 >
-                                  {formatStatus(item.paymentStatus)}
+                                  {formatStatus(sidebarBadgeStatus)}
                                 </s-badge>
                               ) : null}
-                              {!isInvoice ? (
+                              {!isIssuedDocument ? (
                                 <span
                                   className={
                                     item.invoiced
@@ -1358,26 +1575,12 @@ export default function SalesOrderDocumentPage() {
                   padding: paperPaddingCss(data.settings.margins),
                 }}
               >
-                {showVoidedBadge ? (
+                {documentStatusRibbon ? (
                   <div
-                    className="sales-order-status-ribbon sales-order-status-ribbon--voided no-print"
-                    aria-label="Voided"
+                    className={`sales-order-status-ribbon sales-order-status-ribbon--${documentStatusRibbon.variant} no-print`}
+                    aria-label={documentStatusRibbon.label}
                   >
-                    <span>Voided</span>
-                  </div>
-                ) : showInvoicedBadge ? (
-                  <div
-                    className="sales-order-status-ribbon sales-order-status-ribbon--invoiced no-print"
-                    aria-label="Invoiced"
-                  >
-                    <span>Invoiced</span>
-                  </div>
-                ) : showConfirmedBadge ? (
-                  <div
-                    className="sales-order-status-ribbon sales-order-status-ribbon--confirmed no-print"
-                    aria-label="Confirmed"
-                  >
-                    <span>Confirmed</span>
+                    <span>{documentStatusRibbon.label}</span>
                   </div>
                 ) : null}
                 <SalesOrderLiveDocument
@@ -1395,14 +1598,17 @@ export default function SalesOrderDocumentPage() {
         <Modal
           open={deleteInvoiceOpen}
           onClose={() => setDeleteInvoiceOpen(false)}
-          title="Delete invoice?"
+          title={isCreditNote ? "Delete credit note?" : "Delete invoice?"}
           primaryAction={{
             content: "Delete",
             destructive: true,
             onAction: handleDeleteInvoice,
             loading:
               isConverting &&
-              convertFetcher.formData?.get("intent") === "delete-invoice",
+              (convertFetcher.formData?.get("intent") === "delete-invoice" ||
+                convertFetcher.formData?.get("intent") ===
+                  "delete-credit-note"),
+            disabled: isInvoice && Boolean(data.hasCreditNote),
           }}
           secondaryActions={[
             {
@@ -1413,15 +1619,24 @@ export default function SalesOrderDocumentPage() {
         >
           <Modal.Section>
             <Text as="p">
-              Are you sure you want to delete this invoice? The sales order will
-              stay; only the invoice record is removed.
+              {isCreditNote
+                ? "Are you sure you want to delete this credit note? The invoice and sales order stay; only the credit note record is removed."
+                : data.hasCreditNote
+                  ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
+                  : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
             </Text>
           </Modal.Section>
         </Modal>
         <Modal
-          open={invoiceEditOpen && !numberPrefOpen}
-          onClose={requestCloseInvoiceEdit}
-          title={isInvoice ? "Edit invoice" : "Edit sales order"}
+          open={invoiceEditOpen}
+          onClose={closeInvoiceEdit}
+          title={
+            isCreditNote
+              ? "Edit credit note"
+              : isInvoice
+                ? "Edit invoice"
+                : "Edit sales order"
+          }
           primaryAction={{
             content: "Save",
             onAction: handleSaveInvoiceDetails,
@@ -1430,7 +1645,9 @@ export default function SalesOrderDocumentPage() {
               (convertFetcher.formData?.get("intent") ===
                 "update-invoice-details" ||
                 convertFetcher.formData?.get("intent") ===
-                  "update-sales-order-details"),
+                  "update-sales-order-details" ||
+                convertFetcher.formData?.get("intent") ===
+                  "update-credit-note-details"),
             disabled: !invoiceDetailsDirty || isConverting,
           }}
           secondaryActions={[
@@ -1448,14 +1665,25 @@ export default function SalesOrderDocumentPage() {
                 alignItems="end"
               >
                 <s-text-field
-                  label={isInvoice ? "Invoice number" : "Sales order number"}
+                  label={
+                    isCreditNote
+                      ? "Credit note number"
+                      : isInvoice
+                        ? "Invoice number"
+                        : "Sales order number"
+                  }
                   value={editInvoiceNumber}
                   onInput={handleInvoiceNumberInput}
-                  onBlur={handleInvoiceNumberBlur}
                   autocomplete="off"
                 />
                 <s-date-field
-                  label={isInvoice ? "Invoice date" : "Order date"}
+                  label={
+                    isCreditNote
+                      ? "Credit note date"
+                      : isInvoice
+                        ? "Invoice date"
+                        : "Order date"
+                  }
                   value={editInvoiceDate}
                   onInput={(event: Event) =>
                     setEditInvoiceDate(fieldValue(event))
@@ -1465,6 +1693,38 @@ export default function SalesOrderDocumentPage() {
                   }
                 />
               </s-grid>
+              {isCreditNote ? (
+                <s-text-field
+                  label="Reason"
+                  value={editCreditReason}
+                  onInput={(event: Event) =>
+                    setEditCreditReason(fieldValue(event))
+                  }
+                  autocomplete="off"
+                  placeholder="Return, overcharge, goodwill…"
+                />
+              ) : null}
+              {!isInvoice && !isCreditNote && numberChanged ? (
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    After saving this number
+                  </Text>
+                  <RadioButton
+                    label={`Use ${editInvoiceNumber.trim() || "this number"} for this order, then continue auto-generating from the next number`}
+                    checked={numberMode === "continue"}
+                    id="so-number-mode-continue"
+                    name="so-number-mode"
+                    onChange={() => setNumberMode("continue")}
+                  />
+                  <RadioButton
+                    label="Switch to manual sales order numbers (enter each one yourself)"
+                    checked={numberMode === "manual"}
+                    id="so-number-mode-manual"
+                    name="so-number-mode"
+                    onChange={() => setNumberMode("manual")}
+                  />
+                </BlockStack>
+              ) : null}
               <s-text-area
                 label="Customer note"
                 value={editCustomerNote}
@@ -1473,6 +1733,10 @@ export default function SalesOrderDocumentPage() {
                   setEditCustomerNote(fieldValue(event))
                 }
               />
+              <Text as="p" tone="subdued">
+                Shown in the Notes section. Leave blank to use the Shopify order
+                note (or the template default notes).
+              </Text>
               <s-text-area
                 label="Terms & Conditions"
                 value={editTerms}
@@ -1482,100 +1746,14 @@ export default function SalesOrderDocumentPage() {
               <s-banner tone="info" heading="Important">
                 Items, prices, discounts, tax, and totals cannot be edited here.
                 Update them in the Shopify order — changes sync to this{" "}
-                {isInvoice ? "invoice" : "sales order"} automatically.
+                {isCreditNote
+                  ? "credit note"
+                  : isInvoice
+                    ? "invoice"
+                    : "sales order"}{" "}
+                automatically.
               </s-banner>
-              {invoiceEntryMode === "manual" ? (
-                <Text as="p" tone="subdued">
-                  {isInvoice ? "Invoice" : "Sales order"} numbers are set to
-                  manual entry.
-                </Text>
-              ) : null}
             </s-stack>
-          </Modal.Section>
-        </Modal>
-        <Modal
-          open={numberPrefOpen}
-          onClose={() => closeNumberPrefModal(true)}
-          title={
-            isInvoice
-              ? "Configure Invoice Number Preferences"
-              : "Configure Sales Order Number Preferences"
-          }
-          primaryAction={{
-            content: "Save",
-            onAction: confirmNumberPref,
-            disabled:
-              numberPrefChoice === "manual" && !editInvoiceNumber.trim(),
-          }}
-          secondaryActions={[
-            {
-              content: "Cancel",
-              onAction: () => closeNumberPrefModal(true),
-            },
-          ]}
-        >
-          <Modal.Section>
-            <BlockStack gap="400">
-              <Text as="p">
-                {isInvoice
-                  ? "Your invoice numbers are set on auto-generate mode to save your time. Are you sure about changing this setting?"
-                  : "Your sales order numbers are set on auto-generate mode to save your time. Are you sure about changing this setting?"}
-              </Text>
-              <BlockStack gap="200">
-                <RadioButton
-                  label={
-                    isInvoice
-                      ? "Continue auto-generating invoice numbers"
-                      : "Continue auto-generating sales order numbers"
-                  }
-                  checked={numberPrefChoice === "continue-auto"}
-                  id="document-number-pref-auto"
-                  name="document-number-pref"
-                  onChange={() => setNumberPrefChoice("continue-auto")}
-                />
-                <RadioButton
-                  label={
-                    isInvoice
-                      ? "Enter invoice numbers manually"
-                      : "Enter sales order numbers manually"
-                  }
-                  checked={numberPrefChoice === "manual"}
-                  id="document-number-pref-manual"
-                  name="document-number-pref"
-                  onChange={() => setNumberPrefChoice("manual")}
-                />
-                {numberPrefChoice === "manual" ? (
-                  <Box paddingInlineStart="600">
-                    <TextField
-                      label={
-                        isInvoice ? "Invoice number" : "Sales order number"
-                      }
-                      labelHidden
-                      value={editInvoiceNumber}
-                      onChange={setEditInvoiceNumber}
-                      placeholder={
-                        isInvoice
-                          ? "e.g. INV-0004"
-                          : "e.g. SO-0004"
-                      }
-                      autoComplete="off"
-                      autoFocus
-                    />
-                  </Box>
-                ) : null}
-                <RadioButton
-                  label={
-                    isInvoice
-                      ? `Enter the invoice number '${editInvoiceNumber.trim() || originalInvoiceNumber}' for this invoice but resume auto-generating invoice numbers from the next invoice`
-                      : `Enter the sales order number '${editInvoiceNumber.trim() || originalInvoiceNumber}' for this sales order but resume auto-generating sales order numbers from the next sales order`
-                  }
-                  checked={numberPrefChoice === "once"}
-                  id="document-number-pref-once"
-                  name="document-number-pref"
-                  onChange={() => setNumberPrefChoice("once")}
-                />
-              </BlockStack>
-            </BlockStack>
           </Modal.Section>
         </Modal>
       </AppProvider>

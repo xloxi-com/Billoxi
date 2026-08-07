@@ -1,3 +1,5 @@
-export default function CreditNotePage() {
-  return <s-page heading="Credit Note" />;
+import { Outlet } from "react-router";
+
+export default function CreditNoteLayout() {
+  return <Outlet />;
 }

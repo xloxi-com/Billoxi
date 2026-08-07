@@ -42,4 +42,7 @@ redirect_urls = [
 ]
 
 [build]
-automatically_update_urls_on_dev = false
+# true = `shopify app dev` temporarily points App URL at the local tunnel
+# so Preview shows your local code (no GitHub deploy needed for UI testing).
+# Production URL in application_url stays for real deploys.
+automatically_update_urls_on_dev = true

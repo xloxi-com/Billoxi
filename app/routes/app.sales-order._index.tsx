@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
+  LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import {
@@ -17,21 +19,42 @@ import {
   AppProvider,
   Badge,
   Button,
-  ButtonGroup,
   ChoiceList,
+  EmptySearchResult,
+  EmptyState,
+  Icon,
   IndexFilters,
   IndexFiltersMode,
   IndexTable,
+  InlineStack,
   Card,
   Link,
   Modal,
   Text,
+  TextField,
+  BlockStack,
+  Tooltip,
   useIndexResourceState,
   useSetIndexFiltersMode,
 } from "@shopify/polaris";
 import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
-import { EmailIcon, ImportIcon, PrintIcon } from "@shopify/polaris-icons";
+import {
+  CheckCircleIcon,
+  EmailIcon,
+  ImportIcon,
+  MinusCircleIcon,
+  NoteIcon,
+  PrintIcon,
+} from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
+import salesOrdersStyles from "../sales-orders.css?url";
+
+import {
+  CREDIT_NOTE_INDEX_COLUMNS,
+  INVOICE_INDEX_COLUMNS,
+  SALES_ORDER_INDEX_COLUMNS,
+  useIndexColumns,
+} from "../components/index-columns-menu";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
@@ -43,14 +66,28 @@ import {
 import { markOrderInvoiced, unmarkOrdersInvoiced } from "../order-invoice-status.server";
 import { markOrderPackingSlip } from "../order-packing-slip-status.server";
 import {
+  markOrderCreditNote,
+  unmarkOrdersCreditNote,
+  voidOrdersCreditNote,
+  getCreditNoteOrderGids,
+} from "../order-credit-note-status.server";
+import {
   invalidateSalesOrdersCache,
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
   type SalesOrderRow,
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
-import { INVOICED_VIEW_INDEX, SALES_ORDER_VIEWS } from "../sales-orders";
-import "../sales-orders.css";
+import {
+  INVOICED_VIEW_INDEX,
+  INVOICE_LIST_VIEWS,
+  CREDIT_NOTE_LIST_VIEWS,
+  SALES_ORDER_VIEWS,
+} from "../sales-orders";
+
+export const links: LinksFunction = () => [
+  { rel: "stylesheet", href: salesOrdersStyles },
+];
 
 function getSelectedTemplateId(fallback?: string | null) {
   return resolveSalesOrderTemplateId(
@@ -71,12 +108,22 @@ function triggerBrowserDownload(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function invoiceStatusDisplay(order: SalesOrderRow): {
+function documentStatusDisplay(
+  order: SalesOrderRow,
+  listMode: "invoice" | "credit-note",
+): {
   label: string;
   tone: SalesOrderRow["paymentTone"];
   progress: SalesOrderRow["paymentProgress"];
 } {
-  const key = order.paymentStatusKey;
+  // Credit-note void is an app lifecycle status — only on the CN list.
+  // Never override invoice status with a voided credit note.
+  if (listMode === "credit-note" && order.creditNoteVoided) {
+    return { label: "Voided", tone: undefined, progress: "complete" };
+  }
+
+  const key = (order.paymentStatusKey || "").toUpperCase();
+
   if (key === "PAID") {
     return { label: "Paid", tone: "success", progress: "complete" };
   }
@@ -86,12 +133,45 @@ function invoiceStatusDisplay(order: SalesOrderRow): {
   if (key === "REFUNDED") {
     return { label: "Refunded", tone: undefined, progress: "complete" };
   }
+  if (key === "PARTIALLY_REFUNDED") {
+    return {
+      label: "Partially refunded",
+      tone: "warning",
+      progress: "partiallyComplete",
+    };
+  }
+  if (key === "PARTIALLY_PAID") {
+    return {
+      label: "Partially paid",
+      tone: "warning",
+      progress: "partiallyComplete",
+    };
+  }
+  if (key === "AUTHORIZED") {
+    return {
+      label: "Authorized",
+      tone: "attention",
+      progress: "partiallyComplete",
+    };
+  }
+  if (key === "EXPIRED") {
+    return { label: "Expired", tone: "critical", progress: "incomplete" };
+  }
 
+  // PENDING / UNPAID / unknown unpaid — overdue only after the invoice day.
   const startIso = order.invoicedAt || order.createdAt;
   const startMs = new Date(startIso).getTime();
   const days = Number.isFinite(startMs)
     ? Math.max(0, Math.floor((Date.now() - startMs) / 86_400_000))
     : 0;
+
+  if (days <= 0) {
+    return {
+      label: "Unpaid",
+      tone: "attention",
+      progress: "incomplete",
+    };
+  }
 
   return {
     label: `Overdue by ${days} ${days === 1 ? "day" : "days"}`,
@@ -116,9 +196,12 @@ const SEARCH_DEBOUNCE_MS = 250;
 type BulkConfirmAction =
   | "invoice"
   | "packing-slip"
+  | "credit-note"
   | "email"
   | "download"
-  | "delete-invoice";
+  | "delete-invoice"
+  | "delete-credit-note"
+  | "void-credit-note";
 
 const BULK_CONFIRM_COPY: Record<
   BulkConfirmAction,
@@ -135,6 +218,12 @@ const BULK_CONFIRM_COPY: Record<
       "Are you sure you want to convert this sales order to a packing slip?",
     confirm: "Convert",
   },
+  "credit-note": {
+    title: "Create credit note?",
+    message:
+      "Are you sure you want to create a credit note from this invoice?",
+    confirm: "Create",
+  },
   email: {
     title: "Send email?",
     message: "Are you sure you want to open an email draft for this order?",
@@ -148,8 +237,20 @@ const BULK_CONFIRM_COPY: Record<
   "delete-invoice": {
     title: "Delete invoice?",
     message:
-      "Are you sure you want to delete the selected invoice? The sales order will stay; only the invoice record is removed.",
+      "Are you sure you want to delete the selected invoice? The sales order will stay; only the invoice record is removed. Invoices with a credit note cannot be deleted until the credit note is deleted first.",
     confirm: "Delete",
+  },
+  "delete-credit-note": {
+    title: "Delete credit note?",
+    message:
+      "Are you sure you want to delete the selected credit note? The invoice and sales order will stay.",
+    confirm: "Delete",
+  },
+  "void-credit-note": {
+    title: "Void credit note?",
+    message:
+      "Void this credit note? It stays in the list as voided and can be deleted later.",
+    confirm: "Void",
   },
 };
 
@@ -174,13 +275,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    listMode: "sales-order" as "sales-order" | "invoice",
+    listMode: "sales-order" as "sales-order" | "invoice" | "credit-note",
     pageHeading: "Sales Orders",
     invoiceTemplateId: null as string | null,
+    creditNoteTemplateId: null as string | null,
   };
 };
 
-export const shouldRevalidate = () => true;
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+}: {
+  formMethod?: string | null;
+  currentUrl: URL;
+  nextUrl: URL;
+}) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  return currentUrl.search !== nextUrl.search;
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await requireAdminAuth(request);
@@ -190,7 +303,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (
     intent !== "convert-to-invoice" &&
     intent !== "convert-to-packing-slip" &&
+    intent !== "create-credit-note" &&
     intent !== "delete-invoice" &&
+    intent !== "delete-credit-note" &&
+    intent !== "void-credit-note" &&
     intent !== "reload-list"
   ) {
     return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
@@ -237,8 +353,63 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     invalidateSalesOrdersCache(session.shop);
   }
 
+  if (intent === "create-credit-note") {
+    const creditNoteNumbers: Record<string, string> = {};
+    const reason = String(formData.get("reason") || "").trim();
+    try {
+      await Promise.all(
+        orderIds.map(async (orderId) => {
+          const gid = toOrderGid(orderId);
+          const documentNumber = await markOrderCreditNote(session.shop, gid, {
+            reason,
+          });
+          creditNoteNumbers[orderId] = documentNumber;
+          creditNoteNumbers[gid] = documentNumber;
+        }),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create credit note";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      converted: orderIds.length,
+      document: "credit-note" as const,
+      orderId: orderIds[0] ?? null,
+      orderIds,
+      creditNoteNumbers,
+      reason,
+    });
+  }
+
   if (intent === "delete-invoice") {
-    const deleted = await unmarkOrdersInvoiced(
+    const gids = orderIds.map((orderId) => toOrderGid(orderId));
+    const creditNoteGids = await getCreditNoteOrderGids(session.shop, gids);
+    if (creditNoteGids.size > 0) {
+      return Response.json(
+        {
+          ok: false,
+          error:
+            "Delete the credit note first. Invoices with a credit note cannot be deleted.",
+        },
+        { status: 400 },
+      );
+    }
+    const deleted = await unmarkOrdersInvoiced(session.shop, gids);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-invoice" as const,
+      orderId: orderIds[0] ?? null,
+      orderIds,
+    });
+  }
+
+  if (intent === "delete-credit-note") {
+    const deleted = await unmarkOrdersCreditNote(
       session.shop,
       orderIds.map((orderId) => toOrderGid(orderId)),
     );
@@ -246,7 +417,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({
       ok: true,
       deleted,
-      document: "delete-invoice" as const,
+      document: "delete-credit-note" as const,
+      orderId: orderIds[0] ?? null,
+      orderIds,
+    });
+  }
+
+  if (intent === "void-credit-note") {
+    const voided = await voidOrdersCreditNote(
+      session.shop,
+      orderIds.map((orderId) => toOrderGid(orderId)),
+    );
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      voided,
+      document: "void-credit-note" as const,
       orderId: orderIds[0] ?? null,
       orderIds,
     });
@@ -324,6 +510,24 @@ export default function SalesOrderPage() {
   const [, startTransition] = useTransition();
   const [queryValue, setQueryValue] = useState(data.query);
   const isInvoiceList = data.listMode === "invoice";
+  const isCreditNoteList = data.listMode === "credit-note";
+  const isDocumentList = isInvoiceList || isCreditNoteList;
+  const indexColumns = isCreditNoteList
+    ? CREDIT_NOTE_INDEX_COLUMNS
+    : isInvoiceList
+      ? INVOICE_INDEX_COLUMNS
+      : SALES_ORDER_INDEX_COLUMNS;
+  const columnsStorageKey = isCreditNoteList
+    ? "billoxi.index-columns.credit-note"
+    : isInvoiceList
+      ? "billoxi.index-columns.invoice"
+      : "billoxi.index-columns.sales-order";
+  const { visibleColumns, menu: columnsMenu } = useIndexColumns(
+    columnsStorageKey,
+    indexColumns,
+  );
+  const [columnsMountNode, setColumnsMountNode] =
+    useState<HTMLElement | null>(null);
   const { mode, setMode } = useSetIndexFiltersMode(
     data.query || data.paymentStatus || data.fulfillmentStatus
       ? IndexFiltersMode.Filtering
@@ -335,30 +539,67 @@ export default function SalesOrderPage() {
       : data.orders,
   );
   const pageRef = useRef<HTMLDivElement>(null);
+  const {
+    selectedResources,
+    allResourcesSelected,
+    handleSelectionChange,
+    clearSelection,
+  } = useIndexResourceState(orders);
 
-  // Polaris Tabs only remasures on window resize; admin iframe often paints
-  // with width 0 first, which collapses views into "More views".
+  // Polaris Tabs/BulkActions only remasure on window resize; admin iframe
+  // often paints with width 0 first ("More views" / missing bulk buttons).
   useEffect(() => {
     const node = pageRef.current;
     if (!node) return;
 
     let frame = 0;
-    const remeasureTabs = () => {
+    const remeasure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         window.dispatchEvent(new Event("resize"));
+        // Second tick — bulk measurer sometimes still has width 0 on first paint.
+        window.setTimeout(() => {
+          window.dispatchEvent(new Event("resize"));
+        }, 50);
       });
     };
 
-    const observer = new ResizeObserver(remeasureTabs);
+    const observer = new ResizeObserver(remeasure);
     observer.observe(node);
-    remeasureTabs();
+    remeasure();
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, []);
+  }, [selectedResources.length]);
+
+  useEffect(() => {
+    let frame = 0;
+    const findMount = () => {
+      const actionWrap = document.querySelector(
+        ".sales-orders-page .Polaris-IndexFilters__ActionWrap",
+      );
+      if (!(actionWrap instanceof HTMLElement)) {
+        frame = window.requestAnimationFrame(findMount);
+        return;
+      }
+
+      let host = actionWrap.querySelector(
+        ".sales-orders-columns-mount-host",
+      );
+      if (!(host instanceof HTMLElement)) {
+        host = document.createElement("div");
+        host.className = "sales-orders-columns-mount-host";
+        const last = actionWrap.lastElementChild;
+        if (last) actionWrap.insertBefore(host, last);
+        else actionWrap.appendChild(host);
+      }
+      setColumnsMountNode(host);
+    };
+    findMount();
+    return () => window.cancelAnimationFrame(frame);
+  }, [isInvoiceList, isCreditNoteList, mode]);
 
   useEffect(() => {
     if (isInvoiceList) {
@@ -428,12 +669,6 @@ export default function SalesOrderPage() {
     [availableViews],
   );
 
-  const {
-    selectedResources,
-    allResourcesSelected,
-    handleSelectionChange,
-    clearSelection,
-  } = useIndexResourceState(orders);
   const convertFetcher = useFetcher<typeof action>();
   const isConverting = convertFetcher.state !== "idle";
   const handledConvertDataRef = useRef<unknown>(null);
@@ -444,6 +679,7 @@ export default function SalesOrderPage() {
   const [confirmAction, setConfirmAction] = useState<BulkConfirmAction | null>(
     null,
   );
+  const [creditReason, setCreditReason] = useState("");
 
   const isBusy = isConverting || isDownloadingZip || Boolean(quickActionOrderId);
 
@@ -451,6 +687,13 @@ export default function SalesOrderPage() {
     const numericId = orderGid.includes("/")
       ? orderGid.split("/").pop() || orderGid
       : orderGid;
+    if (isCreditNoteList) {
+      const params = new URLSearchParams({
+        template:
+          data.creditNoteTemplateId || "credit-standard",
+      });
+      return `/app/credit-note/${encodeURIComponent(numericId)}?${params.toString()}`;
+    }
     if (isInvoiceList) {
       const params = new URLSearchParams({
         template:
@@ -465,9 +708,11 @@ export default function SalesOrderPage() {
     });
     return `/app/sales-order/${encodeURIComponent(numericId)}?${params.toString()}`;
   }, [
+    data.creditNoteTemplateId,
     data.hasSelectedTemplate,
     data.invoiceTemplateId,
     data.selectedTemplateId,
+    isCreditNoteList,
     isInvoiceList,
   ]);
 
@@ -479,6 +724,9 @@ export default function SalesOrderPage() {
   );
 
   const activeTemplateId = useCallback(() => {
+    if (isCreditNoteList) {
+      return data.creditNoteTemplateId || "credit-standard";
+    }
     if (isInvoiceList) {
       return data.invoiceTemplateId || "invoice-professional";
     }
@@ -486,13 +734,19 @@ export default function SalesOrderPage() {
       data.hasSelectedTemplate ? data.selectedTemplateId : null,
     );
   }, [
+    data.creditNoteTemplateId,
     data.hasSelectedTemplate,
     data.invoiceTemplateId,
     data.selectedTemplateId,
+    isCreditNoteList,
     isInvoiceList,
   ]);
 
-  const activeDocumentKind = isInvoiceList ? "invoice" : "sales-order";
+  const activeDocumentKind = isInvoiceList
+    ? "invoice"
+    : isCreditNoteList
+      ? "credit-note"
+      : "sales-order";
 
   const runQuickDownload = useCallback(
     async (orderId: string) => {
@@ -561,6 +815,7 @@ export default function SalesOrderPage() {
       total: string;
       invoiceNumber?: string;
       salesOrderNumber?: string;
+      creditNoteNumber?: string;
     }) => {
       const email = order.email.trim();
       if (!email) {
@@ -572,10 +827,16 @@ export default function SalesOrderPage() {
         return;
       }
 
-      const docName = isInvoiceList
-        ? order.invoiceNumber || order.salesOrderNumber || order.name
-        : order.salesOrderNumber || order.name;
-      const docLabel = isInvoiceList ? "Invoice" : "Sales Order";
+      const docName = isCreditNoteList
+        ? order.creditNoteNumber || order.name
+        : isInvoiceList
+          ? order.invoiceNumber || order.salesOrderNumber || order.name
+          : order.salesOrderNumber || order.name;
+      const docLabel = isCreditNoteList
+        ? "Credit Note"
+        : isInvoiceList
+          ? "Invoice"
+          : "Sales Order";
       const subject = encodeURIComponent(`${docLabel} ${docName}`);
       const body = encodeURIComponent(
         `Please find ${docLabel.toLowerCase()} ${docName} attached.\n\nTotal: ${order.total}`,
@@ -586,7 +847,7 @@ export default function SalesOrderPage() {
         shopify.toast.show(`Email draft opened for ${email}`);
       }
     },
-    [isInvoiceList],
+    [isCreditNoteList, isInvoiceList],
   );
 
   const handleConvertToInvoice = useCallback(() => {
@@ -611,10 +872,64 @@ export default function SalesOrderPage() {
     convertFetcher.submit(formData, { method: "post" });
   }, [convertFetcher, isConverting, orders, selectedResources]);
 
+  const handleCreateCreditNote = useCallback(() => {
+    if (selectedResources.length !== 1 || isConverting) return;
+    const order = orders.find((row) => row.id === selectedResources[0]);
+    if (!order) return;
+    if (order.creditNote && !order.creditNoteVoided) return;
+    const status = order.paymentStatus.toLowerCase();
+    if (status === "voided" || status.includes("cancel")) return;
+    const formData = new FormData();
+    formData.set("intent", "create-credit-note");
+    formData.append("orderIds", selectedResources[0]!);
+    if (creditReason.trim()) formData.set("reason", creditReason.trim());
+    convertFetcher.submit(formData, { method: "post" });
+    setCreditReason("");
+  }, [
+    convertFetcher,
+    creditReason,
+    isConverting,
+    orders,
+    selectedResources,
+  ]);
+
   const handleDeleteInvoices = useCallback(() => {
     if (selectedResources.length === 0 || isConverting) return;
+    const blocked = selectedResources.some((id) => {
+      const order = orders.find((row) => row.id === id);
+      return Boolean(order?.creditNote);
+    });
+    if (blocked) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(
+          "Delete the credit note first. Invoices with a credit note cannot be deleted.",
+          { isError: true },
+        );
+      }
+      return;
+    }
     const formData = new FormData();
     formData.set("intent", "delete-invoice");
+    for (const orderId of selectedResources) {
+      formData.append("orderIds", orderId);
+    }
+    convertFetcher.submit(formData, { method: "post" });
+  }, [convertFetcher, isConverting, orders, selectedResources]);
+
+  const handleDeleteCreditNotes = useCallback(() => {
+    if (selectedResources.length === 0 || isConverting) return;
+    const formData = new FormData();
+    formData.set("intent", "delete-credit-note");
+    for (const orderId of selectedResources) {
+      formData.append("orderIds", orderId);
+    }
+    convertFetcher.submit(formData, { method: "post" });
+  }, [convertFetcher, isConverting, selectedResources]);
+
+  const handleVoidCreditNotes = useCallback(() => {
+    if (selectedResources.length === 0 || isConverting) return;
+    const formData = new FormData();
+    formData.set("intent", "void-credit-note");
     for (const orderId of selectedResources) {
       formData.append("orderIds", orderId);
     }
@@ -659,10 +974,12 @@ export default function SalesOrderPage() {
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = /filename="([^"]+)"/i.exec(disposition);
-      const fileName =
-        match?.[1] ||
-        (isInvoiceList ? "invoices.zip" : "sales-orders.zip");
-      triggerBrowserDownload(blob, fileName);
+      const zipName = isCreditNoteList
+        ? "credit-notes.zip"
+        : isInvoiceList
+          ? "invoices.zip"
+          : "sales-orders.zip";
+      triggerBrowserDownload(blob, match?.[1] || zipName);
 
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(
@@ -681,6 +998,7 @@ export default function SalesOrderPage() {
     activeDocumentKind,
     activeTemplateId,
     isBusy,
+    isCreditNoteList,
     isInvoiceList,
     runQuickDownload,
     selectedResources,
@@ -715,16 +1033,27 @@ export default function SalesOrderPage() {
         message:
           confirmAction === "download" && selectedResources.length > 1
             ? `Are you sure you want to download ${selectedResources.length} ${
-                isInvoiceList ? "invoice" : "sales order"
+                isCreditNoteList
+                  ? "credit note"
+                  : isInvoiceList
+                    ? "invoice"
+                    : "sales order"
               } PDFs as a zip?`
-            : confirmAction === "download" && isInvoiceList
-              ? "Are you sure you want to download the selected invoice PDF?"
-              : confirmAction === "email" && isInvoiceList
-                ? "Are you sure you want to open an email draft for this invoice?"
-                : confirmAction === "delete-invoice" &&
-                    selectedResources.length > 1
-                  ? `Are you sure you want to delete ${selectedResources.length} invoices? Sales orders will stay; only the invoice records are removed.`
-                  : BULK_CONFIRM_COPY[confirmAction].message,
+            : confirmAction === "download" && isCreditNoteList
+              ? "Are you sure you want to download the selected credit note PDF?"
+              : confirmAction === "download" && isInvoiceList
+                ? "Are you sure you want to download the selected invoice PDF?"
+                : confirmAction === "email" && isCreditNoteList
+                  ? "Are you sure you want to open an email draft for this credit note?"
+                  : confirmAction === "email" && isInvoiceList
+                    ? "Are you sure you want to open an email draft for this invoice?"
+                    : confirmAction === "delete-invoice" &&
+                        selectedResources.length > 1
+                      ? `Are you sure you want to delete ${selectedResources.length} invoices? Sales orders will stay; only the invoice records are removed.`
+                      : confirmAction === "delete-credit-note" &&
+                          selectedResources.length > 1
+                        ? `Are you sure you want to delete ${selectedResources.length} credit notes? Invoices and sales orders will stay.`
+                        : BULK_CONFIRM_COPY[confirmAction].message,
         confirm:
           confirmAction === "download" && selectedResources.length > 1
             ? "Download zip"
@@ -738,8 +1067,11 @@ export default function SalesOrderPage() {
     if (!action) return;
     if (action === "invoice") handleConvertToInvoice();
     else if (action === "packing-slip") handleConvertToPackingSlip();
+    else if (action === "credit-note") handleCreateCreditNote();
     else if (action === "email") handleBulkSendEmail();
     else if (action === "delete-invoice") handleDeleteInvoices();
+    else if (action === "delete-credit-note") handleDeleteCreditNotes();
+    else if (action === "void-credit-note") handleVoidCreditNotes();
     else void handleBulkDownloadPdf();
   }, [
     confirmAction,
@@ -747,7 +1079,10 @@ export default function SalesOrderPage() {
     handleBulkSendEmail,
     handleConvertToInvoice,
     handleConvertToPackingSlip,
+    handleCreateCreditNote,
+    handleDeleteCreditNotes,
     handleDeleteInvoices,
+    handleVoidCreditNotes,
   ]);
 
   const selectedOrders = useMemo(
@@ -762,18 +1097,34 @@ export default function SalesOrderPage() {
   });
   const canConvertToInvoice =
     !isInvoiceList &&
+    selectedResources.length === 1 &&
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
     !selectedOrder!.invoiced;
   const canConvertToPackingSlip =
     !isInvoiceList &&
+    selectedResources.length === 1 &&
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
     !selectedOrder!.packingSlip;
+  const canCreateCreditNote =
+    isInvoiceList &&
+    selectedResources.length === 1 &&
+    Boolean(selectedOrder) &&
+    !hasCancelledSelected &&
+    (!selectedOrder!.creditNote || selectedOrder!.creditNoteVoided);
+  const canDeleteInvoice =
+    isInvoiceList &&
+    selectedResources.length > 0 &&
+    selectedOrders.every((order) => !order.creditNote);
+  const canVoidCreditNote =
+    isCreditNoteList &&
+    selectedResources.length > 0 &&
+    selectedOrders.some((order) => order.creditNote && !order.creditNoteVoided);
   const canSendEmail = !hasCancelledSelected;
 
   const promotedBulkActions = useMemo(() => {
-    if (selectedResources.length === 0) return undefined;
+    if (selectedResources.length === 0) return [];
 
     const actions: Array<{
       content: string;
@@ -782,49 +1133,90 @@ export default function SalesOrderPage() {
       destructive?: boolean;
     }> = [];
 
-    if (canConvertToInvoice) {
-      actions.push({
-        content: "Convert to invoice",
-        onAction: () => setConfirmAction("invoice"),
-        disabled: isBusy,
-      });
-    }
-    if (canConvertToPackingSlip) {
-      actions.push({
-        content: "Convert to packing slip",
-        onAction: () => setConfirmAction("packing-slip"),
-        disabled: isBusy,
-      });
-    }
-    if (canSendEmail) {
+    if (isCreditNoteList) {
       actions.push({
         content: "Send email",
         onAction: () => setConfirmAction("email"),
+        disabled: isBusy || !canSendEmail,
+      });
+      actions.push({
+        content: downloadPdfLabel,
+        onAction: () => setConfirmAction("download"),
         disabled: isBusy,
       });
+      actions.push({
+        content: "Void",
+        onAction: () => setConfirmAction("void-credit-note"),
+        disabled: isBusy || !canVoidCreditNote,
+      });
+      actions.push({
+        content:
+          selectedResources.length > 1 ? "Delete credit notes" : "Delete",
+        onAction: () => setConfirmAction("delete-credit-note"),
+        disabled: isBusy,
+        destructive: true,
+      });
+      return actions;
     }
+
+    if (!isInvoiceList) {
+      // Always show all 4 sales-order actions (disable when not applicable).
+      actions.push({
+        content: "Convert to invoice",
+        onAction: () => setConfirmAction("invoice"),
+        disabled: isBusy || !canConvertToInvoice,
+      });
+      actions.push({
+        content: "Convert to packing slip",
+        onAction: () => setConfirmAction("packing-slip"),
+        disabled: isBusy || !canConvertToPackingSlip,
+      });
+      actions.push({
+        content: "Send email",
+        onAction: () => setConfirmAction("email"),
+        disabled: isBusy || !canSendEmail,
+      });
+      actions.push({
+        content: downloadPdfLabel,
+        onAction: () => setConfirmAction("download"),
+        disabled: isBusy,
+      });
+      return actions;
+    }
+
+    actions.push({
+      content: "Create credit note",
+      onAction: () => setConfirmAction("credit-note"),
+      disabled: isBusy || !canCreateCreditNote,
+    });
+    actions.push({
+      content: "Send email",
+      onAction: () => setConfirmAction("email"),
+      disabled: isBusy || !canSendEmail,
+    });
     actions.push({
       content: downloadPdfLabel,
       onAction: () => setConfirmAction("download"),
       disabled: isBusy,
     });
-    if (isInvoiceList) {
-      actions.push({
-        content:
-          selectedResources.length > 1 ? "Delete invoices" : "Delete",
-        onAction: () => setConfirmAction("delete-invoice"),
-        disabled: isBusy,
-        destructive: true,
-      });
-    }
+    actions.push({
+      content: selectedResources.length > 1 ? "Delete invoices" : "Delete",
+      onAction: () => setConfirmAction("delete-invoice"),
+      disabled: isBusy || !canDeleteInvoice,
+      destructive: true,
+    });
 
     return actions;
   }, [
+    canCreateCreditNote,
     canConvertToInvoice,
     canConvertToPackingSlip,
+    canDeleteInvoice,
     canSendEmail,
+    canVoidCreditNote,
     downloadPdfLabel,
     isBusy,
+    isCreditNoteList,
     isInvoiceList,
     selectedResources.length,
   ]);
@@ -838,10 +1230,20 @@ export default function SalesOrderPage() {
       ok?: boolean;
       converted?: number;
       deleted?: number;
-      document?: "invoice" | "packing-slip" | "delete-invoice" | "reload";
+      document?:
+        | "invoice"
+        | "packing-slip"
+        | "credit-note"
+        | "delete-invoice"
+        | "delete-credit-note"
+        | "void-credit-note"
+        | "reload";
       orderId?: string | null;
       orderIds?: string[];
       invoiceNumbers?: Record<string, string>;
+      creditNoteNumbers?: Record<string, string>;
+      reason?: string;
+      voided?: number;
       error?: string;
     };
     if (!result.ok) {
@@ -862,8 +1264,22 @@ export default function SalesOrderPage() {
         shopify.toast.show(
           count > 1 ? `Deleted ${count} invoices` : "Invoice deleted",
         );
+      } else if (result.document === "delete-credit-note") {
+        const count = result.deleted ?? 1;
+        shopify.toast.show(
+          count > 1
+            ? `Deleted ${count} credit notes`
+            : "Credit note deleted",
+        );
+      } else if (result.document === "void-credit-note") {
+        const count = result.voided ?? 1;
+        shopify.toast.show(
+          count > 1 ? `Voided ${count} credit notes` : "Credit note voided",
+        );
       } else if (result.document === "packing-slip") {
         shopify.toast.show("Converted to packing slip");
+      } else if (result.document === "credit-note") {
+        shopify.toast.show("Credit note created");
       } else {
         shopify.toast.show("Converted to invoice");
       }
@@ -891,6 +1307,33 @@ export default function SalesOrderPage() {
               ),
         );
         clearSelection();
+      } else if (result.document === "delete-credit-note") {
+        setOrders((prev) =>
+          isCreditNoteList
+            ? prev.filter((order) => !patchedIds.has(order.id))
+            : prev.map((order) =>
+                patchedIds.has(order.id)
+                  ? {
+                      ...order,
+                      creditNote: false,
+                      creditNoteNumber: "",
+                      creditNoteAt: null,
+                      creditNoteReason: "",
+                      creditNoteVoided: false,
+                    }
+                  : order,
+              ),
+        );
+        clearSelection();
+      } else if (result.document === "void-credit-note") {
+        setOrders((prev) =>
+          prev.map((order) =>
+            patchedIds.has(order.id)
+              ? { ...order, creditNoteVoided: true }
+              : order,
+          ),
+        );
+        clearSelection();
       } else if (result.document === "packing-slip") {
         setOrders((prev) =>
           prev.map((order) =>
@@ -899,6 +1342,27 @@ export default function SalesOrderPage() {
               : order,
           ),
         );
+      } else if (result.document === "credit-note") {
+        const creditNoteNumbers = result.creditNoteNumbers || {};
+        const creditNoteAt = new Date().toISOString();
+        setOrders((prev) =>
+          prev.map((order) =>
+            patchedIds.has(order.id)
+              ? {
+                  ...order,
+                  creditNote: true,
+                  creditNoteAt,
+                  creditNoteVoided: false,
+                  creditNoteReason: result.reason || order.creditNoteReason || "",
+                  creditNoteNumber:
+                    creditNoteNumbers[order.id] ||
+                    order.creditNoteNumber ||
+                    "",
+                }
+              : order,
+          ),
+        );
+        clearSelection();
       } else if (result.document === "invoice") {
         const invoicedAt = new Date().toISOString();
         const invoiceNumbers = result.invoiceNumbers || {};
@@ -937,6 +1401,7 @@ export default function SalesOrderPage() {
     clearSelection,
     convertFetcher.data,
     convertFetcher.state,
+    isCreditNoteList,
     isInvoiceList,
     orders,
     revalidator,
@@ -1013,17 +1478,25 @@ export default function SalesOrderPage() {
   };
 
   const tabs: TabProps[] = useMemo(() => {
+    if (isCreditNoteList) {
+      return CREDIT_NOTE_LIST_VIEWS.map((view, index) => ({
+        content: view.label,
+        index,
+        onAction: () => {},
+        id: `credit-note-${view.id}`,
+        isLocked: true,
+        actions: [],
+      }));
+    }
     if (isInvoiceList) {
-      return [
-        {
-          content: "All",
-          index: 0,
-          onAction: () => {},
-          id: "invoice-all",
-          isLocked: true,
-          actions: [],
-        },
-      ];
+      return INVOICE_LIST_VIEWS.map((view, index) => ({
+        content: view.label,
+        index,
+        onAction: () => {},
+        id: `invoice-${view.id}`,
+        isLocked: true,
+        actions: [],
+      }));
     }
     return visibleViews.map((view, index) => ({
       content: view.label,
@@ -1034,10 +1507,15 @@ export default function SalesOrderPage() {
       isLocked: true,
       actions: [],
     }));
-  }, [isInvoiceList, visibleViews]);
+  }, [isCreditNoteList, isInvoiceList, visibleViews]);
 
-  const selectedTab = isInvoiceList
-    ? 0
+  const selectedTab = isDocumentList
+    ? Math.max(
+        0,
+        (isCreditNoteList ? CREDIT_NOTE_LIST_VIEWS : INVOICE_LIST_VIEWS).findIndex(
+          (view) => view.payment === (data.paymentStatus || ""),
+        ),
+      )
     : Math.max(
         0,
         visibleViews.findIndex((view) => view.viewIndex === data.selectedView),
@@ -1045,9 +1523,18 @@ export default function SalesOrderPage() {
 
   const handlePaymentStatusChange = useCallback(
     (value: string[]) => {
+      if (isDocumentList) {
+        updateParams({
+          view: isInvoiceList
+            ? String(INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : 4)
+            : "",
+          payment: value[0] ?? "",
+        });
+        return;
+      }
       updateParams({ view: "", payment: value[0] ?? "" });
     },
-    [updateParams],
+    [isDocumentList, isInvoiceList, updateParams],
   );
   const handleFulfillmentStatusChange = useCallback(
     (value: string[]) => {
@@ -1085,10 +1572,10 @@ export default function SalesOrderPage() {
   const filters: IndexFiltersProps["filters"] = useMemo(() => {
     const paymentFilter = {
       key: "paymentStatus",
-      label: isInvoiceList ? "Status" : "Payment status",
+      label: isDocumentList ? "Status" : "Payment status",
       filter: (
         <ChoiceList
-          title={isInvoiceList ? "Status" : "Payment status"}
+          title={isDocumentList ? "Status" : "Payment status"}
           titleHidden
           choices={[
             { label: "Paid", value: "paid" },
@@ -1104,7 +1591,7 @@ export default function SalesOrderPage() {
       shortcut: true,
     };
 
-    if (isInvoiceList) return [paymentFilter];
+    if (isDocumentList) return [paymentFilter];
 
     return [
       paymentFilter,
@@ -1132,18 +1619,18 @@ export default function SalesOrderPage() {
     data.fulfillmentStatus,
     handlePaymentStatusChange,
     handleFulfillmentStatusChange,
-    isInvoiceList,
+    isDocumentList,
   ]);
 
   const appliedFilters: IndexFiltersProps["appliedFilters"] = [];
   if (data.paymentStatus) {
     appliedFilters.push({
       key: "paymentStatus",
-      label: `${isInvoiceList ? "Status" : "Payment status"} is ${data.paymentStatus.replaceAll("_", " ")}`,
+      label: `${isDocumentList ? "Status" : "Payment status"} is ${data.paymentStatus.replaceAll("_", " ")}`,
       onRemove: handlePaymentStatusRemove,
     });
   }
-  if (!isInvoiceList && data.fulfillmentStatus) {
+  if (!isDocumentList && data.fulfillmentStatus) {
     appliedFilters.push({
       key: "fulfillmentStatus",
       label: `Fulfillment status is ${data.fulfillmentStatus.replaceAll("_", " ")}`,
@@ -1151,176 +1638,384 @@ export default function SalesOrderPage() {
     });
   }
 
+  const hasActiveFilters = Boolean(
+    data.query || data.paymentStatus || data.fulfillmentStatus,
+  );
+
+  const emptyStateMarkup = hasActiveFilters ? (
+    <EmptySearchResult
+      title={
+        isCreditNoteList
+          ? "No credit notes found"
+          : isInvoiceList
+            ? "No invoices found"
+            : "No orders found"
+      }
+      description="Try changing the filters or search term"
+      withIllustration
+    />
+  ) : isCreditNoteList ? (
+    <EmptyState
+      heading="No credit notes yet"
+      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      action={{
+        content: "Go to Invoice",
+        onAction: () => navigate("/app/invoice"),
+      }}
+    >
+      <p>Create a credit note from an invoice to see it listed here.</p>
+    </EmptyState>
+  ) : isInvoiceList ? (
+    <EmptyState
+      heading="No invoices yet"
+      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      action={{
+        content: "Go to Sales Orders",
+        onAction: () => navigate("/app/sales-order"),
+      }}
+    >
+      <p>Convert a sales order to an invoice to see it listed here.</p>
+    </EmptyState>
+  ) : (
+    <EmptyState
+      heading="No sales orders yet"
+      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+    >
+      <p>Orders from your Shopify store will appear here.</p>
+    </EmptyState>
+  );
+
   const rowMarkup = orders.map((order, index) => {
-    const invoiceStatus = isInvoiceList
-      ? invoiceStatusDisplay(order)
+    const invoiceStatus = isDocumentList
+      ? documentStatusDisplay(
+          order,
+          isCreditNoteList ? "credit-note" : "invoice",
+        )
       : null;
 
+    const cells = visibleColumns.map((col) => {
+      switch (col.id) {
+        case "document":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Link
+                dataPrimaryLink
+                monochrome
+                removeUnderline
+                onClick={() => openOrderDocument(order.id)}
+              >
+                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                  {isCreditNoteList
+                    ? order.creditNoteNumber || "—"
+                    : isInvoiceList
+                      ? order.invoiceNumber || order.salesOrderNumber || "—"
+                      : order.salesOrderNumber || "—"}
+                </Text>
+              </Link>
+            </IndexTable.Cell>
+          );
+        case "reference":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text as="span" variant="bodyMd" tone="subdued">
+                {isCreditNoteList
+                  ? order.invoiceNumber || order.salesOrderNumber || "—"
+                  : isInvoiceList
+                    ? order.salesOrderNumber || "—"
+                    : order.name}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "date":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text as="span" variant="bodyMd">
+                {order.date}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "company":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text
+                as="span"
+                variant="bodyMd"
+                tone={order.company?.trim() && order.company !== "—" ? undefined : "subdued"}
+              >
+                {order.company?.trim() || "—"}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "customer":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text as="span" variant="bodyMd">
+                {order.customer}
+              </Text>
+            </IndexTable.Cell>
+          );
+        case "total":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <div style={{ paddingInlineEnd: 28 }}>
+                <Text as="span" variant="bodyMd" alignment="end" numeric>
+                  {order.total}
+                </Text>
+              </div>
+            </IndexTable.Cell>
+          );
+        case "balanceDue":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <div style={{ paddingInlineEnd: 28 }}>
+                <Text as="span" variant="bodyMd" alignment="end" numeric>
+                  {order.balanceDue}
+                </Text>
+              </div>
+            </IndexTable.Cell>
+          );
+        case "paymentStatus":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <div style={{ paddingInlineStart: 16 }}>
+                {invoiceStatus ? (
+                  <Badge
+                    tone={invoiceStatus.tone}
+                    progress={invoiceStatus.progress}
+                  >
+                    {invoiceStatus.label}
+                  </Badge>
+                ) : (
+                  <Badge
+                    tone={order.paymentTone}
+                    progress={order.paymentProgress}
+                  >
+                    {order.paymentStatus}
+                  </Badge>
+                )}
+              </div>
+            </IndexTable.Cell>
+          );
+        case "fulfillmentStatus":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Badge
+                tone={order.fulfillmentTone}
+                progress={order.fulfillmentProgress}
+              >
+                {order.fulfillmentStatus}
+              </Badge>
+            </IndexTable.Cell>
+          );
+        case "invoiced":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <InlineStack align="center" blockAlign="center">
+                <Tooltip content={order.invoiced ? "Invoiced" : "Not invoiced"}>
+                  <span>
+                    <Icon
+                      source={
+                        order.invoiced ? CheckCircleIcon : MinusCircleIcon
+                      }
+                      tone={order.invoiced ? "success" : "subdued"}
+                      accessibilityLabel={
+                        order.invoiced ? "Invoiced" : "Not invoiced"
+                      }
+                    />
+                  </span>
+                </Tooltip>
+              </InlineStack>
+            </IndexTable.Cell>
+          );
+        case "packingSlip":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <InlineStack align="center" blockAlign="center">
+                <Tooltip
+                  content={
+                    order.packingSlip
+                      ? "Packing slip created"
+                      : "No packing slip"
+                  }
+                >
+                  <span>
+                    <Icon
+                      source={
+                        order.packingSlip ? CheckCircleIcon : MinusCircleIcon
+                      }
+                      tone={order.packingSlip ? "info" : "subdued"}
+                      accessibilityLabel={
+                        order.packingSlip
+                          ? "Packing slip created"
+                          : "No packing slip"
+                      }
+                    />
+                  </span>
+                </Tooltip>
+              </InlineStack>
+            </IndexTable.Cell>
+          );
+        case "creditNote": {
+          const hasCreditNote = Boolean(order.creditNote);
+          const voided = Boolean(order.creditNoteVoided);
+          const tooltip = !hasCreditNote
+            ? "No credit note"
+            : voided
+              ? `Credit note voided${order.creditNoteNumber ? ` (${order.creditNoteNumber})` : ""}`
+              : `Credit note created${order.creditNoteNumber ? ` (${order.creditNoteNumber})` : ""}`;
+          return (
+            <IndexTable.Cell key={col.id}>
+              <InlineStack align="center" blockAlign="center">
+                <Tooltip content={tooltip}>
+                  <span>
+                    <Icon
+                      source={
+                        hasCreditNote ? CheckCircleIcon : MinusCircleIcon
+                      }
+                      tone={
+                        !hasCreditNote
+                          ? "subdued"
+                          : voided
+                            ? "critical"
+                            : "success"
+                      }
+                      accessibilityLabel={tooltip}
+                    />
+                  </span>
+                </Tooltip>
+              </InlineStack>
+            </IndexTable.Cell>
+          );
+        }
+        case "reason": {
+          const reason = order.creditNoteReason?.trim() || "";
+          return (
+            <IndexTable.Cell key={col.id}>
+              <InlineStack align="center" blockAlign="center">
+                <Tooltip
+                  content={reason || "No reason"}
+                  dismissOnMouseOut
+                >
+                  <span>
+                    <Button
+                      icon={NoteIcon}
+                      variant="tertiary"
+                      accessibilityLabel={
+                        reason ? "Credit note reason" : "No reason"
+                      }
+                    />
+                  </span>
+                </Tooltip>
+              </InlineStack>
+            </IndexTable.Cell>
+          );
+        }
+        case "actions": {
+          const docLabel = isCreditNoteList
+            ? order.creditNoteNumber || order.name
+            : isInvoiceList
+              ? order.invoiceNumber || order.name
+              : order.salesOrderNumber || order.name;
+          return (
+            <IndexTable.Cell key={col.id}>
+              <div
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
+                <InlineStack align="center" gap="100" wrap={false}>
+                  <Tooltip content="Print">
+                    <Button
+                      icon={PrintIcon}
+                      variant="tertiary"
+                      accessibilityLabel={`Print ${docLabel}`}
+                      disabled={isBusy}
+                      onClick={() => {
+                        void runQuickPrint(order.id);
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip content="Download PDF">
+                    <Button
+                      icon={ImportIcon}
+                      variant="tertiary"
+                      accessibilityLabel={`Download ${docLabel}`}
+                      disabled={isBusy}
+                      onClick={() => {
+                        void runQuickDownload(order.id);
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip content="Send email">
+                    <Button
+                      icon={EmailIcon}
+                      variant="tertiary"
+                      accessibilityLabel={`Send ${docLabel}`}
+                      disabled={isBusy}
+                      onClick={() => runQuickSend(order)}
+                    />
+                  </Tooltip>
+                </InlineStack>
+              </div>
+            </IndexTable.Cell>
+          );
+        }
+        default:
+          return null;
+      }
+    });
+
     return (
-    <IndexTable.Row
-      id={order.id}
-      key={order.id}
-      selected={selectedResources.includes(order.id)}
-      position={index}
-      onClick={() => openOrderDocument(order.id)}
-    >
-      <IndexTable.Cell>
-        <Link
-          dataPrimaryLink
-          monochrome
-          removeUnderline
-          onClick={() => openOrderDocument(order.id)}
-        >
-          <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {isInvoiceList
-              ? order.invoiceNumber || order.salesOrderNumber || "—"
-              : order.salesOrderNumber || "—"}
-          </Text>
-        </Link>
-      </IndexTable.Cell>
-      <IndexTable.Cell>
-        <Text as="span" variant="bodyMd" tone="subdued">
-          {isInvoiceList
-            ? order.salesOrderNumber || "—"
-            : order.name}
-        </Text>
-      </IndexTable.Cell>
-      <IndexTable.Cell>{order.date}</IndexTable.Cell>
-      <IndexTable.Cell>{order.company}</IndexTable.Cell>
-      <IndexTable.Cell>{order.customer}</IndexTable.Cell>
-      <IndexTable.Cell>
-        <div style={{ paddingInlineEnd: 20 }}>
-          <Text as="span" alignment="end" numeric>
-            {order.total}
-          </Text>
-        </div>
-      </IndexTable.Cell>
-      {isInvoiceList ? (
-        <IndexTable.Cell>
-          <div style={{ paddingInlineEnd: 20 }}>
-            <Text as="span" alignment="end" numeric>
-              {order.balanceDue}
-            </Text>
-          </div>
-        </IndexTable.Cell>
-      ) : null}
-      <IndexTable.Cell>
-        <div style={{ paddingInlineStart: 12 }}>
-          {invoiceStatus ? (
-            <Badge
-              tone={invoiceStatus.tone}
-              progress={invoiceStatus.progress}
-            >
-              {invoiceStatus.label}
-            </Badge>
-          ) : (
-            <Badge tone={order.paymentTone} progress={order.paymentProgress}>
-              {order.paymentStatus}
-            </Badge>
-          )}
-        </div>
-      </IndexTable.Cell>
-      {!isInvoiceList ? (
-        <>
-          <IndexTable.Cell>
-            <Badge
-              tone={order.fulfillmentTone}
-              progress={order.fulfillmentProgress}
-            >
-              {order.fulfillmentStatus}
-            </Badge>
-          </IndexTable.Cell>
-          <IndexTable.Cell>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <span
-                role="img"
-                aria-label={order.invoiced ? "Invoiced" : "Not invoiced"}
-                title={order.invoiced ? "Invoiced" : "Not invoiced"}
-                style={{
-                  display: "inline-block",
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  backgroundColor: order.invoiced
-                    ? "var(--p-color-bg-fill-success)"
-                    : "var(--p-color-icon-disabled)",
-                }}
-              />
-            </div>
-          </IndexTable.Cell>
-          <IndexTable.Cell>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <span
-                role="img"
-                aria-label={
-                  order.packingSlip ? "Packing slip created" : "No packing slip"
-                }
-                title={
-                  order.packingSlip ? "Packing slip created" : "No packing slip"
-                }
-                style={{
-                  display: "inline-block",
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  backgroundColor: order.packingSlip
-                    ? "var(--p-color-icon-info)"
-                    : "var(--p-color-icon-disabled)",
-                }}
-              />
-            </div>
-          </IndexTable.Cell>
-        </>
-      ) : null}
-      <IndexTable.Cell>
-        <div
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-          style={{ display: "flex", justifyContent: "center" }}
-        >
-          <ButtonGroup gap="extraTight" noWrap>
-            <Button
-              icon={PrintIcon}
-              variant="tertiary"
-              accessibilityLabel={`Print ${
-                isInvoiceList
-                  ? order.invoiceNumber || order.name
-                  : order.salesOrderNumber || order.name
-              }`}
-              disabled={isBusy}
-              onClick={() => {
-                void runQuickPrint(order.id);
-              }}
-            />
-            <Button
-              icon={ImportIcon}
-              variant="tertiary"
-              accessibilityLabel={`Download ${
-                isInvoiceList
-                  ? order.invoiceNumber || order.name
-                  : order.salesOrderNumber || order.name
-              }`}
-              disabled={isBusy}
-              onClick={() => {
-                void runQuickDownload(order.id);
-              }}
-            />
-            <Button
-              icon={EmailIcon}
-              variant="tertiary"
-              accessibilityLabel={`Send ${
-                isInvoiceList
-                  ? order.invoiceNumber || order.name
-                  : order.salesOrderNumber || order.name
-              }`}
-              disabled={isBusy}
-              onClick={() => runQuickSend(order)}
-            />
-          </ButtonGroup>
-        </div>
-      </IndexTable.Cell>
-    </IndexTable.Row>
+      <IndexTable.Row
+        id={order.id}
+        key={order.id}
+        selected={selectedResources.includes(order.id)}
+        position={index}
+        onClick={() => openOrderDocument(order.id)}
+      >
+        {cells}
+      </IndexTable.Row>
     );
+  });
+
+  const columnsMenuPortal =
+    columnsMountNode != null
+      ? createPortal(
+          <span className="sales-orders-columns-mount">{columnsMenu}</span>,
+          columnsMountNode,
+        )
+      : null;
+
+  const tableHeadings = visibleColumns.map((col) => {
+    switch (col.id) {
+      case "total":
+      case "balanceDue":
+        return {
+          id: col.id,
+          title: (
+            <span style={{ display: "inline-block", paddingInlineEnd: 28 }}>
+              {col.label}
+            </span>
+          ),
+          alignment: "end" as const,
+        };
+      case "paymentStatus":
+        return {
+          id: col.id,
+          title: (
+            <span style={{ display: "inline-block", paddingInlineStart: 16 }}>
+              {col.label}
+            </span>
+          ),
+        };
+      case "invoiced":
+      case "packingSlip":
+      case "creditNote":
+      case "reason":
+      case "actions":
+        return { title: col.label, alignment: "center" as const };
+      default:
+        return { title: col.label };
+    }
   });
 
   return (
@@ -1336,26 +2031,45 @@ export default function SalesOrderPage() {
           Reload
         </s-button>
         <div className="sales-orders-page" ref={pageRef}>
+        {columnsMenuPortal}
         <Modal
           open={confirmAction !== null}
           onClose={() => setConfirmAction(null)}
           title={confirmCopy?.title ?? "Are you sure?"}
           primaryAction={{
             content: confirmCopy?.confirm ?? "Confirm",
-            destructive: confirmAction === "delete-invoice",
+            destructive:
+              confirmAction === "delete-invoice" ||
+              confirmAction === "delete-credit-note" ||
+              confirmAction === "void-credit-note",
             onAction: handleConfirmBulkAction,
           }}
           secondaryActions={[
             {
               content: "Cancel",
-              onAction: () => setConfirmAction(null),
+              onAction: () => {
+                setConfirmAction(null);
+                setCreditReason("");
+              },
             },
           ]}
         >
           <Modal.Section>
-            <Text as="p">
-              {confirmCopy?.message ?? "Are you sure you want to continue?"}
-            </Text>
+            <BlockStack gap="400">
+              <Text as="p">
+                {confirmCopy?.message ?? "Are you sure you want to continue?"}
+              </Text>
+              {confirmAction === "credit-note" ? (
+                <TextField
+                  label="Reason"
+                  value={creditReason}
+                  onChange={setCreditReason}
+                  autoComplete="off"
+                  placeholder="Return, overcharge, goodwill…"
+                  helpText="Shown on the credit note notes section."
+                />
+              ) : null}
+            </BlockStack>
           </Modal.Section>
         </Modal>
         <Card padding="0">
@@ -1364,7 +2078,11 @@ export default function SalesOrderPage() {
             sortSelected={[data.sortSelected]}
             queryValue={queryValue}
             queryPlaceholder={
-              isInvoiceList ? "Search invoices" : "Search orders"
+              isCreditNoteList
+                ? "Search credit notes"
+                : isInvoiceList
+                  ? "Search invoices"
+                  : "Search orders"
             }
             onQueryChange={setQueryValue}
             onQueryClear={handleQueryValueRemove}
@@ -1379,7 +2097,21 @@ export default function SalesOrderPage() {
             tabs={tabs}
             selected={selectedTab}
             onSelect={(index) => {
-              if (isInvoiceList) return;
+              if (isCreditNoteList) {
+                const payment = CREDIT_NOTE_LIST_VIEWS[index]?.payment ?? "";
+                updateParams({ payment });
+                return;
+              }
+              if (isInvoiceList) {
+                const payment = INVOICE_LIST_VIEWS[index]?.payment ?? "";
+                updateParams({
+                  view: String(
+                    INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : 4,
+                  ),
+                  payment,
+                });
+                return;
+              }
               const viewIndex = visibleViews[index]?.viewIndex ?? 0;
               updateParams({
                 view: viewIndex === 0 ? "" : String(viewIndex),
@@ -1399,9 +2131,11 @@ export default function SalesOrderPage() {
           />
           <IndexTable
             resourceName={
-              isInvoiceList
-                ? { singular: "invoice", plural: "invoices" }
-                : { singular: "order", plural: "orders" }
+              isCreditNoteList
+                ? { singular: "credit note", plural: "credit notes" }
+                : isInvoiceList
+                  ? { singular: "invoice", plural: "invoices" }
+                  : { singular: "order", plural: "orders" }
             }
             itemCount={orders.length}
             selectedItemsCount={
@@ -1409,62 +2143,14 @@ export default function SalesOrderPage() {
             }
             onSelectionChange={handleSelectionChange}
             promotedBulkActions={promotedBulkActions}
-            headings={[
-              { title: isInvoiceList ? "Invoice" : "Sales Order" },
-              { title: "Reference" },
-              { title: "Date" },
-              { title: "Company" },
-              { title: "Customer" },
-              {
-                id: "total",
-                title: (
-                  <span style={{ display: "inline-block", paddingInlineEnd: 20 }}>
-                    {isInvoiceList ? "Amount" : "Total"}
-                  </span>
-                ),
-                alignment: "end",
-              },
-              ...(isInvoiceList
-                ? [
-                    {
-                      id: "balance-due",
-                      title: (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            paddingInlineEnd: 20,
-                          }}
-                        >
-                          Balance Due
-                        </span>
-                      ),
-                      alignment: "end" as const,
-                    },
-                  ]
-                : []),
-              {
-                id: "payment-status",
-                title: (
-                  <span style={{ display: "inline-block", paddingInlineStart: 12 }}>
-                    {isInvoiceList ? "Status" : "Payment status"}
-                  </span>
-                ),
-              },
-              ...(isInvoiceList
-                ? []
-                : [
-                    { title: "Fulfillment status" },
-                    { title: "Invoiced", alignment: "center" as const },
-                    { title: "Packing slip", alignment: "center" as const },
-                  ]),
-              { title: "Actions", alignment: "center" },
-            ]}
+            headings={tableHeadings}
             pagination={{
               hasPrevious: data.pageInfo.hasPreviousPage,
               hasNext: data.pageInfo.hasNextPage,
               onPrevious: goToPreviousPage,
               onNext: goToNextPage,
             }}
+            emptyState={emptyStateMarkup}
             loading={false}
           >
             {rowMarkup}

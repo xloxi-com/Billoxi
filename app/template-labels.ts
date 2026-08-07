@@ -3,6 +3,12 @@
  * Changing language replaces built-in PDF/document labels (not the store name).
  */
 
+import {
+  getCreditNoteLabels,
+  getPackingSlipLabels,
+  isBuiltInCreditOrPackingBody,
+} from "./template-document-type-labels";
+
 export const TEMPLATE_LANGUAGES = [
   { value: "sq", label: "Shqip (Albanian)" },
   { value: "ar", label: "العربية (Arabic)" },
@@ -3296,7 +3302,7 @@ export function isBuiltInTemplateBody(value: string): boolean {
   for (const pack of Object.values(TEMPLATE_LABEL_PACKS)) {
     if (pack.notes === trimmed || pack.terms === trimmed) return true;
   }
-  return false;
+  return isBuiltInCreditOrPackingBody(trimmed);
 }
 
 export type ApplyTemplateLabelsInput = {
@@ -3366,18 +3372,6 @@ const INVOICE_TXN_EN: DocumentTypeTxnLabels = {
   documentTitle: "INVOICE",
   orderNumber: "Invoice#",
   date: "Invoice Date",
-};
-
-const CREDIT_TXN_EN: DocumentTypeTxnLabels = {
-  documentTitle: "CREDIT NOTE",
-  orderNumber: "Credit Note#",
-  date: "Credit Note Date",
-};
-
-const PACKING_TXN_EN: DocumentTypeTxnLabels = {
-  documentTitle: "PACKING SLIP",
-  orderNumber: "Packing Slip#",
-  date: "Date",
 };
 
 /** Document-type title/number/date overrides (sales-order uses the pack as-is). */
@@ -3648,90 +3642,6 @@ const INVOICE_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
   },
 };
 
-const CREDIT_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
-  en: CREDIT_TXN_EN,
-  "en-AU": CREDIT_TXN_EN,
-  "en-CA": CREDIT_TXN_EN,
-  "en-GB": CREDIT_TXN_EN,
-  de: {
-    documentTitle: "GUTSCHRIFT",
-    orderNumber: "Gutschriftnr.",
-    date: "Gutschriftdatum",
-  },
-  fr: {
-    documentTitle: "AVOIR",
-    orderNumber: "Avoir nº",
-    date: "Date d'avoir",
-  },
-  es: {
-    documentTitle: "NOTA DE CRÉDITO",
-    orderNumber: "Nota de crédito nº",
-    date: "Fecha de nota de crédito",
-  },
-  it: {
-    documentTitle: "NOTA DI CREDITO",
-    orderNumber: "Nota di credito nº",
-    date: "Data nota di credito",
-  },
-  nl: {
-    documentTitle: "CREDITNOTA",
-    orderNumber: "Creditnota nr.",
-    date: "Creditnotadatum",
-  },
-  ja: {
-    documentTitle: "クレジットノート",
-    orderNumber: "クレジットノート#",
-    date: "発行日",
-  },
-  "zh-CN": {
-    documentTitle: "贷项通知单",
-    orderNumber: "贷项通知单#",
-    date: "日期",
-  },
-};
-
-const PACKING_TRANSACTION_LABELS: Record<string, DocumentTypeTxnLabels> = {
-  en: PACKING_TXN_EN,
-  "en-AU": PACKING_TXN_EN,
-  "en-CA": PACKING_TXN_EN,
-  "en-GB": PACKING_TXN_EN,
-  de: {
-    documentTitle: "LIEFERSCHEIN",
-    orderNumber: "Lieferscheinnr.",
-    date: "Datum",
-  },
-  fr: {
-    documentTitle: "BON DE LIVRAISON",
-    orderNumber: "Bon de livraison nº",
-    date: "Date",
-  },
-  es: {
-    documentTitle: "ALBARÁN",
-    orderNumber: "Albarán nº",
-    date: "Fecha",
-  },
-  it: {
-    documentTitle: "DOCUMENTO DI TRASPORTO",
-    orderNumber: "DDT nº",
-    date: "Data",
-  },
-  nl: {
-    documentTitle: "PAKBON",
-    orderNumber: "Pakbon nr.",
-    date: "Datum",
-  },
-  ja: {
-    documentTitle: "納品書",
-    orderNumber: "納品書#",
-    date: "日付",
-  },
-  "zh-CN": {
-    documentTitle: "装箱单",
-    orderNumber: "装箱单#",
-    date: "日期",
-  },
-};
-
 function resolveDocumentTypeTransaction(
   pack: TemplateLabelPack,
   language: TemplateLanguage,
@@ -3741,28 +3651,41 @@ function resolveDocumentTypeTransaction(
     return pack.transaction;
   }
 
-  const table =
-    documentType === "invoice"
-      ? INVOICE_TRANSACTION_LABELS
-      : documentType === "credit-note"
-        ? CREDIT_TRANSACTION_LABELS
-        : documentType === "packing-slip"
-          ? PACKING_TRANSACTION_LABELS
-          : null;
-  if (!table) return pack.transaction;
+  if (documentType === "invoice") {
+    const base = language.split("-")[0] || language;
+    const override =
+      INVOICE_TRANSACTION_LABELS[language] ??
+      INVOICE_TRANSACTION_LABELS[base] ??
+      INVOICE_TXN_EN;
+    return {
+      ...pack.transaction,
+      ...override,
+    };
+  }
 
-  const base = language.split("-")[0] || language;
-  const fallback =
-    documentType === "invoice"
-      ? INVOICE_TXN_EN
-      : documentType === "credit-note"
-        ? CREDIT_TXN_EN
-        : PACKING_TXN_EN;
-  const override = table[language] ?? table[base] ?? fallback;
-  return {
-    ...pack.transaction,
-    ...override,
-  };
+  if (documentType === "credit-note") {
+    const labels = getCreditNoteLabels(language);
+    return {
+      ...pack.transaction,
+      documentTitle: labels.documentTitle,
+      orderNumber: labels.orderNumber,
+      date: labels.date,
+      reference: labels.reference,
+    };
+  }
+
+  if (documentType === "packing-slip") {
+    const labels = getPackingSlipLabels(language);
+    return {
+      ...pack.transaction,
+      documentTitle: labels.documentTitle,
+      orderNumber: labels.orderNumber,
+      date: labels.date,
+      reference: labels.reference,
+    };
+  }
+
+  return pack.transaction;
 }
 
 /**
@@ -3826,6 +3749,36 @@ export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
     return translated ? { ...column, label: translated } : column;
   });
 
+  let totals = {
+    ...settings.totals,
+    ...pack.totals,
+  };
+  let notes = translateNotes ? pack.notes : settings.notes;
+  let terms = translateTerms ? pack.terms : settings.terms;
+
+  if (options?.documentType === "credit-note") {
+    const labels = getCreditNoteLabels(language);
+    totals = {
+      ...totals,
+      totalLabel: labels.totalLabel,
+      itemsInTotalLabel: labels.itemsInTotalLabel,
+      ...(labels.refundedAmountLabel
+        ? { refundedAmountLabel: labels.refundedAmountLabel }
+        : {}),
+    };
+    if (translateNotes) notes = labels.notes;
+    if (translateTerms) terms = labels.terms;
+  } else if (options?.documentType === "packing-slip") {
+    const labels = getPackingSlipLabels(language);
+    totals = {
+      ...totals,
+      totalLabel: labels.totalLabel,
+      itemsInTotalLabel: labels.itemsInTotalLabel,
+    };
+    if (translateNotes) notes = labels.notes;
+    if (translateTerms) terms = labels.terms;
+  }
+
   return {
     ...settings,
     language,
@@ -3847,17 +3800,14 @@ export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
       ...field,
       label: fieldLabelFor(field.key, field.label),
     })),
-    totals: {
-      ...settings.totals,
-      ...pack.totals,
-    },
+    totals,
     taxSummary: {
       ...settings.taxSummary,
       ...pack.taxSummary,
     },
     notesLabel: pack.notesLabel,
     termsLabel: pack.termsLabel,
-    notes: translateNotes ? pack.notes : settings.notes,
-    terms: translateTerms ? pack.terms : settings.terms,
+    notes,
+    terms,
   };
 }

@@ -213,11 +213,32 @@ export type TemplateEditorSettings = {
   };
   notesLabel: string;
   notes: string;
+  /**
+   * When true, Shopify order note is shown in Notes when the
+   * order has one; Other Details “Default notes” is the fallback.
+   * Default: false.
+   */
+  preferShopifyOrderNote: boolean;
   termsLabel: string;
   terms: string;
   showSignature: boolean;
   showStamp: boolean;
 };
+
+/** Resolve note body: edited override → Shopify order note → template default. */
+export function resolveDocumentNotes(options: {
+  savedNote?: string | null;
+  orderNote?: string | null;
+  defaultNotes: string;
+  preferShopifyOrderNote?: boolean;
+}): string {
+  const saved = options.savedNote?.trim();
+  if (saved) return saved;
+  const prefer = options.preferShopifyOrderNote === true;
+  const shopifyNote = options.orderNote?.trim();
+  if (prefer && shopifyNote) return shopifyNote;
+  return options.defaultNotes ?? "";
+}
 
 export const defaultTemplateAppearance: TemplateAppearance = {
   textColor: "#303030",
@@ -409,6 +430,8 @@ export type SalesOrderDocumentData = {
     email: string;
   };
   terms: string;
+  /** Shopify Admin order note (`order.note`), when present. */
+  orderNote: string;
   lineItems: Array<{
     title: string;
     /** Variant label, e.g. "Large / Red". Empty for default variant. */
@@ -1607,9 +1630,1021 @@ export const INVOICE_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] = [
 
 export const DEFAULT_INVOICE_TEMPLATE_ID = "invoice-professional";
 
+/** Credit-note admin: logo/meta/images/tax only — no Paid/Balance Due controls. */
+function creditAdminCaps(
+  partial: Omit<TemplateAdminCapabilities, "paymentAmounts">,
+): TemplateAdminCapabilities {
+  return adminCaps({
+    ...partial,
+    paymentAmounts: false,
+  });
+}
+
+/**
+ * 15 modern credit-note designs.
+ * Keeps legacy ids (standard / detailed / simple / compact) for shops that
+ * already selected them as Active.
+ */
+export const CREDIT_NOTE_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] =
+  [
+    {
+      id: "credit-professional",
+      name: "Professional",
+      description: "Navy B2B credit note with card meta and clear totals.",
+      accent: "#1E3A8A",
+      alignment: "left",
+      layout: "professional",
+      logoPosition: "right",
+      metaStyle: "card",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "outline", "boxed"],
+        taxSummary: true,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#1E3A8A", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#64748B",
+        tableBorderColor: "#BFDBFE",
+        totalHighlightBackground: "#EFF6FF",
+      }),
+    },
+    {
+      id: "credit-modern",
+      name: "Modern",
+      description: "Clean blue accent for refunds and adjustments.",
+      accent: "#2563EB",
+      alignment: "right",
+      layout: "modern",
+      logoPosition: "left",
+      metaStyle: "card",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "boxed", "strip"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#2563EB", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#64748B",
+        totalHighlightBackground: "#EFF6FF",
+        tableBorderColor: "#DBEAFE",
+      }),
+    },
+    {
+      id: "credit-european",
+      name: "European",
+      description: "EU-style credit note with tax summary space.",
+      accent: "#0F766E",
+      alignment: "left",
+      layout: "european",
+      logoPosition: "right",
+      metaStyle: "outline",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "boxed", "card"],
+        taxSummary: true,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: true,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Open Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#0F766E", {
+        textColor: "#134E4A",
+        headingColor: "#134E4A",
+        mutedColor: "#5F8F8A",
+        totalHighlightBackground: "#F0FDFA",
+        tableBorderColor: "#99F6E4",
+      }),
+    },
+    {
+      id: "credit-classic",
+      name: "Classic",
+      description: "Formal serif layout for accounting-led refunds.",
+      accent: "#171717",
+      alignment: "left",
+      layout: "classic",
+      logoPosition: "right",
+      metaStyle: "plain",
+      admin: creditAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["plain", "outline"],
+        taxSummary: true,
+      }),
+      showProductImages: false,
+      showTaxSummary: true,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "Georgia, 'Times New Roman', serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#171717", {
+        textColor: "#262626",
+        headingColor: "#0A0A0A",
+        mutedColor: "#737373",
+        tableBorderColor: "#D4D4D4",
+        totalHighlightBackground: "#FAFAFA",
+      }),
+    },
+    {
+      id: "credit-compact",
+      name: "Compact",
+      description: "A concise layout for quick adjustments.",
+      accent: "#D97706",
+      alignment: "center",
+      layout: "compact",
+      logoPosition: "left",
+      metaStyle: "outline",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "plain", "boxed"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "small",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "inTotals",
+      logoSize: 36,
+      appearance: brandAppearance("#D97706", {
+        textColor: "#292524",
+        headingColor: "#78350F",
+        mutedColor: "#A8A29E",
+        totalHighlightBackground: "#FFFBEB",
+        tableBorderColor: "#FDE68A",
+      }),
+    },
+    {
+      id: "credit-minimal",
+      name: "Minimal",
+      description: "Airy Nordic layout for clean credit notes.",
+      accent: "#0E7490",
+      alignment: "left",
+      layout: "minimal",
+      logoPosition: "left",
+      metaStyle: "card",
+      admin: creditAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "plain", "outline"],
+        taxSummary: false,
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "inTotals",
+      appearance: brandAppearance("#0E7490", {
+        textColor: "#334155",
+        headingColor: "#0F172A",
+        mutedColor: "#94A3B8",
+        totalHighlightBackground: "#ECFEFF",
+        tableBorderColor: "#CBD5E1",
+      }),
+    },
+    {
+      id: "credit-standard",
+      name: "Standard",
+      description: "A clear layout for refunds and adjustments.",
+      accent: "#B90128",
+      alignment: "left",
+      layout: "standard",
+      logoPosition: "left",
+      metaStyle: "boxed",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "card", "outline"],
+        taxSummary: false,
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "Inter, system-ui, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#B90128", {
+        totalHighlightBackground: "#FEF2F2",
+        tableBorderColor: "#FECACA",
+      }),
+    },
+    {
+      id: "credit-bold",
+      name: "Bold",
+      description: "Strong rose title band for high-visibility credits.",
+      accent: "#DC2626",
+      alignment: "left",
+      layout: "bold",
+      logoPosition: "right",
+      metaStyle: "inverted",
+      admin: creditAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["inverted", "strip", "boxed"],
+        taxSummary: false,
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Work Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "balanceBanner",
+      appearance: brandAppearance("#DC2626", {
+        textColor: "#450A0A",
+        headingColor: "#7F1D1D",
+        mutedColor: "#F87171",
+        totalHighlightBackground: "#FEF2F2",
+        tableBorderColor: "#FECACA",
+      }),
+    },
+    {
+      id: "credit-studio",
+      name: "Studio",
+      description: "Soft violet studio look for branded credit notes.",
+      accent: "#7C3AED",
+      alignment: "left",
+      layout: "studio",
+      logoPosition: "left",
+      metaStyle: "strip",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["strip", "card", "boxed"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Outfit', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#7C3AED", {
+        textColor: "#1E1B4B",
+        headingColor: "#4C1D95",
+        mutedColor: "#A78BFA",
+        totalHighlightBackground: "#F5F3FF",
+        tableBorderColor: "#DDD6FE",
+      }),
+    },
+    {
+      id: "credit-horizon",
+      name: "Horizon",
+      description: "Wide cyan header for marketplace refunds.",
+      accent: "#0891B2",
+      alignment: "left",
+      layout: "horizon",
+      logoPosition: "left",
+      metaStyle: "card",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "outline", "plain"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Manrope', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#0891B2", {
+        textColor: "#164E63",
+        headingColor: "#155E75",
+        mutedColor: "#67E8F9",
+        totalHighlightBackground: "#ECFEFF",
+        tableBorderColor: "#A5F3FC",
+      }),
+    },
+    {
+      id: "credit-ledger",
+      name: "Ledger",
+      description: "Accounting-forward layout with outline meta.",
+      accent: "#334155",
+      alignment: "left",
+      layout: "ledger",
+      logoPosition: "right",
+      metaStyle: "outline",
+      admin: creditAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "plain", "boxed"],
+        taxSummary: true,
+      }),
+      showProductImages: false,
+      showTaxSummary: true,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "inTotals",
+      appearance: brandAppearance("#334155", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#94A3B8",
+        totalHighlightBackground: "#F8FAFC",
+        tableBorderColor: "#CBD5E1",
+      }),
+    },
+    {
+      id: "credit-folio",
+      name: "Folio",
+      description: "Editorial folio style for premium brand credits.",
+      accent: "#9F1239",
+      alignment: "left",
+      layout: "folio",
+      logoPosition: "left",
+      metaStyle: "plain",
+      admin: creditAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["plain", "outline", "card"],
+        taxSummary: false,
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "Georgia, 'Times New Roman', serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#9F1239", {
+        textColor: "#4C0519",
+        headingColor: "#881337",
+        mutedColor: "#FB7185",
+        totalHighlightBackground: "#FFF1F2",
+        tableBorderColor: "#FECDD3",
+      }),
+    },
+    {
+      id: "credit-spectrum",
+      name: "Spectrum",
+      description: "Indigo spectrum accents for multi-line credits.",
+      accent: "#4F46E5",
+      alignment: "left",
+      layout: "spectrum",
+      logoPosition: "left",
+      metaStyle: "boxed",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "card", "strip"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Space Grotesk', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#4F46E5", {
+        textColor: "#312E81",
+        headingColor: "#312E81",
+        mutedColor: "#818CF8",
+        totalHighlightBackground: "#EEF2FF",
+        tableBorderColor: "#C7D2FE",
+      }),
+    },
+    {
+      id: "credit-simple",
+      name: "Simple",
+      description: "A lightweight credit note layout.",
+      accent: "#2c6ecb",
+      alignment: "center",
+      layout: "apex",
+      logoPosition: "right",
+      metaStyle: "card",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "outline", "boxed"],
+        taxSummary: false,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Sora', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#2c6ecb", {
+        textColor: "#1E293B",
+        headingColor: "#1E3A8A",
+        mutedColor: "#64748B",
+        totalHighlightBackground: "#EFF6FF",
+        tableBorderColor: "#BFDBFE",
+      }),
+    },
+    {
+      id: "credit-detailed",
+      name: "Detailed",
+      description: "Includes extra space for adjustment notes.",
+      accent: "#8e4b10",
+      alignment: "right",
+      layout: "japanese",
+      logoPosition: "center",
+      metaStyle: "boxed",
+      admin: creditAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["center", "left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "plain", "card"],
+        taxSummary: true,
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: true,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#8e4b10", {
+        textColor: "#431407",
+        headingColor: "#7C2D12",
+        mutedColor: "#C2410C",
+        totalHighlightBackground: "#FFF7ED",
+        tableBorderColor: "#FED7AA",
+      }),
+    },
+  ];
+
+/** Alias kept for older UI copy that referenced Simple. */
+export const DEFAULT_CREDIT_NOTE_TEMPLATE_ID = "credit-standard";
+
+/**
+ * Packing-slip admin: images/logo/meta only — no paid/balance/tax-summary money controls.
+ */
+function packingAdminCaps(
+  partial: Omit<TemplateAdminCapabilities, "paymentAmounts" | "taxSummary">,
+): TemplateAdminCapabilities {
+  return adminCaps({
+    ...partial,
+    paymentAmounts: false,
+    taxSummary: false,
+  });
+}
+
+/**
+ * 15 packing-slip designs.
+ * Keeps legacy ids (standard / branded / compact / detailed) for existing Active selections.
+ */
+export const PACKING_SLIP_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] =
+  [
+    {
+      id: "packing-standard",
+      name: "Standard",
+      description: "Clear packing slip for everyday shipments.",
+      accent: "#202223",
+      alignment: "left",
+      layout: "standard",
+      logoPosition: "left",
+      metaStyle: "boxed",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "plain", "card"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "Inter, system-ui, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#202223", {
+        textColor: "#202223",
+        headingColor: "#111213",
+        mutedColor: "#6D7175",
+        tableBorderColor: "#E1E3E5",
+        totalHighlightBackground: "#F6F6F7",
+      }),
+    },
+    {
+      id: "packing-branded",
+      name: "Branded",
+      description: "Highlights your brand and delivery details.",
+      accent: "#7C3AED",
+      alignment: "left",
+      layout: "modern",
+      logoPosition: "right",
+      metaStyle: "card",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "boxed", "strip"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#7C3AED", {
+        textColor: "#1E1B4B",
+        headingColor: "#4C1D95",
+        mutedColor: "#7C3AED",
+        tableBorderColor: "#E9D5FF",
+        totalHighlightBackground: "#F5F3FF",
+      }),
+    },
+    {
+      id: "packing-compact",
+      name: "Compact",
+      description: "Dense left-aligned layout for high-volume packing.",
+      accent: "#008060",
+      alignment: "left",
+      layout: "compact",
+      logoPosition: "left",
+      metaStyle: "outline",
+      admin: packingAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "plain", "boxed"],
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      logoSize: 36,
+      appearance: brandAppearance("#008060", {
+        textColor: "#0B3D2E",
+        headingColor: "#004C3F",
+        mutedColor: "#5C8F7B",
+        tableBorderColor: "#B7E1D0",
+        totalHighlightBackground: "#F1F8F5",
+      }),
+    },
+    {
+      id: "packing-detailed",
+      name: "Detailed",
+      description: "Extra room for shipment and item details.",
+      accent: "#005BD3",
+      alignment: "right",
+      layout: "professional",
+      logoPosition: "left",
+      metaStyle: "outline",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "card", "boxed"],
+      }),
+      showProductImages: true,
+      productImageSize: "large",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#005BD3", {
+        textColor: "#0A2540",
+        headingColor: "#003B8F",
+        mutedColor: "#5C6F82",
+        tableBorderColor: "#B3D4FF",
+        totalHighlightBackground: "#F0F6FF",
+      }),
+    },
+    {
+      id: "packing-professional",
+      name: "Professional",
+      description: "Warehouse-ready navy layout for B2B packs.",
+      accent: "#1E3A8A",
+      alignment: "left",
+      layout: "professional",
+      logoPosition: "right",
+      metaStyle: "card",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "outline", "boxed"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#1E3A8A", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#64748B",
+        tableBorderColor: "#BFDBFE",
+        totalHighlightBackground: "#EFF6FF",
+      }),
+    },
+    {
+      id: "packing-modern",
+      name: "Modern",
+      description: "Clean blue accent for fulfillment desks.",
+      accent: "#2563EB",
+      alignment: "right",
+      layout: "modern",
+      logoPosition: "left",
+      metaStyle: "card",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "boxed", "strip"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'DM Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#2563EB", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#64748B",
+        tableBorderColor: "#DBEAFE",
+        totalHighlightBackground: "#EFF6FF",
+      }),
+    },
+    {
+      id: "packing-european",
+      name: "European",
+      description: "EU-style slip with clear ship-to hierarchy.",
+      accent: "#0F766E",
+      alignment: "left",
+      layout: "european",
+      logoPosition: "right",
+      metaStyle: "outline",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["outline", "boxed", "card"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Open Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#0F766E", {
+        textColor: "#134E4A",
+        headingColor: "#134E4A",
+        mutedColor: "#5F8F8A",
+        totalHighlightBackground: "#F0FDFA",
+        tableBorderColor: "#99F6E4",
+      }),
+    },
+    {
+      id: "packing-classic",
+      name: "Classic",
+      description: "Formal packing list for retail handoffs.",
+      accent: "#171717",
+      alignment: "left",
+      layout: "classic",
+      logoPosition: "right",
+      metaStyle: "plain",
+      admin: packingAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["plain", "outline"],
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "Georgia, 'Times New Roman', serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#171717", {
+        textColor: "#171717",
+        headingColor: "#0A0A0A",
+        mutedColor: "#737373",
+        tableBorderColor: "#D4D4D4",
+        totalHighlightBackground: "#FAFAFA",
+      }),
+    },
+    {
+      id: "packing-minimal",
+      name: "Minimal",
+      description: "Sparse layout focused on SKU and quantity.",
+      accent: "#525252",
+      alignment: "left",
+      layout: "minimal",
+      logoPosition: "left",
+      metaStyle: "plain",
+      admin: packingAdminCaps({
+        productImages: false,
+        logoPosition: true,
+        logoPositions: ["left", "center"],
+        metaStyle: true,
+        metaStyles: ["plain", "outline"],
+      }),
+      showProductImages: false,
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Inter', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#525252", {
+        textColor: "#262626",
+        headingColor: "#171717",
+        mutedColor: "#737373",
+        tableBorderColor: "#E5E5E5",
+        totalHighlightBackground: "#FAFAFA",
+      }),
+    },
+    {
+      id: "packing-bold",
+      name: "Bold",
+      description: "High-contrast slip for busy packing stations.",
+      accent: "#DC2626",
+      alignment: "left",
+      layout: "bold",
+      logoPosition: "left",
+      metaStyle: "inverted",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["inverted", "boxed", "card"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Space Grotesk', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#DC2626", {
+        textColor: "#450A0A",
+        headingColor: "#7F1D1D",
+        mutedColor: "#B91C1C",
+        tableBorderColor: "#FECACA",
+        totalHighlightBackground: "#FEF2F2",
+      }),
+    },
+    {
+      id: "packing-warehouse",
+      name: "Warehouse",
+      description: "Industrial slate look for pick-and-pack flows.",
+      accent: "#475569",
+      alignment: "left",
+      layout: "professional",
+      logoPosition: "left",
+      metaStyle: "boxed",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "card", "plain"],
+      }),
+      showProductImages: true,
+      productImageSize: "small",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#475569", {
+        textColor: "#1E293B",
+        headingColor: "#0F172A",
+        mutedColor: "#64748B",
+        tableBorderColor: "#CBD5E1",
+        totalHighlightBackground: "#F8FAFC",
+      }),
+    },
+    {
+      id: "packing-express",
+      name: "Express",
+      description: "Fast-ship accent with clear quantity focus.",
+      accent: "#EA580C",
+      alignment: "right",
+      layout: "modern",
+      logoPosition: "right",
+      metaStyle: "strip",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["strip", "card", "boxed"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Sora', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#EA580C", {
+        textColor: "#7C2D12",
+        headingColor: "#9A3412",
+        mutedColor: "#C2410C",
+        tableBorderColor: "#FED7AA",
+        totalHighlightBackground: "#FFF7ED",
+      }),
+    },
+    {
+      id: "packing-spectrum",
+      name: "Spectrum",
+      description: "Indigo spectrum accents for multi-line packs.",
+      accent: "#4F46E5",
+      alignment: "left",
+      layout: "spectrum",
+      logoPosition: "left",
+      metaStyle: "boxed",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "card", "strip"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Space Grotesk', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#4F46E5", {
+        textColor: "#312E81",
+        headingColor: "#312E81",
+        mutedColor: "#818CF8",
+        totalHighlightBackground: "#EEF2FF",
+        tableBorderColor: "#C7D2FE",
+      }),
+    },
+    {
+      id: "packing-apex",
+      name: "Apex",
+      description: "Lightweight slip for quick outbound labels.",
+      accent: "#0EA5E9",
+      alignment: "center",
+      layout: "apex",
+      logoPosition: "center",
+      metaStyle: "card",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["center", "left", "right"],
+        metaStyle: true,
+        metaStyles: ["card", "outline", "boxed"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'Sora', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "underTotal",
+      appearance: brandAppearance("#0EA5E9", {
+        textColor: "#0C4A6E",
+        headingColor: "#075985",
+        mutedColor: "#0284C7",
+        totalHighlightBackground: "#F0F9FF",
+        tableBorderColor: "#BAE6FD",
+      }),
+    },
+    {
+      id: "packing-fulfillment",
+      name: "Fulfillment",
+      description: "Detailed pick list style with centered brand mark.",
+      accent: "#B45309",
+      alignment: "right",
+      layout: "japanese",
+      logoPosition: "center",
+      metaStyle: "boxed",
+      admin: packingAdminCaps({
+        productImages: true,
+        logoPosition: true,
+        logoPositions: ["center", "left", "right"],
+        metaStyle: true,
+        metaStyles: ["boxed", "plain", "card"],
+      }),
+      showProductImages: true,
+      productImageSize: "medium",
+      showTaxSummary: false,
+      showPaidAmount: false,
+      showBalanceDue: false,
+      fontFamily: "'IBM Plex Sans', Helvetica, Arial, sans-serif",
+      backgroundColor: "#ffffff",
+      paymentStatusStyle: "boxed",
+      appearance: brandAppearance("#B45309", {
+        textColor: "#78350F",
+        headingColor: "#92400E",
+        mutedColor: "#D97706",
+        totalHighlightBackground: "#FFFBEB",
+        tableBorderColor: "#FDE68A",
+      }),
+    },
+  ];
+
+export const DEFAULT_PACKING_SLIP_TEMPLATE_ID = "packing-standard";
+
 const ALL_DOCUMENT_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] = [
   ...SALES_ORDER_TEMPLATE_PRESETS,
   ...INVOICE_TEMPLATE_PRESETS,
+  ...CREDIT_NOTE_TEMPLATE_PRESETS,
+  ...PACKING_SLIP_TEMPLATE_PRESETS,
 ];
 
 const SALES_ORDER_TEMPLATES: Record<string, { name: string }> =
@@ -1693,28 +2728,34 @@ export function defaultColumnsForPreset(
 ): TemplateEditorSettings["columns"] {
   const showImage = preset.showProductImages === true;
   const imageSize = preset.productImageSize ?? "medium";
+  const isPackingSlip = preset.id.startsWith("packing-");
   return [
     { key: "number", enabled: true, width: 4, label: "#" },
     {
       key: "item",
       enabled: true,
-      width: showImage ? 40 : 36,
+      width: showImage ? (isPackingSlip ? 48 : 40) : isPackingSlip ? 46 : 36,
       label: "Item",
       showImage: showImage === true,
       ...(showImage ? { imageSize } : {}),
     },
     { key: "custom", enabled: false, width: 12, label: "Custom" },
-    { key: "sku", enabled: true, width: showImage ? 10 : 11, label: "SKU" },
+    {
+      key: "sku",
+      enabled: true,
+      width: showImage ? (isPackingSlip ? 14 : 10) : isPackingSlip ? 16 : 11,
+      label: "SKU",
+    },
     {
       key: "quantity",
       enabled: true,
-      width: showImage ? 8 : 10,
+      width: showImage ? (isPackingSlip ? 12 : 8) : isPackingSlip ? 14 : 10,
       label: "Qty",
       showUnit: false,
     },
     {
       key: "rate",
-      enabled: true,
+      enabled: !isPackingSlip,
       width: showImage ? 9 : 10,
       label: "Rate",
       showComparePrice: true,
@@ -1728,7 +2769,12 @@ export function defaultColumnsForPreset(
     { key: "discountPercentage", enabled: false, width: 10, label: "Discount %" },
     { key: "taxPercentage", enabled: false, width: 10, label: "Tax %" },
     { key: "taxAmount", enabled: false, width: 10, label: "Tax" },
-    { key: "amount", enabled: true, width: showImage ? 11 : 12, label: "Amount" },
+    {
+      key: "amount",
+      enabled: !isPackingSlip,
+      width: showImage ? 11 : 12,
+      label: "Amount",
+    },
   ];
 }
 
@@ -2412,9 +3458,11 @@ export function salesOrderTemplateName(templateId: string) {
 
 export function resolveDocumentTypeForTemplateId(
   templateId: string,
-): "sales-order" | "invoice" | null {
+): "sales-order" | "invoice" | "credit-note" | "packing-slip" | null {
   if (templateId.startsWith("sales-")) return "sales-order";
   if (templateId.startsWith("invoice-")) return "invoice";
+  if (templateId.startsWith("credit-")) return "credit-note";
+  if (templateId.startsWith("packing-")) return "packing-slip";
   return null;
 }
 
@@ -2440,6 +3488,8 @@ export function defaultTemplateSettings(
   const preset = getSalesOrderTemplatePreset(templateId);
   const isPremium = isPremiumTemplatePreset(templateId);
   const isInvoice = templateId.startsWith("invoice-");
+  const isCreditNote = templateId.startsWith("credit-");
+  const isPackingSlip = templateId.startsWith("packing-");
   return {
     name,
     language: "en",
@@ -2454,7 +3504,7 @@ export function defaultTemplateSettings(
     },
     taxSummary: {
       ...defaultTaxSummarySettings(),
-      enabled: preset.showTaxSummary === true,
+      enabled: preset.showTaxSummary === true && !isPackingSlip,
     },
     fontFamily: preset.fontFamily,
     backgroundColor: preset.backgroundColor,
@@ -2469,14 +3519,14 @@ export function defaultTemplateSettings(
       showLogo: true,
       showOrganization: true,
       showCustomer: true,
-      showBilling: true,
-      showShipping: true,
+      showBilling: !isPackingSlip,
+      showShipping: !isCreditNote,
       showCustomerDetails: true,
       showDocumentTitle: true,
       showOrderNumber: true,
       showDate: true,
-      showExpectedShipmentDate: false,
-      showPaymentMethod: true,
+      showExpectedShipmentDate: isPackingSlip,
+      showPaymentMethod: !isCreditNote && !isPackingSlip,
     },
     billingDetails: [
       { key: "company", enabled: true, label: "Company" },
@@ -2499,15 +3549,43 @@ export function defaultTemplateSettings(
       customer: "Bill To",
       shipping: "Ship To",
       customerDetails: "Customer Details",
-      documentTitle: isInvoice ? "INVOICE" : "SALES ORDER",
-      orderNumber: isInvoice ? "Invoice#" : "Sales Order#",
-      date: isInvoice ? "Invoice Date" : "Order Date",
-      reference: "Ref#",
+      documentTitle: isPackingSlip
+        ? "PACKING SLIP"
+        : isCreditNote
+          ? "CREDIT NOTE"
+          : isInvoice
+            ? "INVOICE"
+            : "SALES ORDER",
+      orderNumber: isPackingSlip
+        ? "Packing Slip#"
+        : isCreditNote
+          ? "Credit Note#"
+          : isInvoice
+            ? "Invoice#"
+            : "Sales Order#",
+      date: isPackingSlip
+        ? "Packing Date"
+        : isCreditNote
+          ? "Credit Note Date"
+          : isInvoice
+            ? "Invoice Date"
+            : "Order Date",
+      reference: isPackingSlip
+        ? "Order Ref#"
+        : isCreditNote
+          ? "Invoice Ref#"
+          : "Ref#",
       expectedShipmentDate: "Expected Shipment Date",
       paymentMethod: "Payment Method",
     },
     numbering: {
-      prefix: isInvoice ? "INV-" : "SO-",
+      prefix: isPackingSlip
+        ? "PS-"
+        : isCreditNote
+          ? "CN-"
+          : isInvoice
+            ? "INV-"
+            : "SO-",
       startingNumber: "0001",
       suffix: "",
     },
@@ -2523,34 +3601,51 @@ export function defaultTemplateSettings(
     columns: defaultColumnsForPreset(preset),
     selectedCustomFields: [],
     totals: {
-      showSubtotal: true,
+      showSubtotal: !isPackingSlip,
       subtotalLabel: "Sub Total",
-      showQuantity: false,
-      itemsInTotalLabel: "Items in Total",
-      // Invoice: tax line details + tax summary table off by default.
-      // Sales-order premium: tax line details on.
-      showTaxLines: isPremium && !isInvoice,
-      showDiscountAmount: true,
+      showQuantity: isPackingSlip,
+      itemsInTotalLabel: isPackingSlip ? "Items packed" : "Items in Total",
+      // Invoice / credit note / packing: tax line details off by default.
+      showTaxLines: isPremium && !isInvoice && !isCreditNote && !isPackingSlip,
+      showDiscountAmount: !isPackingSlip,
       discountAmountLabel: "Discount",
-      showShippingPrice: true,
+      showShippingPrice: !isCreditNote && !isPackingSlip,
       shippingPriceLabel: "Shipping Charge",
-      showVatAmount: true,
+      showVatAmount: !isPackingSlip,
       vatAmountLabel: "Total Tax",
-      showPaidAmount: isInvoice ? true : preset.showPaidAmount === true,
+      showPaidAmount: isCreditNote || isPackingSlip
+        ? false
+        : isInvoice
+          ? true
+          : preset.showPaidAmount === true,
       paidAmountLabel: "Paid Amount",
-      showBalanceDue:
-        isInvoice || templateId === "sales-standard"
+      showBalanceDue: isCreditNote || isPackingSlip
+        ? false
+        : isInvoice || templateId === "sales-standard"
           ? true
           : preset.showBalanceDue === true,
       balanceDueLabel: "Balance Due",
-      refundedAmountLabel: "Refunded Amount",
+      refundedAmountLabel: isCreditNote ? "Credit Amount" : "Refunded Amount",
       paymentStatusStyle: preset.paymentStatusStyle,
-      totalLabel: "Total",
+      totalLabel: isPackingSlip
+        ? "Packed Total"
+        : isCreditNote
+          ? "Credit Total"
+          : "Total",
     },
     notesLabel: "Notes",
-    notes: "Thanks for your business.",
+    notes: isPackingSlip
+      ? "Please check contents against this packing slip."
+      : isCreditNote
+        ? "Credit issued against the referenced invoice."
+        : "Thanks for your business.",
+    preferShopifyOrderNote: false,
     termsLabel: "Terms & Conditions",
-    terms: "Payment is due on receipt.",
+    terms: isPackingSlip
+      ? "Report missing or damaged items within 48 hours of delivery."
+      : isCreditNote
+        ? "This credit note may be applied to future purchases or refunded as agreed."
+        : "Payment is due on receipt.",
     showSignature: false,
     showStamp: false,
   };
@@ -2598,6 +3693,7 @@ export function mergeTemplateSettings(
           }
       : taxSummary,
     showTaxSummaryTable: undefined,
+    preferShopifyOrderNote: input.preferShopifyOrderNote === true,
     showSignature: input.showSignature === true,
     showStamp: input.showStamp === true,
     logoPosition: needsLookUpgrade

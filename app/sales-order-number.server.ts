@@ -4,6 +4,17 @@ import {
   type TemplateEditorSettings,
 } from "./sales-order-document";
 import { getInvoicedOrderGids } from "./order-invoice-status.server";
+import {
+  parseNumberSeriesDigits,
+  widenStartingNumberPad,
+  numberingFromSeries,
+} from "./number-series";
+import {
+  loadNumberSeriesEntryForShop,
+  loadNumberSeriesForShop,
+  saveNumberSeriesEntryMode,
+  saveNumberSeriesForShop,
+} from "./shop-settings.server";
 
 export function numberingMeta(numbering: TemplateEditorSettings["numbering"]) {
   const padLength = Math.max(numbering.startingNumber.length, 1);
@@ -295,7 +306,7 @@ export async function allocateSalesOrderDocumentNumber(
   );
 }
 
-type AdminGraphql = {
+export type AdminGraphql = {
   graphql: (
     query: string,
     options?: { variables?: Record<string, unknown> },
@@ -371,13 +382,13 @@ export async function fetchAllOrderGidsOldestFirst(
 /**
  * Assigns document numbers to existing Shopify orders that do not have one yet.
  * Orders are numbered oldest → newest. Already assigned numbers are never changed.
- * Saves an undo snapshot so the last assign can be reverted.
  */
 export async function backfillSalesOrderDocumentNumbers(
   shop: string,
   templateId: string,
   numbering: TemplateEditorSettings["numbering"],
   orderGids: string[],
+  options?: { persistUndo?: boolean },
 ): Promise<{
   assigned: number;
   skipped: number;
@@ -425,7 +436,7 @@ export async function backfillSalesOrderDocumentNumbers(
     assigned += 1;
   }
 
-  if (assignedOrderGids.length > 0) {
+  if (options?.persistUndo === true && assignedOrderGids.length > 0) {
     await saveNumberBackfillUndo(shop, {
       templateId,
       orderGids: assignedOrderGids,
@@ -440,7 +451,7 @@ export async function backfillSalesOrderDocumentNumbers(
     skipped,
     lastNumber,
     lastAllocatedSequence: await getLastAllocatedSequence(shop, templateId),
-    canUndo: assignedOrderGids.length > 0,
+    canUndo: options?.persistUndo === true && assignedOrderGids.length > 0,
   };
 }
 
@@ -668,6 +679,11 @@ export type UpdateSalesOrderDetailsInput = {
   documentDate: Date;
   customerNote: string;
   terms: string;
+  /**
+   * `continue` (default): keep auto series; next new orders start after this number.
+   * `manual`: switch shop to manual SO numbering after save.
+   */
+  numberMode?: "continue" | "manual";
 };
 
 /** Update SO number, date, customer note, and terms for one order. */
@@ -681,6 +697,7 @@ export async function updateSalesOrderDocumentDetails(
   const documentDate = input.documentDate;
   const customerNote = input.customerNote.trim();
   const terms = input.terms.trim();
+  const numberMode = input.numberMode === "manual" ? "manual" : "continue";
 
   if (!documentNumber) {
     return { ok: false, error: "Sales order number is required" };
@@ -718,10 +735,27 @@ export async function updateSalesOrderDocumentDetails(
   }
 
   try {
+    const series = await loadNumberSeriesEntryForShop(shop, "sales-order");
+    const parsed = parseNumberSeriesDigits(documentNumber, series);
+    const sequence = parsed?.sequence ?? null;
+
+    // Free unique (shop, templateId, sequence) if another row owns this number.
+    if (sequence != null) {
+      await prisma.$executeRaw`
+        UPDATE "SalesOrderDocumentNumber"
+        SET sequence = NULL, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE shop = ${shop}
+          AND "templateId" = ${templateId}
+          AND sequence = ${sequence}
+          AND "orderGid" <> ${orderGid}
+      `;
+    }
+
     await prisma.$executeRaw`
       UPDATE "SalesOrderDocumentNumber"
       SET
         "documentNumber" = ${documentNumber},
+        sequence = ${sequence},
         "documentDate" = ${documentDate},
         "customerNote" = ${customerNote || null},
         terms = ${terms || null},
@@ -730,6 +764,45 @@ export async function updateSalesOrderDocumentDetails(
         AND "templateId" = ${templateId}
         AND "orderGid" = ${orderGid}
     `;
+
+    // Continue auto series after this number (SO-0006 → next SO-0007).
+    if (parsed) {
+      await syncNumberCounter(
+        shop,
+        templateId,
+        numberingFromSeries(series),
+        parsed.sequence + 1,
+      );
+
+      const allSeries = await loadNumberSeriesForShop(shop);
+      const current = allSeries["sales-order"];
+      const widened = widenStartingNumberPad(
+        current.startingNumber,
+        parsed.digitWidth,
+      );
+      const nextEntryMode =
+        numberMode === "manual" ? ("manual" as const) : ("auto" as const);
+      if (
+        widened !== current.startingNumber ||
+        current.entryMode !== nextEntryMode
+      ) {
+        await saveNumberSeriesForShop(shop, {
+          ...allSeries,
+          "sales-order": {
+            ...current,
+            startingNumber: widened,
+            entryMode: nextEntryMode,
+          },
+        });
+      }
+    } else if (numberMode === "manual") {
+      await saveNumberSeriesEntryMode(shop, "sales-order", "manual");
+    } else {
+      const current = await loadNumberSeriesEntryForShop(shop, "sales-order");
+      if (current.entryMode === "manual") {
+        await saveNumberSeriesEntryMode(shop, "sales-order", "auto");
+      }
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update sales order";

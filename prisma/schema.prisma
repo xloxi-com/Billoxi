@@ -9,8 +9,9 @@ generator client {
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Session {
@@ -56,6 +57,8 @@ model ShopSettings {
   selectedTemplates  Json     @default("{}")
   numberSeries       Json     @default("{}")
   numberBackfillUndo Json?
+  /// Set when existing Shopify orders were numbered on install / first sync.
+  salesOrderNumbersSyncedAt DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -119,5 +122,28 @@ model OrderPackingSlipStatus {
   updatedAt   DateTime @updatedAt
 
   @@unique([shop, orderGid])
+  @@index([shop])
+}
+
+model OrderCreditNoteStatus {
+  id             String    @id @default(cuid())
+  shop           String
+  orderGid       String
+  convertedAt    DateTime  @default(now())
+  sequence       Int?
+  documentNumber String?
+  /** Merchant reason for issuing the credit note. */
+  reason         String?
+  customerNote   String?
+  terms          String?
+  /** Deprecated — unused; kept for existing DBs. */
+  creditAmount   String?
+  voidedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([shop, orderGid])
+  @@unique([shop, sequence])
+  @@unique([shop, documentNumber])
   @@index([shop])
 }

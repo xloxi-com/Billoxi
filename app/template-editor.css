@@ -292,6 +292,27 @@
   font-size: var(--doc-customer-details-size, 1em);
 }
 
+/* Packing slips hide Bill To — pin Ship To + Customer Details to the left. */
+.live-document--packing-slip .live-document__customer--shipping {
+  grid-column: 1;
+}
+
+.live-document--packing-slip .live-document__customer--details {
+  grid-column: 2;
+}
+
+/*
+ * European right-aligns party blocks for invoice Bill To.
+ * On packing slips those blocks must sit left; org / totals / qty stay right.
+ */
+.live-document--packing-slip.live-document--european
+  .live-document__address-blocks
+  > .live-document__customer {
+  order: unset;
+  align-items: flex-start;
+  text-align: left;
+}
+
 .live-document__customer--details > span:first-child,
 .live-document__customer--details > .live-document__address-label {
   color: var(--doc-muted-color, #737373);
@@ -1179,6 +1200,52 @@
 .live-document--compact .live-document__table td {
   padding-top: 0.22em;
   padding-bottom: 0.22em;
+}
+
+/* Packing Compact — org left, title + dates right-aligned */
+.live-document--packing-slip.live-document--compact .live-document__header {
+  margin-bottom: 1.35em;
+}
+
+.live-document--packing-slip.live-document--compact .live-document__title {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.live-document--packing-slip.live-document--compact .live-document__metadata {
+  margin-left: auto;
+  margin-right: 0;
+  text-align: right;
+}
+
+.live-document--packing-slip.live-document--compact.live-document--logo-center .live-document__header {
+  grid-template-columns: 1fr 1fr;
+}
+
+.live-document--packing-slip.live-document--compact.live-document--logo-center
+  .live-document__organization {
+  align-items: flex-start;
+  text-align: left;
+  order: unset;
+}
+
+.live-document--packing-slip.live-document--compact.live-document--logo-center
+  .live-document__title {
+  align-items: flex-end;
+  text-align: right;
+}
+
+/* Packing Compact — same cell padding for header + body (not ultra-dense) */
+.live-document--packing-slip.live-document--compact .live-document__table th,
+.live-document--packing-slip.live-document--compact .live-document__table td {
+  padding-top: 0.75em;
+  padding-bottom: 0.75em;
+  padding-left: 0.6em;
+  padding-right: 0.6em;
+}
+
+.live-document--packing-slip.live-document--compact .live-document__table th {
+  vertical-align: middle;
 }
 
 .live-document--minimal .live-document__title h1 {

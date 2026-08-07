@@ -11,7 +11,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatNumberSeriesNextPreview,
-  formatNumberSeriesValue,
   normalizeNumberSeries,
   NUMBER_SERIES_MODULES,
   numberingFromSeries,
@@ -48,16 +47,11 @@ import {
   saveStoreDetailsForShop,
 } from "../shop-settings.server";
 import {
-  backfillSalesOrderDocumentNumbers,
-  fetchAllOrderGidsOldestFirst,
   getLastAllocatedSequence,
-  getNumberBackfillUndoStatus,
-  revertLastSalesOrderNumberBackfill,
   syncNumberCounter,
   validateStartingNumber,
 } from "../sales-order-number.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-document";
-import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import "../settings.css";
 
 type SettingsSection = "store-details" | "number-series" | "smtp";
@@ -124,13 +118,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     storeDetails,
     smtpSettings,
     numberSeries,
-    numberBackfillUndo,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
     loadNumberSeriesForShop(session.shop),
-    getNumberBackfillUndoStatus(session.shop),
   ]);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
     selectedSalesOrderTemplateIdRaw,
@@ -154,7 +146,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     lastAllocatedSequence,
     lastAllocatedByModule,
     invoiceDigitWidth,
-    numberBackfillUndo,
   };
 }
 
@@ -278,77 +269,6 @@ export async function action({ request }: ActionFunctionArgs) {
     };
   }
 
-  if (intent === "backfill-numbers") {
-    const numberSeries = await loadNumberSeriesForShop(session.shop);
-    const selectedTemplateId = resolveSalesOrderTemplateId(
-      await loadSelectedTemplateForShop(session.shop, "sales-order"),
-    );
-    try {
-      const orderGids = await fetchAllOrderGidsOldestFirst(admin);
-      const result = await backfillSalesOrderDocumentNumbers(
-        session.shop,
-        selectedTemplateId,
-        numberingFromSeries(numberSeries["sales-order"]),
-        orderGids,
-      );
-      invalidateSalesOrdersCache(session.shop);
-      return {
-        backfilled: true,
-        assigned: result.assigned,
-        skipped: result.skipped,
-        lastNumber: result.lastNumber,
-        lastAllocatedSequence: result.lastAllocatedSequence,
-        canUndo: result.canUndo,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          backfilled: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to assign numbers to existing orders.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (intent === "revert-backfill-numbers") {
-    try {
-      const result = await revertLastSalesOrderNumberBackfill(session.shop);
-      if (!result.ok) {
-        return Response.json(
-          {
-            revertedBackfill: false,
-            error: result.error,
-            invoicedCount: result.invoicedCount,
-            canUndo: false,
-          },
-          { status: 400 },
-        );
-      }
-      invalidateSalesOrdersCache(session.shop);
-      return {
-        revertedBackfill: true,
-        reverted: result.reverted,
-        lastAllocatedSequence: result.lastAllocatedSequence,
-        canUndo: false,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          revertedBackfill: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to undo the last number assignment.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
   const raw = formData.get("storeDetails");
   if (typeof raw !== "string") {
     return Response.json(
@@ -422,12 +342,6 @@ export default function SettingsPage() {
   const [previewDrafts, setPreviewDrafts] = useState<
     Partial<Record<NumberSeriesModuleId, string>>
   >({});
-  const [backfillUndo, setBackfillUndo] = useState<{
-    assignedCount: number;
-    assignedAt: string;
-    canUndo: boolean;
-    invoicedCount: number;
-  } | null>(data.numberBackfillUndo);
   const [isStoreDirty, setIsStoreDirty] = useState(false);
   const [isSmtpDirty, setIsSmtpDirty] = useState(false);
   const [isNumberSeriesDirty, setIsNumberSeriesDirty] = useState(false);
@@ -467,7 +381,6 @@ export default function SettingsPage() {
     setLastAllocatedSequence(data.lastAllocatedSequence);
     setLastAllocatedByModule(data.lastAllocatedByModule);
     setInvoiceDigitWidth(data.invoiceDigitWidth);
-    setBackfillUndo(data.numberBackfillUndo);
     setIsNumberSeriesDirty(false);
     setIsEditingSeries(false);
   }, [
@@ -475,92 +388,12 @@ export default function SettingsPage() {
     data.lastAllocatedSequence,
     data.lastAllocatedByModule,
     data.invoiceDigitWidth,
-    data.numberBackfillUndo,
   ]);
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     if (handledFetcherDataRef.current === fetcher.data) return;
     handledFetcherDataRef.current = fetcher.data;
-
-    if ("backfilled" in fetcher.data && fetcher.data.backfilled) {
-      if (
-        "lastAllocatedSequence" in fetcher.data &&
-        (typeof fetcher.data.lastAllocatedSequence === "number" ||
-          fetcher.data.lastAllocatedSequence === null)
-      ) {
-        const nextLast = fetcher.data.lastAllocatedSequence;
-        setLastAllocatedSequence(nextLast);
-        setLastAllocatedByModule((current) => ({
-          ...current,
-          "sales-order": nextLast,
-        }));
-      }
-      const assigned =
-        "assigned" in fetcher.data ? Number(fetcher.data.assigned) : 0;
-      if (assigned > 0 && "canUndo" in fetcher.data && fetcher.data.canUndo) {
-        setBackfillUndo({
-          assignedCount: assigned,
-          assignedAt: new Date().toISOString(),
-          canUndo: true,
-          invoicedCount: 0,
-        });
-      }
-      if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show(
-          assigned > 0
-            ? `Assigned ${assigned} sales order number${assigned === 1 ? "" : "s"}`
-            : "All existing orders already have numbers",
-        );
-      }
-      return;
-    }
-
-    if ("revertedBackfill" in fetcher.data) {
-      if (fetcher.data.revertedBackfill) {
-        if (
-          "lastAllocatedSequence" in fetcher.data &&
-          (typeof fetcher.data.lastAllocatedSequence === "number" ||
-            fetcher.data.lastAllocatedSequence === null)
-        ) {
-          const nextLast = fetcher.data.lastAllocatedSequence;
-          setLastAllocatedSequence(nextLast);
-          setLastAllocatedByModule((current) => ({
-            ...current,
-            "sales-order": nextLast,
-          }));
-        }
-        setBackfillUndo(null);
-        if (typeof shopify !== "undefined" && shopify.toast) {
-          const reverted =
-            "reverted" in fetcher.data ? Number(fetcher.data.reverted) : 0;
-          shopify.toast.show(
-            reverted > 0
-              ? `Reverted ${reverted} sales order number${reverted === 1 ? "" : "s"}`
-              : "Nothing to undo",
-          );
-        }
-      } else if (
-        typeof shopify !== "undefined" &&
-        shopify.toast &&
-        "error" in fetcher.data &&
-        typeof fetcher.data.error === "string"
-      ) {
-        shopify.toast.show(fetcher.data.error, { isError: true });
-        if (
-          "invoicedCount" in fetcher.data &&
-          typeof fetcher.data.invoicedCount === "number"
-        ) {
-          const invoicedCount = fetcher.data.invoicedCount;
-          setBackfillUndo((current) =>
-            current
-              ? { ...current, canUndo: false, invoicedCount }
-              : current,
-          );
-        }
-      }
-      return;
-    }
 
     if (!("saved" in fetcher.data) || !fetcher.data.saved) {
       return;
@@ -805,14 +638,6 @@ export default function SettingsPage() {
     fetcher.submit({ intent: "reset" }, { method: "post" });
   };
 
-  const backfillExistingOrderNumbers = () => {
-    fetcher.submit({ intent: "backfill-numbers" }, { method: "post" });
-  };
-
-  const revertLastBackfill = () => {
-    fetcher.submit({ intent: "revert-backfill-numbers" }, { method: "post" });
-  };
-
   const switchSection = (section: SettingsSection) => {
     if (isDirty && section !== activeSection) {
       discard();
@@ -822,14 +647,6 @@ export default function SettingsPage() {
       setIsEditingSeries(false);
     }
   };
-
-  const salesOrderNextNumber = formatNumberSeriesValue(
-    numberSeries["sales-order"],
-    resolveNumberSeriesNextSequence(
-      numberSeries["sales-order"],
-      lastAllocatedSequence,
-    ),
-  );
 
   const previewForModule = (moduleId: NumberSeriesModuleId) => {
     const entry = numberSeries[moduleId];
@@ -1275,163 +1092,6 @@ export default function SettingsPage() {
                         </s-table-body>
                       </s-table>
                     </s-box>
-
-                    {!isEditingSeries ? (
-                      <s-banner tone="info" heading="Transaction number">
-                        <s-stack direction="block" gap="small">
-                          <s-paragraph>
-                            Assign numbers to existing Shopify orders (oldest
-                            first) using the saved Sales Order series. Orders
-                            that already have a number are skipped. Next number:{" "}
-                            <s-text type="strong">{salesOrderNextNumber}</s-text>
-                          </s-paragraph>
-                          <s-stack direction="inline" gap="small">
-                            <s-button
-                              variant="secondary"
-                              commandFor="assign-numbers-modal"
-                              command="--show"
-                              loading={
-                                (isSaving &&
-                                  fetcher.formData?.get("intent") ===
-                                    "backfill-numbers") ||
-                                undefined
-                              }
-                              disabled={
-                                isNumberSeriesDirty || isSaving || undefined
-                              }
-                            >
-                              Assign to existing orders
-                            </s-button>
-                            {backfillUndo ? (
-                              <s-button
-                                variant="tertiary"
-                                tone="critical"
-                                commandFor={
-                                  backfillUndo.canUndo
-                                    ? "revert-numbers-modal"
-                                    : undefined
-                                }
-                                command={
-                                  backfillUndo.canUndo ? "--show" : undefined
-                                }
-                                loading={
-                                  (isSaving &&
-                                    fetcher.formData?.get("intent") ===
-                                      "revert-backfill-numbers") ||
-                                  undefined
-                                }
-                                disabled={
-                                  !backfillUndo.canUndo || isSaving || undefined
-                                }
-                              >
-                                Undo last assign
-                              </s-button>
-                            ) : null}
-                          </s-stack>
-                          {backfillUndo ? (
-                            <s-paragraph color="subdued">
-                              {backfillUndo.canUndo
-                                ? `Last assign added ${backfillUndo.assignedCount} number${backfillUndo.assignedCount === 1 ? "" : "s"}. You can undo that run once.`
-                                : `Undo is disabled: ${backfillUndo.invoicedCount} order${backfillUndo.invoicedCount === 1 ? "" : "s"} from the last assign ${backfillUndo.invoicedCount === 1 ? "was" : "were"} converted to invoice. Delete ${backfillUndo.invoicedCount === 1 ? "that invoice" : "those invoices"} to enable undo again.`}
-                            </s-paragraph>
-                          ) : null}
-                        </s-stack>
-                      </s-banner>
-                    ) : null}
-
-                    <s-modal
-                      id="assign-numbers-modal"
-                      heading="Assign numbers to existing orders?"
-                    >
-                      <s-paragraph>
-                        Numbers will be assigned to Shopify orders oldest first,
-                        starting from{" "}
-                        <s-text type="strong">{salesOrderNextNumber}</s-text>.
-                        Orders that already have a number are skipped. You can
-                        undo the last assign if needed.
-                      </s-paragraph>
-                      <s-button
-                        slot="secondary-actions"
-                        commandFor="assign-numbers-modal"
-                        command="--hide"
-                        disabled={isSaving || undefined}
-                      >
-                        Cancel
-                      </s-button>
-                      <s-button
-                        slot="primary-action"
-                        variant="primary"
-                        commandFor="assign-numbers-modal"
-                        command="--hide"
-                        loading={
-                          (isSaving &&
-                            fetcher.formData?.get("intent") ===
-                              "backfill-numbers") ||
-                          undefined
-                        }
-                        disabled={isSaving || undefined}
-                        onClick={backfillExistingOrderNumbers}
-                      >
-                        Assign numbers
-                      </s-button>
-                    </s-modal>
-
-                    <s-modal
-                      id="revert-numbers-modal"
-                      heading="Undo last number assign?"
-                    >
-                      <s-paragraph>
-                        This removes the{" "}
-                        <s-text type="strong">
-                          {backfillUndo?.assignedCount ?? 0}
-                        </s-text>{" "}
-                        sales order number
-                        {(backfillUndo?.assignedCount ?? 0) === 1 ? "" : "s"}{" "}
-                        from the last “Assign to existing orders” run. Numbers
-                        assigned earlier or from normal use are kept.
-                      </s-paragraph>
-                      {!backfillUndo?.canUndo ? (
-                        <s-paragraph>
-                          Undo is currently blocked because{" "}
-                          {backfillUndo?.invoicedCount ?? 0} of those orders
-                          {(backfillUndo?.invoicedCount ?? 0) === 1
-                            ? " has"
-                            : " have"}{" "}
-                          an invoice. Delete the invoice
-                          {(backfillUndo?.invoicedCount ?? 0) === 1
-                            ? ""
-                            : "s"}{" "}
-                          first.
-                        </s-paragraph>
-                      ) : null}
-                      <s-button
-                        slot="secondary-actions"
-                        commandFor="revert-numbers-modal"
-                        command="--hide"
-                        disabled={isSaving || undefined}
-                      >
-                        Cancel
-                      </s-button>
-                      <s-button
-                        slot="primary-action"
-                        variant="primary"
-                        tone="critical"
-                        commandFor="revert-numbers-modal"
-                        command="--hide"
-                        loading={
-                          (isSaving &&
-                            fetcher.formData?.get("intent") ===
-                              "revert-backfill-numbers") ||
-                          undefined
-                        }
-                        disabled={
-                          !backfillUndo?.canUndo || isSaving || undefined
-                        }
-                        onClick={revertLastBackfill}
-                      >
-                        Undo assign
-                      </s-button>
-                    </s-modal>
 
                     {isNumberSeriesDirty ? (
                       <s-paragraph color="subdued">
