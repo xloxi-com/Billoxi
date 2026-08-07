@@ -23,7 +23,7 @@ import prisma from "./db.server";
 
 const PAGE_SIZE = 25;
 /** Keep list hot while browsing Admin — invalidate on convert/delete/update. */
-const CACHE_TTL_MS = 180_000;
+const CACHE_TTL_MS = 300_000;
 const CACHE_MAX_ENTRIES = 80;
 const SEARCH_MATCH_LIMIT = 50;
 
@@ -950,8 +950,8 @@ export async function loadSalesOrdersPage(
 
     const ensuredInvoiceNumbers = new Map<string, string>();
 
-    // Credit note / packing slip lists: prefer existing numbers; backfill missing
-    // without blocking the response when possible.
+    // Credit note / packing slip lists: never block navigation on allocate.
+    // Missing numbers backfill in background; next load / detail shows them.
     let ensuredCreditNoteNumbers = new Map<string, string>();
     if (forceCreditNote && orderGids.length > 0) {
       const missing = orderGids.filter((gid) => {
@@ -959,11 +959,9 @@ export async function loadSalesOrdersPage(
         return !num;
       });
       if (missing.length > 0) {
-        // Await only missing — usually empty after first visit.
-        ensuredCreditNoteNumbers = await ensureCreditNoteDocumentNumbers(
-          shop,
-          missing,
-        );
+        void ensureCreditNoteDocumentNumbers(shop, missing).catch((error) => {
+          console.error("Background credit-note number ensure failed:", error);
+        });
       }
     }
 
@@ -974,10 +972,9 @@ export async function loadSalesOrdersPage(
         return !num;
       });
       if (missing.length > 0) {
-        ensuredPackingSlipNumbers = await ensurePackingSlipDocumentNumbers(
-          shop,
-          missing,
-        );
+        void ensurePackingSlipDocumentNumbers(shop, missing).catch((error) => {
+          console.error("Background packing-slip number ensure failed:", error);
+        });
       }
     }
 

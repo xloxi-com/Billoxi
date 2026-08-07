@@ -47,6 +47,18 @@ const numberSeriesCache = new Map<
   { expires: number; value: NumberSeriesMap }
 >();
 
+const STORE_DETAILS_TTL_MS = 120_000;
+const storeDetailsCache = new Map<
+  string,
+  { expires: number; value: StoreDetails }
+>();
+
+function invalidateStoreDetailsCache(shop: string) {
+  for (const key of storeDetailsCache.keys()) {
+    if (key.startsWith(`${shop}|`)) storeDetailsCache.delete(key);
+  }
+}
+
 function parseJsonObject(value: unknown): Record<string, unknown> {
   const raw =
     typeof value === "string"
@@ -199,7 +211,15 @@ export async function saveEmailTemplatesForShop(
 export async function loadStoreDetailsForShop(
   shop: string,
   admin: { graphql: (query: string) => Promise<Response> },
+  options?: { includeLogo?: boolean },
 ): Promise<StoreDetails> {
+  const includeLogo = options?.includeLogo !== false;
+  const cacheKey = `${shop}|logo:${includeLogo ? "1" : "0"}`;
+  const cached = storeDetailsCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.value;
+  }
+
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT "storeDetails"
     FROM "ShopSettings"
@@ -221,6 +241,8 @@ export async function loadStoreDetailsForShop(
         asNonEmptyAddress(rawRecord?.country)),
   );
 
+  let result: StoreDetails;
+
   // Fast path: shop already saved complete store details — skip Shopify GraphQL.
   if (
     rows[0] &&
@@ -228,19 +250,29 @@ export async function loadStoreDetailsForShop(
     fromDb.name &&
     !rawHasLegacyAddress
   ) {
-    return fromDb;
+    result = fromDb;
+  } else {
+    const shopDefaults = await fetchShopStoreDefaults(admin, shop);
+    const merged = mergeStoreDetails(raw, shopDefaults);
+    const filledFromShopify = !rawHasAddress && Boolean(merged.address);
+
+    // Persist migrated / backfilled address so documents keep showing it.
+    if (rows[0] && (rawHasLegacyAddress || filledFromShopify)) {
+      await saveStoreDetailsForShop(shop, merged);
+    }
+    result = merged;
   }
 
-  const shopDefaults = await fetchShopStoreDefaults(admin, shop);
-  const merged = mergeStoreDetails(raw, shopDefaults);
-  const filledFromShopify = !rawHasAddress && Boolean(merged.address);
-
-  // Persist migrated / backfilled address so documents keep showing it.
-  if (rows[0] && (rawHasLegacyAddress || filledFromShopify)) {
-    await saveStoreDetailsForShop(shop, merged);
+  if (!includeLogo) {
+    const { logoDataUrl: _logo, logoFileName: _name, ...rest } = result;
+    result = rest;
   }
 
-  return merged;
+  storeDetailsCache.set(cacheKey, {
+    expires: Date.now() + STORE_DETAILS_TTL_MS,
+    value: result,
+  });
+  return result;
 }
 
 function parseStoreDetailsJson(value: unknown): unknown {
@@ -291,6 +323,7 @@ export async function saveStoreDetailsForShop(
     `;
   }
 
+  invalidateStoreDetailsCache(shop);
   return normalized;
 }
 

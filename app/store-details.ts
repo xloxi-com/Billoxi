@@ -11,6 +11,9 @@ export type StoreDetails = {
   phone: string;
   email: string;
   website: string;
+  /** Shared document logo (data URL). Used by all templates. */
+  logoDataUrl?: string;
+  logoFileName?: string;
   customFields: StoreCustomField[];
 };
 
@@ -22,6 +25,18 @@ export const emptyStoreDetails: StoreDetails = {
   website: "",
   customFields: [],
 };
+
+const LOGO_DATA_URL_RE = /^data:image\/(?:png|jpeg|webp);base64,/i;
+const MAX_LOGO_DATA_URL_LENGTH = 1_500_000;
+
+export function normalizeStoreLogoDataUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!LOGO_DATA_URL_RE.test(trimmed)) return undefined;
+  if (trimmed.length > MAX_LOGO_DATA_URL_LENGTH) return undefined;
+  return trimmed;
+}
 
 type ShopAddress = {
   company?: string | null;
@@ -127,12 +142,24 @@ export function normalizeStoreDetails(value: unknown): StoreDetails {
   const input = value as Partial<StoreDetails> & LegacyStoreAddressFields;
   const address =
     asAddressString(input.address) || composeLegacyAddress(input);
+  const logoDataUrl = normalizeStoreLogoDataUrl(
+    (input as { logoDataUrl?: unknown }).logoDataUrl,
+  );
+  const logoFileName = asTrimmedString(
+    (input as { logoFileName?: unknown }).logoFileName,
+  );
   return {
     name: asTrimmedString(input.name),
     address,
     phone: asTrimmedString(input.phone),
     email: asTrimmedString(input.email),
     website: formatStoreWebsite(asTrimmedString(input.website)),
+    ...(logoDataUrl
+      ? {
+          logoDataUrl,
+          ...(logoFileName ? { logoFileName } : {}),
+        }
+      : {}),
     customFields: normalizeStoreCustomFields(input.customFields),
   };
 }
@@ -182,6 +209,21 @@ export function mergeStoreDetails(
     phone: normalized.phone || shopDefaults.phone,
     email: normalized.email || shopDefaults.email,
     website: normalized.website || shopDefaults.website,
+    ...(normalized.logoDataUrl
+      ? {
+          logoDataUrl: normalized.logoDataUrl,
+          ...(normalized.logoFileName
+            ? { logoFileName: normalized.logoFileName }
+            : {}),
+        }
+      : shopDefaults.logoDataUrl
+        ? {
+            logoDataUrl: shopDefaults.logoDataUrl,
+            ...(shopDefaults.logoFileName
+              ? { logoFileName: shopDefaults.logoFileName }
+              : {}),
+          }
+        : {}),
     customFields: normalized.customFields,
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -24,7 +24,9 @@ import {
   Box,
   Collapsible,
   DataTable,
+  DropZone,
   Icon,
+  Thumbnail,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
@@ -38,7 +40,13 @@ import {
   StoreIcon,
 } from "@shopify/polaris-icons";
 
-import { EmailBodyEditor, type EmailBodyEditorHandle } from "../components/email-body-editor";
+import type { EmailBodyEditorHandle } from "../components/email-body-editor";
+
+const EmailBodyEditor = lazy(() =>
+  import("../components/email-body-editor").then((mod) => ({
+    default: mod.EmailBodyEditor,
+  })),
+);
 import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatNumberSeriesNextPreview,
@@ -502,6 +510,8 @@ export default function SettingsPage() {
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(
     data.storeDetails,
   );
+  const [logoError, setLogoError] = useState("");
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>(
     data.smtpSettings,
   );
@@ -732,6 +742,27 @@ export default function SettingsPage() {
   ) => {
     setStoreDetails((current) => ({ ...current, [key]: value }));
     setIsStoreDirty(true);
+  };
+
+  const uploadStoreLogo = (files: File[]) => {
+    const file = files[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      setLogoError("Logo must be smaller than 1 MB.");
+      return;
+    }
+    setLogoError("");
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result !== "string") return;
+      setStoreDetails((current) => ({
+        ...current,
+        logoDataUrl: reader.result as string,
+        logoFileName: file.name,
+      }));
+      setIsStoreDirty(true);
+    });
+    reader.readAsDataURL(file);
   };
 
   const updateSmtpField = <K extends keyof SmtpSettings>(
@@ -1227,6 +1258,92 @@ export default function SettingsPage() {
                             autoComplete="off"
                             helpText="Shown on document headers as Website: www.your-site.com"
                           />
+
+                          <Divider />
+
+                          <BlockStack gap="300">
+                            <Text as="h3" variant="headingSm">
+                              Store logo
+                            </Text>
+                            <Text as="p" tone="subdued">
+                              Used on every sales order, invoice, credit note,
+                              and packing slip template. Set size per template
+                              in Templates → Edit → Transaction details.
+                            </Text>
+                            {logoError ? (
+                              <Banner tone="critical" onDismiss={() => setLogoError("")}>
+                                {logoError}
+                              </Banner>
+                            ) : null}
+                            {storeDetails.logoDataUrl ? (
+                              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                                <Thumbnail
+                                  source={storeDetails.logoDataUrl}
+                                  alt={storeDetails.logoFileName || "Store logo"}
+                                  size="medium"
+                                />
+                                <BlockStack gap="200">
+                                  <InlineStack gap="200">
+                                    <Button
+                                      onClick={() => logoInputRef.current?.click()}
+                                    >
+                                      Change logo
+                                    </Button>
+                                    <Button
+                                      tone="critical"
+                                      variant="plain"
+                                      onClick={() => {
+                                        setStoreDetails((current) => {
+                                          const next = { ...current };
+                                          delete next.logoDataUrl;
+                                          delete next.logoFileName;
+                                          return next;
+                                        });
+                                        setIsStoreDirty(true);
+                                        setLogoError("");
+                                      }}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </InlineStack>
+                                  <Text as="p" tone="subdued" variant="bodySm">
+                                    {storeDetails.logoFileName || "PNG, JPG, or WebP"}
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                            ) : (
+                              <DropZone
+                                accept="image/png,image/jpeg,image/webp"
+                                allowMultiple={false}
+                                type="image"
+                                onDropAccepted={uploadStoreLogo}
+                                onDropRejected={() =>
+                                  setLogoError(
+                                    "Upload a PNG, JPG, or WebP image smaller than 1 MB.",
+                                  )
+                                }
+                              >
+                                <DropZone.FileUpload
+                                  actionTitle="Upload logo"
+                                  actionHint="PNG, JPG, or WebP · Maximum 1 MB"
+                                />
+                              </DropZone>
+                            )}
+                            <input
+                              ref={logoInputRef}
+                              accept="image/png,image/jpeg,image/webp"
+                              type="file"
+                              hidden
+                              onChange={(event) => {
+                                uploadStoreLogo(
+                                  event.currentTarget.files
+                                    ? Array.from(event.currentTarget.files)
+                                    : [],
+                                );
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </BlockStack>
 
                           <Divider />
 
@@ -1749,15 +1866,23 @@ export default function SettingsPage() {
                             />
                           </InlineStack>
 
-                          <EmailBodyEditor
-                            key={emailTemplateKind}
-                            ref={emailBodyEditorRef}
-                            label="Body"
-                            value={emailTemplates.templates[emailTemplateKind].body}
-                            onChange={(html) =>
-                              updateEmailTemplateField("body", html)
+                          <Suspense
+                            fallback={
+                              <Text as="p" tone="subdued">
+                                Loading editor…
+                              </Text>
                             }
-                          />
+                          >
+                            <EmailBodyEditor
+                              key={emailTemplateKind}
+                              ref={emailBodyEditorRef}
+                              label="Body"
+                              value={emailTemplates.templates[emailTemplateKind].body}
+                              onChange={(html) =>
+                                updateEmailTemplateField("body", html)
+                              }
+                            />
+                          </Suspense>
 
                           <div className="settings-email-placeholders">
                             {EMAIL_TEMPLATE_PLACEHOLDERS.map((token) => (

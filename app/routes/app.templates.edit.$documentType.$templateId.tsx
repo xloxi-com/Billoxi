@@ -31,13 +31,11 @@ import {
   BlockStack,
   Box,
   Button,
-  ButtonGroup,
   Card,
   Checkbox,
   Collapsible,
   ColorPicker,
   Divider,
-  DropZone,
   FormLayout,
   Icon,
   InlineGrid,
@@ -1606,14 +1604,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     template.name,
     params.templateId,
   );
-  settings.numbering = numberingFromSeries(numberSeries);
-  if (
-    storeDetails.name &&
-    (!settings.transactionLabels.organization ||
-      settings.transactionLabels.organization === "Northstar Commerce")
-  ) {
+  // Shop store details own the org name + logo for every template.
+  if (storeDetails.name) {
     settings.transactionLabels.organization = storeDetails.name;
   }
+  if (storeDetails.logoDataUrl) {
+    settings.logoDataUrl = storeDetails.logoDataUrl;
+    settings.logoFileName = storeDetails.logoFileName;
+  }
+  settings.numbering = numberingFromSeries(numberSeries);
   settings = reconcileSettingsForDocumentType(
     settings,
     params.documentType,
@@ -1655,18 +1654,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const settings = mergeSettings(parsedSettings, template.name, params.templateId);
   // Transaction numbers are managed in Settings → Transaction numbers.
-  const series = await loadNumberSeriesEntryForShop(session.shop, "sales-order");
+  const seriesModule =
+    params.documentType === "invoice"
+      ? "invoice"
+      : params.documentType === "credit-note"
+        ? "credit-note"
+        : params.documentType === "packing-slip"
+          ? "packing-slip"
+          : "sales-order";
+  const series = await loadNumberSeriesEntryForShop(session.shop, seriesModule);
   settings.numbering = numberingFromSeries(series);
-  if (
-    settings.logoDataUrl &&
-    (!/^data:image\/(?:png|jpeg|webp);base64,/.test(settings.logoDataUrl) ||
-      settings.logoDataUrl.length > 1_500_000)
-  ) {
-    return Response.json(
-      { saved: false, error: "Logo must be a PNG, JPG, or WebP image under 1 MB." },
-      { status: 400 },
-    );
-  }
+  // Logo lives in Settings → Store details (shared). Never persist per-template.
+  delete settings.logoDataUrl;
+  delete settings.logoFileName;
 
   await prisma.templateCustomization.upsert({
     where: {
@@ -1842,8 +1842,6 @@ export default function TemplateEditorPage() {
     () => withNormalizedTotalLabels(data.settings, data.templateId),
   );
   const [isDirty, setIsDirty] = useState(false);
-  const [logoError, setLogoError] = useState("");
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const [openHeaderPanel, setOpenHeaderPanel] = useState<string | null>(
     "organization",
   );
@@ -1872,18 +1870,33 @@ export default function TemplateEditorPage() {
   const deferredSettings = useDeferredValue(settings);
   const previewPending = deferredSettings !== settings;
   const previewSettings = useMemo(() => {
-    if (deferredSettings.logoDataUrl) return deferredSettings;
-    const preset = findTemplatePreset(data.templateId) ?? null;
-    if (!preset) return deferredSettings;
-    return {
+    const withStoreBrand = {
       ...deferredSettings,
+      transactionLabels: {
+        ...deferredSettings.transactionLabels,
+        organization:
+          data.storeDetails.name ||
+          deferredSettings.transactionLabels.organization,
+      },
+      ...(data.storeDetails.logoDataUrl
+        ? {
+            logoDataUrl: data.storeDetails.logoDataUrl,
+            logoFileName: data.storeDetails.logoFileName,
+          }
+        : {}),
+    };
+    if (withStoreBrand.logoDataUrl) return withStoreBrand;
+    const preset = findTemplatePreset(data.templateId) ?? null;
+    if (!preset) return withStoreBrand;
+    return {
+      ...withStoreBrand,
       logoDataUrl: templatePreviewLogoDataUrl(preset.accent),
       header: {
-        ...deferredSettings.header,
+        ...withStoreBrand.header,
         showLogo: true,
       },
     };
-  }, [data.templateId, deferredSettings]);
+  }, [data.storeDetails, data.templateId, deferredSettings]);
   const lastAllocatedSequence =
     (fetcher.data &&
     "lastAllocatedSequence" in fetcher.data &&
@@ -2141,27 +2154,6 @@ export default function TemplateEditorPage() {
           ? { shippingDetails: next }
           : { customerBlockDetails: next },
     );
-  };
-
-  const uploadLogo = (files: File[]) => {
-    const file = files[0];
-    if (!file) return;
-
-    if (file.size > 1024 * 1024) {
-      setLogoError("Logo must be smaller than 1 MB.");
-      return;
-    }
-
-    setLogoError("");
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      if (typeof reader.result !== "string") return;
-      updateSettings({
-        logoDataUrl: reader.result,
-        logoFileName: file.name,
-      });
-    });
-    reader.readAsDataURL(file);
   };
 
   const toggleHeaderPanel = (panel: string) => {
@@ -3074,8 +3066,9 @@ export default function TemplateEditorPage() {
                         <div className="template-editor__accordion-body">
                           <BlockStack gap="300">
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Organization details come from Settings → Store
-                              details. Only the logo is set on this template.
+                              Organization name and logo come from Settings →
+                              Store details and apply to every template. Only
+                              logo size is set here.
                             </Text>
                             <Banner tone="info">
                               <BlockStack gap="200">
@@ -3093,71 +3086,35 @@ export default function TemplateEditorPage() {
                                     </Text>
                                   ),
                                 )}
-                                <Button url="/app/settings" size="slim">
+                                <Button
+                                  url="/app/settings?section=store-details"
+                                  size="slim"
+                                >
                                   Edit store details
                                 </Button>
                               </BlockStack>
                             </Banner>
-                            <FormLayout>
-                              <TextField
-                                label="Organization name on document"
-                                value={settings.transactionLabels.organization}
-                                onChange={(organization) =>
-                                  updateSettings({
-                                    transactionLabels: {
-                                      ...settings.transactionLabels,
-                                      organization,
-                                    },
-                                  })
-                                }
-                                helpText="Defaults from Settings. Change here only if this template needs a different name."
-                                autoComplete="off"
-                              />
-                            </FormLayout>
-                            {logoError ? (
-                              <Banner tone="critical">{logoError}</Banner>
-                            ) : null}
-                            {settings.logoDataUrl ? (
+                            {data.storeDetails.logoDataUrl ? (
                               <InlineStack
                                 gap="300"
                                 blockAlign="start"
                                 wrap={false}
                               >
                                 <Thumbnail
-                                  source={settings.logoDataUrl}
+                                  source={data.storeDetails.logoDataUrl}
                                   alt={
-                                    settings.logoFileName || "Organization logo"
+                                    data.storeDetails.logoFileName ||
+                                    "Organization logo"
                                   }
                                   size="small"
                                 />
                                 <BlockStack gap="200">
-                                  <ButtonGroup>
-                                    <Button
-                                      size="slim"
-                                      onClick={() =>
-                                        logoInputRef.current?.click()
-                                      }
-                                    >
-                                      Change
-                                    </Button>
-                                    <Button
-                                      size="slim"
-                                      variant="plain"
-                                      tone="critical"
-                                      onClick={() =>
-                                        updateSettings({
-                                          logoDataUrl: undefined,
-                                          logoFileName: undefined,
-                                        })
-                                      }
-                                    >
-                                      Remove
-                                    </Button>
-                                  </ButtonGroup>
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    Logo from Store details
+                                  </Text>
                                   <div className="template-editor__logo-size">
                                     <RangeSlider
-                                      label="Size"
-                                      labelHidden
+                                      label="Logo size"
                                       min={20}
                                       max={100}
                                       step={1}
@@ -3175,38 +3132,41 @@ export default function TemplateEditorPage() {
                                     />
                                   </div>
                                 </BlockStack>
-                                <input
-                                  ref={logoInputRef}
-                                  accept="image/png,image/jpeg,image/webp"
-                                  className="template-editor__hidden-file-input"
-                                  type="file"
-                                  onChange={(event) => {
-                                    uploadLogo(
-                                      event.currentTarget.files
-                                        ? Array.from(event.currentTarget.files)
-                                        : [],
-                                    );
-                                    event.currentTarget.value = "";
-                                  }}
-                                />
                               </InlineStack>
                             ) : (
-                              <DropZone
-                                accept="image/png,image/jpeg,image/webp"
-                                allowMultiple={false}
-                                type="image"
-                                onDropAccepted={uploadLogo}
-                                onDropRejected={() =>
-                                  setLogoError(
-                                    "Upload a PNG, JPG, or WebP image smaller than 1 MB.",
-                                  )
-                                }
-                              >
-                                <DropZone.FileUpload
-                                  actionTitle="Upload logo"
-                                  actionHint="PNG, JPG, or WebP · Maximum 1 MB"
-                                />
-                              </DropZone>
+                              <Banner tone="warning">
+                                <BlockStack gap="200">
+                                  <Text as="p" variant="bodySm">
+                                    No store logo yet. Upload one in Settings →
+                                    Store details to show it on all templates.
+                                  </Text>
+                                  <Button
+                                    url="/app/settings?section=store-details"
+                                    size="slim"
+                                  >
+                                    Upload store logo
+                                  </Button>
+                                  <div className="template-editor__logo-size">
+                                    <RangeSlider
+                                      label="Logo size"
+                                      min={20}
+                                      max={100}
+                                      step={1}
+                                      value={settings.logoSize}
+                                      output
+                                      suffix={`${settings.logoSize}%`}
+                                      onChange={(value) =>
+                                        updateSettings({
+                                          logoSize:
+                                            typeof value === "number"
+                                              ? value
+                                              : value[0],
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                </BlockStack>
+                              </Banner>
                             )}
                             {adminCaps.logoPosition ? (
                               <BlockStack gap="200">

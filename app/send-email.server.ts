@@ -196,7 +196,7 @@ export async function sendDocumentEmail(args: {
     design: emailTemplates.design,
     bodyText: bodyContent,
     storeName: storeDetails.name || vars.storeName,
-    logoDataUrl: null,
+    logoDataUrl: storeDetails.logoDataUrl || null,
     vars: {
       documentType: vars.documentType,
       documentNumber: vars.documentNumber,

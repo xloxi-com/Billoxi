@@ -224,13 +224,13 @@ export async function loadDocumentTemplateSettings(
   );
   // Shop transaction-number series is the source of truth for document numbers.
   settings.numbering = numberingFromSeries(numberSeries);
-  if (
-    storeDetails.name &&
-    (!settings.transactionLabels.organization ||
-      settings.transactionLabels.organization === "Northstar Commerce" ||
-      settings.transactionLabels.organization === "Organization")
-  ) {
+  // Shop store details are the source of truth for org name + logo.
+  if (storeDetails.name) {
     settings.transactionLabels.organization = storeDetails.name;
+  }
+  if (storeDetails.logoDataUrl) {
+    settings.logoDataUrl = storeDetails.logoDataUrl;
+    settings.logoFileName = storeDetails.logoFileName;
   }
 
   const language = normalizeTemplateLanguage(settings.language);

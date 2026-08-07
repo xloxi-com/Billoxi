@@ -129,10 +129,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   );
   const totalWidth =
     columns.reduce((total, column) => total + Math.max(column.width, 1), 0) || 1;
-  const organizationName =
-    settings.transactionLabels.organization ||
-    storeDetails.name ||
-    "Organization";
+  const organizationName = storeDetails.name || "Organization";
+  const logoDataUrl = storeDetails.logoDataUrl || settings.logoDataUrl;
+  const logoFileName = storeDetails.logoFileName || settings.logoFileName;
   const addressLines = formatStoreAddressLines(storeDetails);
   const styleName = salesOrderLayoutStyle(templateId);
   const logoPosition = salesOrderLogoPosition(templateId, settings);
@@ -405,11 +404,11 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         {settings.header.showOrganization ? (
           <div className="live-document__organization">
             {settings.header.showLogo ? (
-              settings.logoDataUrl ? (
+              logoDataUrl ? (
                 <img
-                  alt={settings.logoFileName || "Organization logo"}
+                  alt={logoFileName || "Organization logo"}
                   className="live-document__logo-image"
-                  src={settings.logoDataUrl}
+                  src={logoDataUrl}
                   style={{
                     maxHeight: `${settings.logoSize / 10}em`,
                     maxWidth: `${settings.logoSize}%`,

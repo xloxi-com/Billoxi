@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   Outlet,
@@ -9,7 +9,18 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { AppProvider, Modal, Text, Card, Button, Badge, BlockStack, InlineStack, Box } from "@shopify/polaris";
+import {
+  ActionList,
+  AppProvider,
+  Modal,
+  Text,
+  Card,
+  Button,
+  Badge,
+  BlockStack,
+  InlineStack,
+  Box,
+} from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
   defaultTemplateSettings,
@@ -149,13 +160,12 @@ function buildPreviewBundle(args: {
     args.templateId,
   );
   settings.numbering = numberingFromSeries(args.numberSeries);
-  if (
-    args.storeDetails.name &&
-    (!settings.transactionLabels.organization ||
-      settings.transactionLabels.organization === "Northstar Commerce" ||
-      settings.transactionLabels.organization === "Organization")
-  ) {
+  if (args.storeDetails.name) {
     settings.transactionLabels.organization = args.storeDetails.name;
+  }
+  if (args.storeDetails.logoDataUrl) {
+    settings.logoDataUrl = args.storeDetails.logoDataUrl;
+    settings.logoFileName = args.storeDetails.logoFileName;
   }
   // Pin document-type header + repair stale Sales Order titles without loading
   // the full multi-language label packs on the gallery client.
@@ -215,10 +225,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
 
   try {
-    const [selectedTemplates, storeDetails, numberSeries, customizations] =
+    const [selectedTemplates, storeDetails, numberSeries, customizations, shopCurrencyCode] =
       await Promise.all([
         loadSelectedTemplatesForShop(session.shop),
-        loadStoreDetailsForShop(session.shop, admin),
+        // Gallery cards use CSS thumbs — skip logo data URL to shrink payload.
+        loadStoreDetailsForShop(session.shop, admin, { includeLogo: false }),
         loadNumberSeriesForShop(session.shop),
         (async () => {
           try {
@@ -240,10 +251,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
             }>;
           }
         })(),
+        fetchShopCurrencyCode(admin, session.shop),
       ]);
-
-    // Prefer currency cache warmed by store-defaults; avoid racing a second GraphQL.
-    const shopCurrencyCode = await fetchShopCurrencyCode(admin, session.shop);
 
     const customizationByKey: Record<string, unknown> = {};
     for (const row of customizations) {
@@ -317,29 +326,32 @@ function TemplateThumbnail({ template }: { template: Template }) {
   return (
     <div aria-hidden="true" className="template-card-thumb">
       <div className="template-preview">
-        <div className="template-preview__sheet">
+        <div
+          className="template-preview__sheet"
+          style={{
+            borderTop: `3px solid ${template.accent}`,
+          }}
+        >
           <div
-            className="template-preview__accent"
-            style={{
-              background: template.accent,
-            }}
-          />
-          <div
-            className="template-preview__title"
-            style={{
-              color: template.accent,
-              textAlign: template.alignment,
-            }}
+            className="template-preview__header"
+            style={{ justifyContent: template.alignment === "right" ? "flex-end" : template.alignment === "center" ? "center" : "flex-start" }}
           >
-            {template.name.toUpperCase()}
+            <div
+              className="template-preview__logo"
+              style={{ background: template.accent }}
+            />
+            <div
+              className="template-preview__title"
+              style={{ color: template.accent, textAlign: template.alignment }}
+            >
+              {template.name.toUpperCase()}
+            </div>
           </div>
           {[68, 90, 76].map((width) => (
             <div
               key={width}
               className="template-preview__line"
-              style={{
-                width: `${width}%`,
-              }}
+              style={{ width: `${width}%` }}
             />
           ))}
           <div
@@ -350,6 +362,10 @@ function TemplateThumbnail({ template }: { template: Template }) {
               <div key={row} className="template-preview__row" />
             ))}
           </div>
+          <div
+            className="template-preview__total"
+            style={{ background: `${template.accent}22` }}
+          />
         </div>
       </div>
     </div>
@@ -359,6 +375,7 @@ function TemplateThumbnail({ template }: { template: Template }) {
 function buildPreviewSettings(
   settings: TemplateEditorSettings,
   templateId: string,
+  storeLogoDataUrl?: string,
 ) {
   const preset = getSalesOrderTemplatePreset(templateId);
   const previewSettings: TemplateEditorSettings = {
@@ -401,14 +418,132 @@ function buildPreviewSettings(
     previewSettings.metaStyle = preset.metaStyle;
   }
 
-  // Template gallery: always show Logo.svg tinted to each preset accent.
-  previewSettings.logoDataUrl = templatePreviewLogoDataUrl(preset.accent);
+  // Prefer shop store logo; otherwise tinted placeholder for gallery cards.
+  previewSettings.logoDataUrl =
+    storeLogoDataUrl ||
+    settings.logoDataUrl ||
+    templatePreviewLogoDataUrl(preset.accent);
   previewSettings.header = {
     ...previewSettings.header,
     showLogo: true,
   };
 
   return previewSettings;
+}
+
+function SalesOrderCardThumbnail({
+  templateId,
+  preview,
+  shopCurrencyCode,
+}: {
+  templateId: string;
+  preview: SalesOrderPreviewBundle;
+  shopCurrencyCode: string;
+}) {
+  const previewSettings = buildPreviewSettings(
+    preview.settings,
+    templateId,
+    preview.storeDetails.logoDataUrl,
+  );
+  const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
+  const previewOrder = {
+    ...(templateId.startsWith("credit-")
+      ? sampleCreditNoteForShop(shopCurrencyCode)
+      : sampleSalesOrderForShop(shopCurrencyCode)),
+    name: "#1008",
+    documentNumber,
+  };
+
+  return (
+    <div aria-hidden="true" className="template-card-thumb">
+      <PaperScaleFrame className="template-card-thumb__scale" fit="contain">
+        <div
+          className="template-editor__paper template-editor__paper--portrait template-editor__paper--a4 template-card-thumb__paper"
+          style={{
+            backgroundColor: previewSettings.backgroundColor,
+            fontFamily: previewSettings.fontFamily,
+            padding: paperPaddingCss(previewSettings.margins),
+          }}
+        >
+          <Suspense fallback={<TemplateThumbnailFallback />}>
+            <SalesOrderLiveDocument
+              settings={previewSettings}
+              templateId={templateId}
+              storeDetails={preview.storeDetails}
+              showLogoPlaceholder={false}
+              order={previewOrder}
+            />
+          </Suspense>
+        </div>
+      </PaperScaleFrame>
+    </div>
+  );
+}
+
+function TemplateThumbnailFallback() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        minHeight: "100%",
+        background: "var(--p-color-bg-surface-secondary, #f6f6f7)",
+      }}
+    />
+  );
+}
+
+/** Live A4 thumb after hydration + when scrolled into view (keeps gallery fast). */
+function DeferredSalesOrderCardThumbnail({
+  template,
+  preview,
+  shopCurrencyCode,
+}: {
+  template: Template;
+  preview: SalesOrderPreviewBundle;
+  shopCurrencyCode: string;
+}) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const node = hostRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "120px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [mounted]);
+
+  return (
+    <div ref={hostRef}>
+      {mounted && visible ? (
+        <SalesOrderCardThumbnail
+          templateId={template.id}
+          preview={preview}
+          shopCurrencyCode={shopCurrencyCode}
+        />
+      ) : (
+        <TemplateThumbnail template={template} />
+      )}
+    </div>
+  );
 }
 
 function SalesOrderTemplatePreview({
@@ -420,7 +555,11 @@ function SalesOrderTemplatePreview({
   preview: SalesOrderPreviewBundle;
   shopCurrencyCode: string;
 }) {
-  const previewSettings = buildPreviewSettings(preview.settings, templateId);
+  const previewSettings = buildPreviewSettings(
+    preview.settings,
+    templateId,
+    preview.storeDetails.logoDataUrl,
+  );
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
   const previewOrder = {
     ...(templateId.startsWith("credit-")
@@ -481,26 +620,35 @@ export default function TemplatesPage() {
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [confirmTemplate, setConfirmTemplate] = useState<Template | null>(null);
 
-  // Build live preview only when Preview modal is open (not for every card).
-  const salesOrderPreviewBundle = useMemo(() => {
-    if (isEditRoute || !previewTemplate) return null;
+  // Live card thumbs for the visible document type only (~15, not all 60).
+  // Cards mount via IntersectionObserver so first paint stays light.
+  const salesOrderPreviews = useMemo(() => {
+    if (isEditRoute) return {} as Record<string, SalesOrderPreviewBundle>;
     const series = numberSeries as NumberSeriesMap;
-    return buildPreviewBundle({
-      documentType: activeType,
-      templateId: previewTemplate.id,
-      customizationSettings:
-        customizationByKey[`${activeType}:${previewTemplate.id}`] ?? null,
-      storeDetails,
-      numberSeries: series[activeType],
-    });
+    const next: Record<string, SalesOrderPreviewBundle> = {};
+    for (const template of templates[activeType]) {
+      next[template.id] = buildPreviewBundle({
+        documentType: activeType,
+        templateId: template.id,
+        customizationSettings:
+          customizationByKey[`${activeType}:${template.id}`] ?? null,
+        storeDetails,
+        numberSeries: series[activeType],
+      });
+    }
+    return next;
   }, [
     activeType,
     customizationByKey,
     isEditRoute,
     numberSeries,
-    previewTemplate,
     storeDetails,
   ]);
+
+  const salesOrderPreviewBundle = useMemo(() => {
+    if (!previewTemplate) return null;
+    return salesOrderPreviews[previewTemplate.id] ?? null;
+  }, [previewTemplate, salesOrderPreviews]);
 
   useEffect(() => {
     const savedSelections: Partial<Record<DocumentType, string>> = {};
@@ -595,58 +743,36 @@ export default function TemplatesPage() {
       <div className="templates-page">
         <s-stack direction="block" gap="base">
           <div className="templates-content__header">
-            <s-stack direction="block" gap="small">
-              <s-heading>{activeDocument.label} templates</s-heading>
-              <s-paragraph color="subdued">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingLg">
+                {activeDocument.label} templates
+              </Text>
+              <Text as="p" tone="subdued">
                 {activeDocument.description}
-              </s-paragraph>
-            </s-stack>
-            <s-badge tone="info">
-              {templates[activeType].length} available
-            </s-badge>
+              </Text>
+            </BlockStack>
+            <Badge tone="info">
+              {`${templates[activeType].length} available`}
+            </Badge>
           </div>
 
           <div className="templates-layout">
             <div className="templates-sidebar">
-              <s-box
-                background="base"
-                border="base"
-                borderRadius="large"
-                padding="small"
-              >
-                <s-box padding="small">
-                  <s-heading>Document type</s-heading>
-                </s-box>
-                <div className="templates-sidebar__items">
-                  {documentTypes.map((documentType) => {
-                    const isActive = documentType.id === activeType;
-
-                    return (
-                      <s-clickable
-                        key={documentType.id}
-                        accessibilityLabel={`View ${documentType.label} templates`}
-                        background={isActive ? "subdued" : "transparent"}
-                        borderRadius="base"
-                        onClick={() => changeDocumentType(documentType.id)}
-                        padding="small"
-                      >
-                        <s-grid
-                          gridTemplateColumns="1fr auto"
-                          gap="small"
-                          alignItems="center"
-                        >
-                          <s-text type={isActive ? "strong" : undefined}>
-                            {documentType.label}
-                          </s-text>
-                          {selectedTemplates[documentType.id] ? (
-                            <s-icon type="check-circle" tone="success" />
-                          ) : null}
-                        </s-grid>
-                      </s-clickable>
-                    );
-                  })}
-                </div>
-              </s-box>
+              <Card padding="0">
+                <Box paddingBlockStart="300" paddingInline="300" paddingBlockEnd="100">
+                  <Text as="h3" variant="headingSm">
+                    Document type
+                  </Text>
+                </Box>
+                <ActionList
+                  actionRole="menuitem"
+                  items={documentTypes.map((documentType) => ({
+                    content: documentType.label,
+                    active: documentType.id === activeType,
+                    onAction: () => changeDocumentType(documentType.id),
+                  }))}
+                />
+              </Card>
             </div>
 
             <div className="templates-content">
@@ -655,12 +781,21 @@ export default function TemplatesPage() {
                   {templates[activeType].map((template) => {
                     const isSelected =
                       selectedTemplates[activeType] === template.id;
+                    const livePreview = salesOrderPreviews[template.id] ?? null;
 
                     return (
                       <div className="template-card" key={template.id}>
                         <Card padding="0" background="bg-surface">
                           <div className="template-card__inner">
-                            <TemplateThumbnail template={template} />
+                            {livePreview ? (
+                              <DeferredSalesOrderCardThumbnail
+                                template={template}
+                                preview={livePreview}
+                                shopCurrencyCode={shopCurrencyCode}
+                              />
+                            ) : (
+                              <TemplateThumbnail template={template} />
+                            )}
                             <Box padding="400">
                               <BlockStack gap="300">
                                 <InlineStack gap="200" blockAlign="center" wrap={false}>

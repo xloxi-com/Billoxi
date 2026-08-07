@@ -768,10 +768,8 @@ async function buildSalesOrderVectorPdf({
     return cursor;
   };
 
-  const organizationName =
-    settings.transactionLabels.organization ||
-    storeDetails.name ||
-    "Organization";
+  const organizationName = storeDetails.name || "Organization";
+  const logoDataUrl = storeDetails.logoDataUrl || settings.logoDataUrl;
   const addressLines = formatStoreAddressLines(storeDetails);
   const orderDate = formatOrderDate(order.documentDate || order.createdAt);
   const documentNumber =
@@ -801,13 +799,13 @@ async function buildSalesOrderVectorPdf({
   let titleY = rightY;
 
   if (settings.header.showOrganization) {
-    if (settings.header.showLogo && settings.logoDataUrl) {
+    if (settings.header.showLogo && logoDataUrl) {
       try {
-        const logoFormat = settings.logoDataUrl.includes("image/png")
+        const logoFormat = logoDataUrl.includes("image/png")
           ? "PNG"
           : "JPEG";
         const { width: naturalW, height: naturalH } = await loadImageSize(
-          settings.logoDataUrl,
+          logoDataUrl,
         );
         const { width: logoW, height: logoH } = fitLogoSize(
           naturalW,
@@ -816,7 +814,7 @@ async function buildSalesOrderVectorPdf({
         );
         const logoX = logoOnRight ? orgX - logoW : orgX;
         pdf.addImage(
-          settings.logoDataUrl,
+          logoDataUrl,
           logoFormat,
           logoX,
           y,

@@ -7,7 +7,7 @@
 
 .templates-layout {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: var(--p-space-500, 20px);
   align-items: start;
 }
@@ -22,9 +22,8 @@
   overflow: auto;
 }
 
-.templates-sidebar__items {
-  display: grid;
-  gap: var(--p-space-100, 4px);
+.templates-sidebar .Polaris-ActionList__Item {
+  border-radius: var(--p-border-radius-200, 8px);
 }
 
 .templates-content {
@@ -227,11 +226,34 @@
   border-radius: 1px;
 }
 
-.template-preview__title {
+.template-preview__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 8px;
+}
+
+.template-preview__logo {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+.template-preview__title {
+  margin-bottom: 0;
   font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.3px;
+}
+
+.template-preview__total {
+  margin-top: 8px;
+  margin-left: auto;
+  width: 42%;
+  height: 10px;
+  border-radius: 2px;
 }
 
 .template-preview__line {
@@ -378,7 +400,7 @@
 
 @media (max-width: 900px) {
   .templates-layout {
-    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-columns: 200px minmax(0, 1fr);
   }
 
   .templates-grid {
@@ -391,20 +413,15 @@
   .templates-layout {
     grid-template-columns: minmax(0, 1fr);
   }
-
-  .templates-sidebar__items {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 480px) {
   .templates-content__header,
-  .templates-grid,
-  .templates-sidebar__items {
+  .templates-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .templates-content__header s-badge {
+  .templates-content__header .Polaris-Badge {
     justify-self: start;
   }
 
