@@ -70,6 +70,8 @@ type RawSalesOrder = {
   displayFinancialStatus: string | null;
   displayFulfillmentStatus: string;
   currentTotalPriceSet: { shopMoney: Money };
+  /** Original order total — stays unchanged after refunds. */
+  totalPriceSet?: { shopMoney: Money } | null;
   totalRefundedSet?: { shopMoney: Money } | null;
   totalReceivedSet?: { shopMoney: Money } | null;
   totalOutstandingSet?: { shopMoney: Money } | null;
@@ -195,6 +197,12 @@ const SALES_ORDERS_QUERY = `#graphql
             currencyCode
           }
         }
+        totalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
         totalRefundedSet {
           shopMoney {
             amount
@@ -247,6 +255,12 @@ const SALES_ORDERS_BY_IDS_QUERY = `#graphql
         displayFinancialStatus
         displayFulfillmentStatus
         currentTotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalPriceSet {
           shopMoney {
             amount
             currencyCode
@@ -423,8 +437,16 @@ function sortRawOrders(
       }
       case "total asc":
       case "total desc": {
-        const aTotal = Number(a.currentTotalPriceSet.shopMoney.amount) || 0;
-        const bTotal = Number(b.currentTotalPriceSet.shopMoney.amount) || 0;
+        const aTotal =
+          Number(
+            (a.totalPriceSet?.shopMoney ?? a.currentTotalPriceSet.shopMoney)
+              .amount,
+          ) || 0;
+        const bTotal =
+          Number(
+            (b.totalPriceSet?.shopMoney ?? b.currentTotalPriceSet.shopMoney)
+              .amount,
+          ) || 0;
         return (aTotal - bTotal) * (reverse ? -1 : 1);
       }
       case "date asc":
@@ -675,9 +697,10 @@ function resolveCompany(order: RawSalesOrder) {
 }
 
 function resolveBalanceDue(order: RawSalesOrder): Money {
-  const currencyCode =
-    order.currentTotalPriceSet.shopMoney.currencyCode || "USD";
-  const total = Number(order.currentTotalPriceSet.shopMoney.amount) || 0;
+  const listTotalMoney =
+    order.totalPriceSet?.shopMoney ?? order.currentTotalPriceSet.shopMoney;
+  const currencyCode = listTotalMoney.currencyCode || "USD";
+  const total = Number(listTotalMoney.amount) || 0;
   const outstandingRaw = order.totalOutstandingSet?.shopMoney?.amount;
   const receivedRaw = order.totalReceivedSet?.shopMoney?.amount;
   const status = (order.displayFinancialStatus || "").toUpperCase();
@@ -700,6 +723,10 @@ function resolveBalanceDue(order: RawSalesOrder): Money {
   const received = Number(receivedRaw) || 0;
   const balance = Math.max(0, Math.round((total - received) * 100) / 100);
   return { amount: balance.toFixed(2), currencyCode };
+}
+
+function orderListTotalMoney(order: RawSalesOrder): Money {
+  return order.totalPriceSet?.shopMoney ?? order.currentTotalPriceSet.shopMoney;
 }
 
 function toRow(
@@ -742,7 +769,7 @@ function toRow(
     Number.isFinite(creditTotalAmount) &&
     creditTotalAmount > 0
       ? formatMoney(creditTotalMoney!)
-      : formatMoney(order.currentTotalPriceSet.shopMoney);
+      : formatMoney(orderListTotalMoney(order));
   return {
     id: order.id,
     name: order.name,

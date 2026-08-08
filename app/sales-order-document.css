@@ -1,47 +1,99 @@
-.sales-order-document-page {
-  min-width: 0;
+/* Kill s-page bottom spacing / outer page scroll on the document view. */
+html:has(.sales-order-document-page),
+body:has(.sales-order-document-page) {
+  overflow: hidden;
 }
 
-.sales-order-document-page > s-grid {
+s-page:has(.sales-order-document-page),
+s-page:has(.sales-order-document-page)::part(content),
+s-page:has(.sales-order-document-page) > * {
+  padding-block-end: 0 !important;
+  margin-block-end: 0 !important;
+  overflow: hidden;
+}
+
+.sales-order-document-page {
+  /* Fallback until JS measures remaining viewport under the page header. */
+  --sales-order-doc-height: calc(100svh - 11rem);
+  min-width: 0;
+  height: var(--sales-order-doc-height);
+  max-height: var(--sales-order-doc-height);
+  margin-block-end: 0;
+  margin-bottom: 0;
+  padding-block-end: 0;
+}
+
+.sales-order-document-layout {
   width: 100%;
-  min-height: calc(100vh - 10rem);
+  height: var(--sales-order-doc-height);
+  max-height: var(--sales-order-doc-height);
+  display: grid;
+  grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+  grid-template-rows: var(--sales-order-doc-height);
+  gap: var(--p-space-200, 8px);
   align-items: stretch;
 }
 
 .sales-order-document-sidebar {
   min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 10rem);
-  max-height: calc(100vh - 8rem);
-  position: sticky;
-  top: var(--p-space-400, 16px);
+  height: var(--sales-order-doc-height);
+  max-height: var(--sales-order-doc-height);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* Polaris AppProvider wrapper must stretch or the card stays content-sized. */
+.sales-order-document-sidebar > * {
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .sales-order-document-sidebar__card {
-  flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
   height: 100%;
+  max-height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .sales-order-document-sidebar__card > .Polaris-ShadowBevel {
-  height: 100%;
+  --pc-shadow-bevel-box-shadow: none;
+  --pc-shadow-bevel-box-shadow-xs: none;
+  --pc-shadow-bevel-box-shadow-sm: none;
+  --pc-shadow-bevel-box-shadow-md: none;
+  --pc-shadow-bevel-box-shadow-lg: none;
+  --pc-shadow-bevel-box-shadow-xl: none;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  box-shadow: none !important;
+}
+
+.sales-order-document-sidebar__card > .Polaris-ShadowBevel::before,
+.sales-order-document-sidebar__card > .Polaris-ShadowBevel::after {
+  content: none !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
 .sales-order-document-sidebar__card > .Polaris-ShadowBevel > .Polaris-Box {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-.sales-order-document-sidebar__list {
-  flex: 1;
+.sales-order-document-sidebar__list.Polaris-Scrollable {
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  height: 100%;
+  max-height: 100%;
 }
 
 .sales-order-document-sidebar__loading {
@@ -88,13 +140,33 @@
 .sales-order-document-stage {
   position: relative;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   min-width: 0;
-  min-height: 100%;
-  overflow: auto;
-  padding: var(--p-space-500, 20px);
+  min-height: 0;
+  height: var(--sales-order-doc-height);
+  max-height: var(--sales-order-doc-height);
+  overflow: hidden;
+  padding: 0;
   background: var(--p-color-bg-surface-secondary, #f6f6f7);
   border-radius: var(--p-border-radius-200, 8px);
+}
+
+/* PDF preview is the only pane that scrolls (Polaris thin bar). */
+.sales-order-document-stage__scroll.Polaris-Scrollable {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  padding: var(--p-space-500, 20px);
+}
+
+.sales-order-document-stage .paper-scale-frame {
+  width: 100%;
+  min-width: 0;
+  /* Scroll lives on Polaris Scrollable — not on the scale frame. */
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
 .sales-order-document-stage .template-editor__paper {
@@ -187,7 +259,7 @@
 
 /* Paper size rules live in template-editor.css (shared with Preview) */
 .sales-order-document-stage .template-editor__paper {
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 4px 12px rgb(0 0 0 / 6%);
+  box-shadow: none !important;
 }
 
 .sales-order-document-stage .template-editor__paper.is-pdf-export,
@@ -438,24 +510,56 @@
 }
 
 @media (max-width: 900px) {
-  .sales-order-document-page > s-grid {
-    display: flex !important;
+  html:has(.sales-order-document-page),
+  body:has(.sales-order-document-page),
+  s-page:has(.sales-order-document-page),
+  s-page:has(.sales-order-document-page) > * {
+    overflow: visible;
+  }
+
+  .sales-order-document-page {
+    --sales-order-doc-height: auto;
+    height: auto;
+    max-height: none;
+  }
+
+  .sales-order-document-layout {
+    display: flex;
     flex-direction: column;
+    height: auto;
+    max-height: none;
+    grid-template-rows: none;
   }
 
   .sales-order-document-sidebar {
-    position: static;
     width: 100%;
+    height: auto;
+    max-height: none;
+  }
+
+  .sales-order-document-sidebar > * {
     height: auto;
     max-height: none;
   }
 
   .sales-order-document-sidebar__card {
     height: auto;
+    max-height: none;
   }
 
   .sales-order-document-sidebar__list {
+    height: auto;
     max-height: min(50vh, 360px);
+  }
+
+  .sales-order-document-stage {
+    height: auto;
+    max-height: none;
+    min-height: 24rem;
+  }
+
+  .sales-order-document-stage__scroll.Polaris-Scrollable {
+    max-height: min(70vh, 640px);
   }
 }
 
@@ -490,11 +594,14 @@
   }
 
   .sales-order-document-page,
-  .sales-order-document-page > s-grid,
+  .sales-order-document-layout,
   .sales-order-document-stage {
     display: block !important;
     position: static !important;
     width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;

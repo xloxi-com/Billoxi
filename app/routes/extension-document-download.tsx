@@ -94,7 +94,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     const started = Date.now();
-    const { pdf, fileName } = await buildSalesOrderPdfFile({
+    const { pdf, fileName, orderName, documentNumber } =
+      await buildSalesOrderPdfFile({
       admin,
       shop: session.shop,
       orderId,
@@ -113,8 +114,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     void incrementShopMonthlyUsage(session.shop, "downloaded", 1, {
       documentKind,
+      documentNumber,
       orderGid: `gid://shopify/Order/${orderId}`,
-      orderName: `#${orderId}`,
+      orderName,
       processType: "extension",
     });
 

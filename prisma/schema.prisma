@@ -62,6 +62,8 @@ model ShopSettings {
   creditNoteSettings Json     @default("{}")
   /// Auto invoice when order is paid.
   invoiceSettings    Json     @default("{}")
+  /// Off | Shopify Markets | Coin — document currency source.
+  multiCurrencySettings Json  @default("{}")
   /// Set when existing Shopify orders were numbered on install / first sync.
   salesOrderNumbersSyncedAt DateTime?
   createdAt          DateTime @default(now())

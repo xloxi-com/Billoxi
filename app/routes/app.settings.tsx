@@ -26,6 +26,8 @@ import {
   DataTable,
   DropZone,
   Icon,
+  Link,
+  RadioButton,
   Thumbnail,
   Modal,
 } from "@shopify/polaris";
@@ -33,6 +35,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
+  CurrencyConvertIcon,
   DragHandleIcon,
   EditIcon,
   EmailIcon,
@@ -96,6 +99,7 @@ import {
   loadEmailTemplatesForShop,
   loadCreditNoteSettingsForShop,
   loadInvoiceSettingsForShop,
+  loadMultiCurrencySettingsForShop,
   loadNumberSeriesForShop,
   loadSelectedTemplateForShop,
   loadSmtpSettingsForShop,
@@ -104,6 +108,7 @@ import {
   saveEmailTemplatesForShop,
   saveCreditNoteSettingsForShop,
   saveInvoiceSettingsForShop,
+  saveMultiCurrencySettingsForShop,
   saveNumberSeriesForShop,
   saveSmtpSettingsForShop,
   saveStoreDetailsForShop,
@@ -116,6 +121,10 @@ import {
   normalizeInvoiceSettings,
   type InvoiceSettings,
 } from "../invoice-settings";
+import {
+  normalizeMultiCurrencySettings,
+  type MultiCurrencySettings,
+} from "../multi-currency-settings";
 import {
   getLastAllocatedSequence,
   syncNumberCounter,
@@ -202,6 +211,7 @@ type SettingsSection =
   | "store-details"
   | "number-series"
   | "credit-notes"
+  | "multi-currency"
   | "smtp"
   | "email-sales-order"
   | "email-invoice"
@@ -212,7 +222,7 @@ type SettingsMenuItem = {
   id: SettingsSection;
   label: string;
   description: string;
-  icon: "store" | "order" | "email" | "note" | "receipt";
+  icon: "store" | "order" | "email" | "note" | "receipt" | "currency";
 };
 
 type SettingsMenuGroup = {
@@ -274,6 +284,13 @@ const settingsMenu: Array<SettingsMenuItem | SettingsMenuGroup> = [
     icon: "receipt",
   },
   {
+    id: "multi-currency",
+    label: "Multi Currency",
+    description:
+      "Show documents in the customer checkout currency or shop currency.",
+    icon: "currency",
+  },
+  {
     id: "smtp",
     label: "SMTP",
     description: "Email server for sending documents.",
@@ -293,6 +310,7 @@ const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = 
   email: EmailIcon,
   note: NoteIcon,
   receipt: ReceiptIcon,
+  currency: CurrencyConvertIcon,
 };
 
 function isEmailTemplatesSection(section: SettingsSection): boolean {
@@ -309,6 +327,7 @@ function parseSettingsSection(value: string | null): SettingsSection {
     value === "number-series" ||
     value === "transaction-numbers" ||
     value === "credit-notes" ||
+    value === "multi-currency" ||
     value === "smtp" ||
     value === "store-details" ||
     value === "email-sales-order" ||
@@ -359,6 +378,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     numberSeries,
     creditNoteSettings,
     invoiceSettings,
+    multiCurrencySettings,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
@@ -367,6 +387,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     loadNumberSeriesForShop(session.shop),
     loadCreditNoteSettingsForShop(session.shop),
     loadInvoiceSettingsForShop(session.shop),
+    loadMultiCurrencySettingsForShop(session.shop),
   ]);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
     selectedSalesOrderTemplateIdRaw,
@@ -400,6 +421,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     salesOrderSync,
     creditNoteSettings,
     invoiceSettings,
+    multiCurrencySettings,
   };
 }
 
@@ -477,6 +499,37 @@ export async function action({ request }: ActionFunctionArgs) {
       creditNoteSettings: saved,
       invoiceSettings: savedInvoice,
       backfilledCreditNotes: backfilled,
+    };
+  }
+
+  if (intent === "save-multi-currency") {
+    const raw = formData.get("multiCurrencySettings");
+    if (typeof raw !== "string") {
+      return Response.json(
+        { saved: false, error: "Multi currency settings are required." },
+        { status: 400 },
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return Response.json(
+        { saved: false, error: "Invalid multi currency settings." },
+        { status: 400 },
+      );
+    }
+
+    const saved = await saveMultiCurrencySettingsForShop(
+      session.shop,
+      normalizeMultiCurrencySettings(parsed),
+    );
+
+    return {
+      saved: true,
+      section: "multi-currency" as const,
+      multiCurrencySettings: saved,
     };
   }
 
@@ -793,6 +846,9 @@ export default function SettingsPage() {
   const initialSection = parseSettingsSection(requestedSection);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(initialSection);
+  const [emailTemplatesNavOpen, setEmailTemplatesNavOpen] = useState(
+    isEmailTemplatesSection(initialSection),
+  );
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(
     data.storeDetails,
   );
@@ -806,6 +862,8 @@ export default function SettingsPage() {
   const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettings>(
     data.invoiceSettings,
   );
+  const [multiCurrencySettings, setMultiCurrencySettings] =
+    useState<MultiCurrencySettings>(data.multiCurrencySettings);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplatesSettings>(
     data.emailTemplates,
   );
@@ -824,6 +882,8 @@ export default function SettingsPage() {
     useState<CreditNoteSettings>(data.creditNoteSettings);
   const [savedInvoiceSettings, setSavedInvoiceSettings] =
     useState<InvoiceSettings>(data.invoiceSettings);
+  const [savedMultiCurrencySettings, setSavedMultiCurrencySettings] =
+    useState<MultiCurrencySettings>(data.multiCurrencySettings);
   const [savedEmailTemplates, setSavedEmailTemplates] =
     useState<EmailTemplatesSettings>(data.emailTemplates);
   const [savedNumberSeries, setSavedNumberSeries] = useState<NumberSeriesMap>(
@@ -848,6 +908,7 @@ export default function SettingsPage() {
   const [isStoreDirty, setIsStoreDirty] = useState(false);
   const [isSmtpDirty, setIsSmtpDirty] = useState(false);
   const [isCreditNoteDirty, setIsCreditNoteDirty] = useState(false);
+  const [isMultiCurrencyDirty, setIsMultiCurrencyDirty] = useState(false);
   const [isEmailTemplatesDirty, setIsEmailTemplatesDirty] = useState(false);
   const [isNumberSeriesDirty, setIsNumberSeriesDirty] = useState(false);
   const [isEditingSeries, setIsEditingSeries] = useState(false);
@@ -873,9 +934,11 @@ export default function SettingsPage() {
         ? isSmtpDirty
         : activeSection === "credit-notes"
           ? isCreditNoteDirty
-          : isEmailTemplatesSection(activeSection)
-            ? isEmailTemplatesDirty
-            : isNumberSeriesDirty;
+          : activeSection === "multi-currency"
+            ? isMultiCurrencyDirty
+            : isEmailTemplatesSection(activeSection)
+              ? isEmailTemplatesDirty
+              : isNumberSeriesDirty;
   const activeEmailChild =
     EMAIL_TEMPLATE_SECTIONS.find((item) => item.id === activeSection) ?? null;
   const activeItem = (() => {
@@ -956,6 +1019,12 @@ export default function SettingsPage() {
   }, [data.creditNoteSettings, data.invoiceSettings]);
 
   useEffect(() => {
+    setMultiCurrencySettings(data.multiCurrencySettings);
+    setSavedMultiCurrencySettings(data.multiCurrencySettings);
+    setIsMultiCurrencyDirty(false);
+  }, [data.multiCurrencySettings]);
+
+  useEffect(() => {
     setEmailTemplates(data.emailTemplates);
     setSavedEmailTemplates(data.emailTemplates);
     setIsEmailTemplatesDirty(false);
@@ -1022,6 +1091,15 @@ export default function SettingsPage() {
       setInvoiceSettings(fetcher.data.invoiceSettings);
       setSavedInvoiceSettings(fetcher.data.invoiceSettings);
       setIsCreditNoteDirty(false);
+    }
+
+    if (
+      "multiCurrencySettings" in fetcher.data &&
+      fetcher.data.multiCurrencySettings
+    ) {
+      setMultiCurrencySettings(fetcher.data.multiCurrencySettings);
+      setSavedMultiCurrencySettings(fetcher.data.multiCurrencySettings);
+      setIsMultiCurrencyDirty(false);
     }
 
     if ("emailTemplates" in fetcher.data && fetcher.data.emailTemplates) {
@@ -1118,6 +1196,8 @@ export default function SettingsPage() {
                 }
                 return "Credit note settings saved";
               })()
+            : fetcher.data.section === "multi-currency"
+              ? "Multi currency settings saved"
             : fetcher.data.section === "email-templates"
               ? "Email templates saved"
               : fetcher.data.section === "number-series"
@@ -1419,6 +1499,17 @@ export default function SettingsPage() {
       return;
     }
 
+    if (activeSection === "multi-currency") {
+      fetcher.submit(
+        {
+          intent: "save-multi-currency",
+          multiCurrencySettings: JSON.stringify(multiCurrencySettings),
+        },
+        { method: "post" },
+      );
+      return;
+    }
+
     if (isEmailTemplatesSection(activeSection)) {
       fetcher.submit(
         {
@@ -1471,6 +1562,11 @@ export default function SettingsPage() {
       setCreditNoteSettings(savedCreditNoteSettings);
       setInvoiceSettings(savedInvoiceSettings);
       setIsCreditNoteDirty(false);
+      return;
+    }
+    if (activeSection === "multi-currency") {
+      setMultiCurrencySettings(savedMultiCurrencySettings);
+      setIsMultiCurrencyDirty(false);
       return;
     }
     if (isEmailTemplatesSection(activeSection)) {
@@ -1612,6 +1708,8 @@ export default function SettingsPage() {
         ? "Transaction numbers"
         : activeSection === "credit-notes"
           ? "Advanced"
+          : activeSection === "multi-currency"
+            ? "Multi Currency"
           : activeSection === "smtp"
             ? "SMTP"
             : `Email · ${activeEmailChild?.label ?? "Template"}`;
@@ -1690,7 +1788,9 @@ export default function SettingsPage() {
               className={`settings-page${
                 isEmailTemplatesSection(activeSection)
                   ? " settings-page--with-preview"
-                  : " settings-page--with-recommend"
+                  : activeSection === "multi-currency"
+                    ? " settings-page--with-recommend settings-page--multi-currency"
+                    : " settings-page--with-recommend"
               }`}
               onKeyDown={stopInputShortcutPropagation}
             >
@@ -1711,13 +1811,17 @@ export default function SettingsPage() {
                                 className={`settings-nav-item settings-nav-item--group${
                                   groupActive ? " settings-nav-item--active" : ""
                                 }`}
-                                onClick={() =>
-                                  switchSection(
-                                    groupActive
-                                      ? activeSection
-                                      : item.children[0].id,
-                                  )
-                                }
+                                aria-expanded={emailTemplatesNavOpen}
+                                onClick={() => {
+                                  if (emailTemplatesNavOpen) {
+                                    setEmailTemplatesNavOpen(false);
+                                    return;
+                                  }
+                                  setEmailTemplatesNavOpen(true);
+                                  if (!groupActive) {
+                                    switchSection(item.children[0].id);
+                                  }
+                                }}
                               >
                                 <Icon
                                   source={SETTINGS_MENU_ICONS[item.icon]}
@@ -1726,27 +1830,53 @@ export default function SettingsPage() {
                                 <Text as="span" fontWeight="semibold">
                                   {item.label}
                                 </Text>
+                                <span className="settings-nav-item__chevron">
+                                  <Icon
+                                    source={
+                                      emailTemplatesNavOpen
+                                        ? ChevronUpIcon
+                                        : ChevronDownIcon
+                                    }
+                                    tone="subdued"
+                                  />
+                                </span>
                               </button>
-                              {item.children.map((child) => {
-                                const isActive = child.id === activeSection;
-                                return (
-                                  <button
-                                    key={child.id}
-                                    type="button"
-                                    className={`settings-nav-item settings-nav-item--sub${
-                                      isActive ? " settings-nav-item--active" : ""
-                                    }`}
-                                    onClick={() => switchSection(child.id)}
-                                  >
-                                    <Text
-                                      as="span"
-                                      fontWeight={isActive ? "semibold" : "regular"}
+                              <Collapsible
+                                open={emailTemplatesNavOpen}
+                                id="settings-email-templates-nav"
+                                transition={{
+                                  duration: "150ms",
+                                  timingFunction: "ease",
+                                }}
+                              >
+                                {item.children.map((child) => {
+                                  const isActive = child.id === activeSection;
+                                  return (
+                                    <button
+                                      key={child.id}
+                                      type="button"
+                                      className={`settings-nav-item settings-nav-item--sub${
+                                        isActive
+                                          ? " settings-nav-item--active"
+                                          : ""
+                                      }`}
+                                      onClick={() => {
+                                        setEmailTemplatesNavOpen(true);
+                                        switchSection(child.id);
+                                      }}
                                     >
-                                      {child.label}
-                                    </Text>
-                                  </button>
-                                );
-                              })}
+                                      <Text
+                                        as="span"
+                                        fontWeight={
+                                          isActive ? "semibold" : "regular"
+                                        }
+                                      >
+                                        {child.label}
+                                      </Text>
+                                    </button>
+                                  );
+                                })}
+                              </Collapsible>
                             </div>
                           );
                         }
@@ -1868,6 +1998,67 @@ export default function SettingsPage() {
                       </Card>
 
                       {isCreditNoteDirty ? (
+                        <Text as="p" tone="subdued">
+                          Unsaved changes
+                        </Text>
+                      ) : null}
+                    </BlockStack>
+                  ) : activeSection === "multi-currency" ? (
+                    <BlockStack gap="400">
+                      <BlockStack gap="200">
+                        <Text as="h2" variant="headingMd">
+                          Multi Currency
+                        </Text>
+                        <Text as="p" tone="subdued">
+                          Choose which currency appears on your invoices and
+                          other documents.
+                        </Text>
+                      </BlockStack>
+
+                      <Card>
+                        <BlockStack gap="500">
+                          <RadioButton
+                            label="Off"
+                            helpText="Always use your store’s main currency."
+                            checked={multiCurrencySettings.mode === "off"}
+                            id="multi-currency-off"
+                            name="multiCurrency"
+                            onChange={(_checked, id) => {
+                              if (id !== "multi-currency-off") return;
+                              setMultiCurrencySettings({ mode: "off" });
+                              setIsMultiCurrencyDirty(true);
+                            }}
+                          />
+
+                          <RadioButton
+                            label="Shopify Multi Currency"
+                            helpText="Show the currency the customer paid in at checkout (Shopify Payments)."
+                            checked={multiCurrencySettings.mode === "shopify"}
+                            id="multi-currency-shopify"
+                            name="multiCurrency"
+                            onChange={(_checked, id) => {
+                              if (id !== "multi-currency-shopify") return;
+                              setMultiCurrencySettings({ mode: "shopify" });
+                              setIsMultiCurrencyDirty(true);
+                            }}
+                          />
+
+                          <RadioButton
+                            label="Coin Currency Converter"
+                            helpText="Show the customer’s checkout currency when using the Coin app."
+                            checked={multiCurrencySettings.mode === "coin"}
+                            id="multi-currency-coin"
+                            name="multiCurrency"
+                            onChange={(_checked, id) => {
+                              if (id !== "multi-currency-coin") return;
+                              setMultiCurrencySettings({ mode: "coin" });
+                              setIsMultiCurrencyDirty(true);
+                            }}
+                          />
+                        </BlockStack>
+                      </Card>
+
+                      {isMultiCurrencyDirty ? (
                         <Text as="p" tone="subdued">
                           Unsaved changes
                         </Text>

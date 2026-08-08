@@ -223,10 +223,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
     const src = `/extension-document-print?ticket=${encodeURIComponent(ticket)}`;
 
+    const firstOrder = pages[0]?.order;
+    const orderName =
+      typeof firstOrder?.name === "string" && firstOrder.name.trim()
+        ? firstOrder.name.trim()
+        : null;
+    const documentNumber =
+      typeof firstOrder?.documentNumber === "string" &&
+      firstOrder.documentNumber.trim()
+        ? firstOrder.documentNumber.trim()
+        : null;
+
     void incrementShopMonthlyUsage(session.shop, "printed", 1, {
       documentKind: documentKinds[0] || "sales-order",
+      documentNumber,
       orderGid: orderId ? `gid://shopify/Order/${orderId}` : null,
-      orderName: orderId ? `#${orderId}` : null,
+      orderName,
       processType: "extension",
     });
 

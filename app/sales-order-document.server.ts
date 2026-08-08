@@ -1,8 +1,12 @@
 import prisma from "./db.server";
 import {
+  loadMultiCurrencySettingsForShop,
   loadNumberSeriesEntryForShop,
   loadStoreDetailsForShop,
 } from "./shop-settings.server";
+import {
+  usesPresentmentCurrency,
+} from "./multi-currency-settings";
 import {
   defaultTemplateSettings,
   mergeTemplateSettings,
@@ -81,6 +85,29 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
 function moneyAmount(value: { amount?: string } | null | undefined) {
   const amount = Number(value?.amount ?? 0);
   return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
+}
+
+/** Copy presentmentMoney → shopMoney so existing mappers keep working. */
+function promotePresentmentDeep(value: unknown): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) promotePresentmentDeep(item);
+    return;
+  }
+  const obj = value as Record<string, unknown>;
+  const shopMoney = obj.shopMoney;
+  const presentmentMoney = obj.presentmentMoney;
+  if (
+    shopMoney &&
+    typeof shopMoney === "object" &&
+    presentmentMoney &&
+    typeof presentmentMoney === "object"
+  ) {
+    obj.shopMoney = presentmentMoney;
+  }
+  for (const child of Object.values(obj)) {
+    promotePresentmentDeep(child);
+  }
 }
 
 /** Accept Money scalar string/number or MoneyV2-like `{ amount }`. */
@@ -321,6 +348,11 @@ type OrderNode = {
   totalShippingPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
   currentTotalTaxSet?: { shopMoney?: { amount: string; currencyCode: string } };
   currentTotalPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  /** Original order amounts (unchanged after refunds). */
+  subtotalPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  totalDiscountsSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  totalTaxSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  totalPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalReceivedSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalOutstandingSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalRefundedSet?: { shopMoney?: { amount: string; currencyCode: string } };
@@ -597,9 +629,10 @@ export async function fetchSalesOrderDocument(
     ) => Promise<Response>;
   },
   orderGid: string,
-  options?: { asCreditNote?: boolean },
+  options?: { asCreditNote?: boolean; shop?: string },
 ): Promise<SalesOrderDocumentData | null> {
-  const response = await admin.graphql(
+  const [response, multiCurrency] = await Promise.all([
+    admin.graphql(
     `#graphql
       query SalesOrderDocument($id: ID!) {
         order(id: $id) {
@@ -649,22 +682,26 @@ export async function fetchSalesOrderDocument(
             country
             phone
           }
-          currentSubtotalPriceSet { shopMoney { amount currencyCode } }
-          currentTotalDiscountsSet { shopMoney { amount currencyCode } }
-          totalShippingPriceSet { shopMoney { amount currencyCode } }
-          currentTotalTaxSet { shopMoney { amount currencyCode } }
-          currentTotalPriceSet { shopMoney { amount currencyCode } }
-          totalReceivedSet { shopMoney { amount currencyCode } }
-          totalOutstandingSet { shopMoney { amount currencyCode } }
-          totalRefundedSet { shopMoney { amount currencyCode } }
+          currentSubtotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          currentTotalDiscountsSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalShippingPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          currentTotalTaxSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          currentTotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          subtotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalDiscountsSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalTaxSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalReceivedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalOutstandingSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+          totalRefundedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
           refunds(first: 50) {
             id
-            totalRefundedSet { shopMoney { amount currencyCode } }
+            totalRefundedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
             refundLineItems(first: 100) {
               nodes {
                 quantity
-                subtotalSet { shopMoney { amount } }
-                totalTaxSet { shopMoney { amount } }
+                subtotalSet { shopMoney { amount } presentmentMoney { amount } }
+                totalTaxSet { shopMoney { amount } presentmentMoney { amount } }
                 lineItem {
                   title
                   variantTitle
@@ -682,13 +719,13 @@ export async function fetchSalesOrderDocument(
             }
             orderAdjustments(first: 20) {
               nodes {
-                amountSet { shopMoney { amount } }
+                amountSet { shopMoney { amount } presentmentMoney { amount } }
                 reason
               }
             }
             refundShippingLines(first: 10) {
               nodes {
-                subtotalAmountSet { shopMoney { amount } }
+                subtotalAmountSet { shopMoney { amount } presentmentMoney { amount } }
               }
             }
           }
@@ -696,7 +733,7 @@ export async function fetchSalesOrderDocument(
             title
             rate
             ratePercentage
-            priceSet { shopMoney { amount } }
+            priceSet { shopMoney { amount } presentmentMoney { amount } }
           }
           lineItems(first: 100) {
             nodes {
@@ -704,18 +741,18 @@ export async function fetchSalesOrderDocument(
               variantTitle
               name
               quantity
-              originalUnitPriceSet { shopMoney { amount } }
-              originalTotalSet { shopMoney { amount } }
-              totalDiscountSet { shopMoney { amount } }
-              discountedTotalSet(withCodeDiscounts: true) { shopMoney { amount } }
-              priceAfterAllDiscountsBeforeTaxesSet { shopMoney { amount } }
+              originalUnitPriceSet { shopMoney { amount } presentmentMoney { amount } }
+              originalTotalSet { shopMoney { amount } presentmentMoney { amount } }
+              totalDiscountSet { shopMoney { amount } presentmentMoney { amount } }
+              discountedTotalSet(withCodeDiscounts: true) { shopMoney { amount } presentmentMoney { amount } }
+              priceAfterAllDiscountsBeforeTaxesSet { shopMoney { amount } presentmentMoney { amount } }
               discountAllocations {
-                allocatedAmountSet { shopMoney { amount } }
+                allocatedAmountSet { shopMoney { amount } presentmentMoney { amount } }
               }
               taxLines {
                 rate
                 ratePercentage
-                priceSet { shopMoney { amount } }
+                priceSet { shopMoney { amount } presentmentMoney { amount } }
               }
               image {
                 url
@@ -740,7 +777,11 @@ export async function fetchSalesOrderDocument(
         }
       }`,
     { variables: { id: orderGid } },
-  );
+    ),
+    options?.shop
+      ? loadMultiCurrencySettingsForShop(options.shop)
+      : Promise.resolve(null),
+  ]);
 
   const payload = await response.json();
   if (payload?.errors?.length) {
@@ -752,9 +793,25 @@ export async function fetchSalesOrderDocument(
   const order = payload?.data?.order as OrderNode | null | undefined;
   if (!order) return null;
 
+  if (
+    multiCurrency &&
+    usesPresentmentCurrency(multiCurrency.mode)
+  ) {
+    promotePresentmentDeep(order);
+  }
+
   const expectedShipmentDate = expectedShipmentDateFromOrder(order);
+  // Prefer original order money bags so full refunds do not zero Subtotal/Total.
+  const documentSubtotalSet =
+    order.subtotalPriceSet ?? order.currentSubtotalPriceSet;
+  const documentDiscountSet =
+    order.totalDiscountsSet ?? order.currentTotalDiscountsSet;
+  const documentTaxSet = order.totalTaxSet ?? order.currentTotalTaxSet;
+  const documentTotalSet = order.totalPriceSet ?? order.currentTotalPriceSet;
   const currencyCode =
-    order.currentTotalPriceSet?.shopMoney?.currencyCode ?? "USD";
+    documentTotalSet?.shopMoney?.currencyCode ??
+    order.currentTotalPriceSet?.shopMoney?.currencyCode ??
+    "USD";
   const customerName =
     order.customer?.displayName ||
     personName(order.billingAddress) ||
@@ -908,22 +965,20 @@ export async function fetchSalesOrderDocument(
     orderNote: (order.note || "").trim(),
     lineItems,
     subtotal: (() => {
-      const net = Number(order.currentSubtotalPriceSet?.shopMoney?.amount ?? 0);
-      const discounts = Number(
-        order.currentTotalDiscountsSet?.shopMoney?.amount ?? 0,
-      );
+      const net = Number(documentSubtotalSet?.shopMoney?.amount ?? 0);
+      const discounts = Number(documentDiscountSet?.shopMoney?.amount ?? 0);
       // Show gross subtotal so Subtotal − Discount + Tax = Total reads correctly.
       const gross = net + discounts;
       return Number.isFinite(gross) && gross > 0
         ? gross.toFixed(2)
-        : moneyAmount(order.currentSubtotalPriceSet?.shopMoney);
+        : moneyAmount(documentSubtotalSet?.shopMoney);
     })(),
-    discount: moneyAmount(order.currentTotalDiscountsSet?.shopMoney),
+    discount: moneyAmount(documentDiscountSet?.shopMoney),
     shippingPrice: moneyAmount(order.totalShippingPriceSet?.shopMoney),
-    tax: moneyAmount(order.currentTotalTaxSet?.shopMoney),
-    total: moneyAmount(order.currentTotalPriceSet?.shopMoney),
+    tax: moneyAmount(documentTaxSet?.shopMoney),
+    total: moneyAmount(documentTotalSet?.shopMoney),
     ...reconcilePaymentAmounts(
-      moneyAmount(order.currentTotalPriceSet?.shopMoney),
+      moneyAmount(documentTotalSet?.shopMoney),
       moneyAmount(order.totalReceivedSet?.shopMoney),
       moneyAmount(order.totalOutstandingSet?.shopMoney),
       order.displayFinancialStatus,
@@ -935,8 +990,8 @@ export async function fetchSalesOrderDocument(
       orderTaxSummary.length > 0
         ? orderTaxSummary
         : buildTaxSummaryFromLineItems(lineItems),
-      moneyAmount(order.currentTotalPriceSet?.shopMoney),
-      moneyAmount(order.currentTotalTaxSet?.shopMoney),
+      moneyAmount(documentTotalSet?.shopMoney),
+      moneyAmount(documentTaxSet?.shopMoney),
     ),
   };
 
@@ -971,7 +1026,7 @@ export async function fetchSalesOrderList(
     templateId?: string;
   },
 ): Promise<import("./sales-order-document").CustomerOrderListItem[]> {
-  const cacheKey = `${options?.shop || ""}|${options?.templateId || ""}|v2-refunded`;
+  const cacheKey = `${options?.shop || ""}|${options?.templateId || ""}|v3-original-total`;
   const now = Date.now();
   if (options?.shop) {
     const hit = sidebarListCache.get(cacheKey);
@@ -994,8 +1049,9 @@ export async function fetchSalesOrderList(
               company
               name
             }
-            currentTotalPriceSet { shopMoney { amount currencyCode } }
-            totalRefundedSet { shopMoney { amount currencyCode } }
+            currentTotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+            totalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+            totalRefundedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
           }
         }
       }`,
@@ -1021,9 +1077,15 @@ export async function fetchSalesOrderList(
     } | null;
     currentTotalPriceSet?: {
       shopMoney?: { amount: string; currencyCode: string };
+      presentmentMoney?: { amount: string; currencyCode: string };
+    };
+    totalPriceSet?: {
+      shopMoney?: { amount: string; currencyCode: string };
+      presentmentMoney?: { amount: string; currencyCode: string };
     };
     totalRefundedSet?: {
       shopMoney?: { amount: string; currencyCode: string };
+      presentmentMoney?: { amount: string; currencyCode: string };
     };
   }>;
 
@@ -1049,6 +1111,8 @@ export async function fetchSalesOrderList(
       node.billingAddress?.name?.trim() ||
       "Guest customer";
     const refunded = moneyAmount(node.totalRefundedSet?.shopMoney);
+    const totalMoney =
+      node.totalPriceSet?.shopMoney ?? node.currentTotalPriceSet?.shopMoney;
 
     return {
       id: node.id,
@@ -1056,11 +1120,11 @@ export async function fetchSalesOrderList(
       documentNumber: documentNumbers.get(node.id) ?? null,
       customer: customerName,
       createdAt: node.createdAt,
-      total: moneyAmount(node.currentTotalPriceSet?.shopMoney),
+      total: moneyAmount(totalMoney),
       refundedTotal: refunded,
       currencyCode:
         node.totalRefundedSet?.shopMoney?.currencyCode ||
-        node.currentTotalPriceSet?.shopMoney?.currencyCode ||
+        totalMoney?.currencyCode ||
         "USD",
       paymentStatus: node.displayFinancialStatus ?? null,
       invoiced: invoicedGids.has(node.id),

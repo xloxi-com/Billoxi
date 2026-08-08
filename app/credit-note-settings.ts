@@ -10,9 +10,9 @@ export type CreditNoteSettings = {
 };
 
 export const defaultCreditNoteSettings: CreditNoteSettings = {
-  autoOnCancel: false,
-  autoOnRefund: false,
-  autoOnPartialRefund: false,
+  autoOnCancel: true,
+  autoOnRefund: true,
+  autoOnPartialRefund: true,
 };
 
 export function normalizeCreditNoteSettings(
@@ -23,8 +23,18 @@ export function normalizeCreditNoteSettings(
   }
   const input = value as Partial<CreditNoteSettings>;
   return {
-    autoOnCancel: input.autoOnCancel === true,
-    autoOnRefund: input.autoOnRefund === true,
-    autoOnPartialRefund: input.autoOnPartialRefund === true,
+    // Missing key keeps default on — explicit false only turns off.
+    autoOnCancel:
+      "autoOnCancel" in input
+        ? input.autoOnCancel === true
+        : defaultCreditNoteSettings.autoOnCancel,
+    autoOnRefund:
+      "autoOnRefund" in input
+        ? input.autoOnRefund === true
+        : defaultCreditNoteSettings.autoOnRefund,
+    autoOnPartialRefund:
+      "autoOnPartialRefund" in input
+        ? input.autoOnPartialRefund === true
+        : defaultCreditNoteSettings.autoOnPartialRefund,
   };
 }

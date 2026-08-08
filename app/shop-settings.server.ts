@@ -24,6 +24,10 @@ import {
   type InvoiceSettings,
 } from "./invoice-settings";
 import {
+  normalizeMultiCurrencySettings,
+  type MultiCurrencySettings,
+} from "./multi-currency-settings";
+import {
   mergeStoreDetails,
   normalizeStoreDetails,
   type StoreDetails,
@@ -39,6 +43,7 @@ type ShopSettingsRow = {
   emailTemplates?: unknown;
   creditNoteSettings?: unknown;
   invoiceSettings?: unknown;
+  multiCurrencySettings?: unknown;
   selectedTemplates?: unknown;
   numberSeries?: unknown;
 };
@@ -205,6 +210,63 @@ export async function saveInvoiceSettingsForShop(
       VALUES (
         ${randomUUID()},
         ${shop},
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify(normalized)}::jsonb,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+  }
+
+  return normalized;
+}
+
+export async function loadMultiCurrencySettingsForShop(
+  shop: string,
+): Promise<MultiCurrencySettings> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ multiCurrencySettings: unknown }>
+    >`
+      SELECT "multiCurrencySettings"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    return normalizeMultiCurrencySettings(rows[0]?.multiCurrencySettings);
+  } catch {
+    return normalizeMultiCurrencySettings(null);
+  }
+}
+
+export async function saveMultiCurrencySettingsForShop(
+  shop: string,
+  multiCurrencySettings: MultiCurrencySettings,
+): Promise<MultiCurrencySettings> {
+  const normalized = normalizeMultiCurrencySettings(multiCurrencySettings);
+  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "ShopSettings" WHERE shop = ${shop} LIMIT 1
+  `;
+
+  if (existing[0]) {
+    await prisma.$executeRaw`
+      UPDATE "ShopSettings"
+      SET "multiCurrencySettings" = ${JSON.stringify(normalized)}::jsonb,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE shop = ${shop}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "ShopSettings" (
+        id, shop, "storeDetails", "smtpSettings", "creditNoteSettings",
+        "invoiceSettings", "multiCurrencySettings", "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${shop},
+        ${JSON.stringify({})}::jsonb,
         ${JSON.stringify({})}::jsonb,
         ${JSON.stringify({})}::jsonb,
         ${JSON.stringify({})}::jsonb,

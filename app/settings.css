@@ -60,6 +60,21 @@
   max-width: 640px;
 }
 
+/* Multi Currency: same form width as other settings sections */
+.settings-page--multi-currency > .Polaris-Layout {
+  grid-template-columns: 230px 640px 360px;
+}
+
+.settings-page--multi-currency .settings-form-column {
+  max-width: 640px;
+}
+
+@media (max-width: 1300px) {
+  .settings-page--multi-currency > .Polaris-Layout {
+    grid-template-columns: 230px minmax(0, 1fr) 320px;
+  }
+}
+
 @media (max-width: 1300px) {
   .settings-page--with-preview > .Polaris-Layout {
     grid-template-columns: 230px minmax(0, 1fr) 380px;
@@ -151,9 +166,29 @@
   font-size: 0.8125rem;
 }
 
+.settings-nav-item--group {
+  width: 100%;
+}
+
+.settings-nav-item__chevron {
+  margin-left: auto;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
 .settings-nav__group {
   display: flex;
   flex-direction: column;
+}
+
+.settings-nav__group .Polaris-Collapsible .settings-nav-item--sub:last-child {
+  border-bottom: 1px solid var(--p-color-border-secondary, #f1f1f1);
+}
+
+.settings-nav__group:last-child
+  .Polaris-Collapsible
+  .settings-nav-item--sub:last-child {
+  border-bottom: none;
 }
 
 /* Store details custom fields */

@@ -136,6 +136,8 @@ function resolveDocumentKind(
 type BuiltPdfEntry = {
   pdf: Uint8Array;
   fileName: string;
+  orderName: string;
+  documentNumber: string | null;
 };
 
 async function prepareOrdersForPdf(args: {
@@ -212,6 +214,7 @@ async function prepareOrdersForPdf(args: {
 
         const order = await fetchSalesOrderDocument(args.admin, orderGid, {
           asCreditNote: true,
+          shop: args.shop,
         });
         if (!order) return null;
 
@@ -254,6 +257,8 @@ async function prepareOrdersForPdf(args: {
 
         return {
           pdf,
+          orderName: order.name,
+          documentNumber,
           fileName: salesOrderPdfFileName(
             documentNumber || order.name,
             "credit-note",
@@ -310,7 +315,9 @@ async function prepareOrdersForPdf(args: {
         const meta = invoiceMeta.get(orderGid);
         if (!meta) return null;
 
-        const order = await fetchSalesOrderDocument(args.admin, orderGid);
+        const order = await fetchSalesOrderDocument(args.admin, orderGid, {
+          shop: args.shop,
+        });
         if (!order) return null;
 
         const documentNumber =
@@ -346,6 +353,8 @@ async function prepareOrdersForPdf(args: {
 
         return {
           pdf,
+          orderName: order.name,
+          documentNumber,
           fileName: salesOrderPdfFileName(
             documentNumber || order.name,
             "invoice",
@@ -402,7 +411,9 @@ async function prepareOrdersForPdf(args: {
         const meta = packingMeta.get(orderGid);
         if (!meta) return null;
 
-        const order = await fetchSalesOrderDocument(args.admin, orderGid);
+        const order = await fetchSalesOrderDocument(args.admin, orderGid, {
+          shop: args.shop,
+        });
         if (!order) return null;
 
         const documentNumber =
@@ -427,6 +438,8 @@ async function prepareOrdersForPdf(args: {
 
         return {
           pdf,
+          orderName: order.name,
+          documentNumber,
           fileName: salesOrderPdfFileName(
             documentNumber || order.name,
             "packing-slip",
@@ -463,7 +476,9 @@ async function prepareOrdersForPdf(args: {
 
   const built = await mapPool(orderIds, BULK_PDF_CONCURRENCY, async (orderId) => {
     const orderGid = toOrderGid(orderId);
-    const order = await fetchSalesOrderDocument(args.admin, orderGid);
+    const order = await fetchSalesOrderDocument(args.admin, orderGid, {
+      shop: args.shop,
+    });
     if (!order) return null;
 
     const documentNumber = documentNumbers.get(order.id) ?? order.name;
@@ -477,6 +492,8 @@ async function prepareOrdersForPdf(args: {
 
     return {
       pdf,
+      orderName: order.name,
+      documentNumber,
       fileName: salesOrderPdfFileName(documentNumber || order.name),
     };
   });
@@ -499,7 +516,12 @@ export async function buildSalesOrderPdfFile(args: {
   orderId: string;
   templateId?: string | null;
   documentKind?: string | null;
-}): Promise<{ pdf: Uint8Array; fileName: string }> {
+}): Promise<{
+  pdf: Uint8Array;
+  fileName: string;
+  orderName: string;
+  documentNumber: string | null;
+}> {
   const prepared = await prepareOrdersForPdf({
     admin: args.admin,
     shop: args.shop,
@@ -511,7 +533,12 @@ export async function buildSalesOrderPdfFile(args: {
   if (!entry) {
     throw new Response("Document not found", { status: 404 });
   }
-  return { pdf: entry.pdf, fileName: entry.fileName };
+  return {
+    pdf: entry.pdf,
+    fileName: entry.fileName,
+    orderName: entry.orderName,
+    documentNumber: entry.documentNumber,
+  };
 }
 
 export async function buildSalesOrdersPdfZip(args: {

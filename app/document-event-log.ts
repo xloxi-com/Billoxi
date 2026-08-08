@@ -83,22 +83,44 @@ export function processTypeLabel(
   return "Manual process";
 }
 
-export function formatOrderIdLabel(
-  orderName?: string | null,
+/** Shopify Order GID numeric id (e.g. 7374577533169), not merchant order name (#1009). */
+export function shopifyOrderGidNumeric(
   orderGid?: string | null,
-): string {
-  const name = orderName?.trim();
-  if (name) {
-    return name.startsWith("#") ? name : `#${name.replace(/^#/, "")}`;
-  }
+): string | null {
   const gid = orderGid?.trim();
-  if (!gid) return "—";
+  if (!gid) return null;
   const numeric = gid.includes("/")
     ? gid.split("/").pop()
     : /^\d+$/.test(gid)
       ? gid
       : null;
-  return numeric ? `#${numeric}` : "—";
+  return numeric && /^\d+$/.test(numeric) ? numeric : null;
+}
+
+/**
+ * True when `orderName` is missing or is just the Shopify internal Order id
+ * (written by older extension logs as `#7374577533169` instead of `#1009`).
+ */
+export function isInternalShopifyOrderIdLabel(
+  orderName?: string | null,
+  orderGid?: string | null,
+): boolean {
+  const bare = orderName?.trim().replace(/^#/, "") || "";
+  if (!bare) return true;
+  const gidNumeric = shopifyOrderGidNumeric(orderGid);
+  return Boolean(gidNumeric && bare === gidNumeric);
+}
+
+export function formatOrderIdLabel(
+  orderName?: string | null,
+  orderGid?: string | null,
+): string {
+  if (!isInternalShopifyOrderIdLabel(orderName, orderGid)) {
+    const name = orderName!.trim();
+    return name.startsWith("#") ? name : `#${name.replace(/^#/, "")}`;
+  }
+  // Never show the raw Shopify Order id as the merchant-facing order number.
+  return "—";
 }
 
 export function orderIdHref(

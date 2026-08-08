@@ -1,6 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
 
-import { peekExtensionDownloadTicket } from "../extension-download-ticket.server";
+import {
+  peekExtensionDownloadTicket,
+  type ExtensionExportPayload,
+} from "../extension-download-ticket.server";
 import { authenticate } from "../shopify.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import { loader as exportLoader } from "./app.sales-order.export.$orderId";
@@ -132,10 +135,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
   });
 
   if (shop) {
+    const order =
+      payload && typeof payload === "object" && "order" in payload
+        ? (payload as ExtensionExportPayload).order
+        : null;
+    const orderName =
+      typeof order?.name === "string" && order.name.trim()
+        ? order.name.trim()
+        : null;
+    const documentNumber =
+      typeof order?.documentNumber === "string" && order.documentNumber.trim()
+        ? order.documentNumber.trim()
+        : null;
+
     void incrementShopMonthlyUsage(shop, "downloaded", 1, {
       documentKind: kind,
+      documentNumber,
       orderGid: `gid://shopify/Order/${orderId}`,
-      orderName: `#${orderId}`,
+      orderName,
       processType: "extension",
     });
   }

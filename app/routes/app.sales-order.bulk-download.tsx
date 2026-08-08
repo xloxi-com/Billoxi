@@ -33,7 +33,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     if (orderIds.length === 1) {
-      const { pdf, fileName } = await buildSalesOrderPdfFile({
+      const { pdf, fileName, orderName, documentNumber } =
+        await buildSalesOrderPdfFile({
         admin,
         shop: session.shop,
         orderId: orderIds[0]!,
@@ -47,8 +48,9 @@ export async function action({ request }: ActionFunctionArgs) {
         1,
         {
           documentKind,
+          documentNumber,
           orderGid: orderIds[0],
-          orderName: null,
+          orderName,
           processType: "bulk",
         },
       );

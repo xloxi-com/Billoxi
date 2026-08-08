@@ -63,10 +63,11 @@ export function normalizeOrderIdentity(args: {
 
   if (name) {
     name = name.startsWith("#") ? name : `#${name.replace(/^#/, "")}`;
-  } else if (gid) {
-    const numeric = gid.split("/").pop();
-    if (numeric && /^\d+$/.test(numeric)) {
-      name = `#${numeric}`;
+    // Reject `#7374577533169`-style values that are just the Order GID id.
+    const bare = name.replace(/^#/, "");
+    const gidNumeric = gid?.split("/").pop();
+    if (gidNumeric && bare === gidNumeric) {
+      name = null;
     }
   }
 
@@ -140,6 +141,143 @@ export async function recordDocumentEvent(
   }
 }
 
+function mapEventLogRow(row: EventLogRow): DocumentEventLogItem {
+  const action = isDocumentEventAction(row.action)
+    ? row.action
+    : "downloaded";
+  const processType = isDocumentEventProcessType(row.processType)
+    ? row.processType
+    : null;
+  const identity = normalizeOrderIdentity({
+    orderGid: row.orderGid,
+    orderName: row.orderName,
+  });
+  const count = Number(row.count) || 1;
+  return {
+    id: row.id,
+    action,
+    documentKind: row.documentKind,
+    documentNumber: row.documentNumber,
+    orderGid: identity.orderGid,
+    orderName: identity.orderName,
+    processType,
+    count,
+    message: buildDocumentEventMessage({
+      action,
+      count,
+      documentKind: row.documentKind,
+      documentNumber: row.documentNumber,
+      orderName: identity.orderName,
+      orderGid: identity.orderGid,
+      processType,
+    }),
+    createdAt: new Date(row.createdAt).toISOString(),
+  };
+}
+
+const ORDER_NAMES_BY_IDS_QUERY = `#graphql
+  query DocumentEventOrderNames($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Order {
+        id
+        name
+      }
+    }
+  }
+`;
+
+/**
+ * Fill merchant order names (#1009) for events that only stored the Shopify
+ * Order id. Persists the fix so Event Logs stay correct after refresh.
+ */
+export async function enrichDocumentEventsWithOrderNames(
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: Record<string, unknown> },
+    ) => Promise<Response>;
+  },
+  events: DocumentEventLogItem[],
+): Promise<DocumentEventLogItem[]> {
+  const needsName = events.filter(
+    (event) => event.orderGid && !event.orderName,
+  );
+  if (needsName.length === 0) return events;
+
+  const ids = [
+    ...new Set(
+      needsName
+        .map((event) => event.orderGid)
+        .filter((gid): gid is string => Boolean(gid)),
+    ),
+  ];
+
+  const nameByGid = new Map<string, string>();
+  try {
+    const response = await admin.graphql(ORDER_NAMES_BY_IDS_QUERY, {
+      variables: { ids },
+    });
+    const json = (await response.json()) as {
+      data?: { nodes?: Array<{ id?: string; name?: string } | null> };
+    };
+    for (const node of json.data?.nodes || []) {
+      if (!node?.id || !node.name) continue;
+      const formatted = node.name.startsWith("#")
+        ? node.name
+        : `#${node.name.replace(/^#/, "")}`;
+      nameByGid.set(node.id, formatted);
+    }
+  } catch (error) {
+    console.error("[document-event-log] order name lookup failed", error);
+    return events;
+  }
+
+  if (nameByGid.size === 0) return events;
+
+  const updated = events.map((event) => {
+    if (event.orderName || !event.orderGid) return event;
+    const orderName = nameByGid.get(event.orderGid) || null;
+    if (!orderName) return event;
+    const message = buildDocumentEventMessage({
+      action: event.action,
+      count: event.count,
+      documentKind: event.documentKind,
+      documentNumber: event.documentNumber,
+      orderName,
+      orderGid: event.orderGid,
+      processType: event.processType,
+    });
+    return { ...event, orderName, message };
+  });
+
+  void Promise.all(
+    updated
+      .filter((event) => {
+        const prior = events.find((row) => row.id === event.id);
+        return prior && !prior.orderName && event.orderName;
+      })
+      .map(async (event) => {
+        try {
+          await prisma.$executeRaw`
+            UPDATE "DocumentEventLog"
+            SET
+              "orderName" = ${event.orderName},
+              message = ${event.message}
+            WHERE id = ${event.id}
+          `;
+        } catch (error) {
+          console.error(
+            "[document-event-log] persist order name failed",
+            event.id,
+            error,
+          );
+        }
+      }),
+  );
+
+  return updated;
+}
+
 export async function loadRecentDocumentEvents(
   shop: string,
   limit = 20,
@@ -171,40 +309,7 @@ export async function loadRecentDocumentEvents(
       shop,
     );
 
-    return rows.map((row) => {
-      const action = isDocumentEventAction(row.action)
-        ? row.action
-        : "downloaded";
-      const processType = isDocumentEventProcessType(row.processType)
-        ? row.processType
-        : null;
-      const identity = normalizeOrderIdentity({
-        orderGid: row.orderGid,
-        orderName: row.orderName,
-      });
-      return {
-        id: row.id,
-        action,
-        documentKind: row.documentKind,
-        documentNumber: row.documentNumber,
-        orderGid: identity.orderGid,
-        orderName: identity.orderName,
-        processType,
-        count: Number(row.count) || 1,
-        message:
-          row.message ||
-          buildDocumentEventMessage({
-            action,
-            count: Number(row.count) || 1,
-            documentKind: row.documentKind,
-            documentNumber: row.documentNumber,
-            orderName: identity.orderName,
-            orderGid: identity.orderGid,
-            processType,
-          }),
-        createdAt: new Date(row.createdAt).toISOString(),
-      };
-    });
+    return rows.map(mapEventLogRow);
   } catch (error) {
     console.error("[document-event-log] load failed", shop, error);
     return [];

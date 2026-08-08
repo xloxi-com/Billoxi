@@ -3030,7 +3030,7 @@ export function shouldShowDocumentPaidAmount(
   return hasNonZeroAmount(order.paidAmount);
 }
 
-/** Show Balance Due; on fully refunded orders use invoice total (not $0). */
+/** Show Balance Due; fully refunded orders still show $0.00. */
 export function shouldShowDocumentBalanceDue(
   order: Pick<SalesOrderDocumentData, "balanceDue" | "financialStatus">,
   enabled: boolean,
@@ -3243,8 +3243,8 @@ export function reconcilePaymentAmounts(
     if (refundedN <= 0 && totalN > 0) refundedN = totalN;
     return {
       paidAmount: "0.00",
-      // Invoice total — not $0 (refund recorded separately on Refunded Amount).
-      balanceDue: totalN.toFixed(2),
+      // Refund is shown on Refunded Amount; nothing remains due.
+      balanceDue: "0.00",
       refundedAmount: refundedN.toFixed(2),
     };
   }

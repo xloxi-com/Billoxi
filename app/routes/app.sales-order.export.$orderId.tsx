@@ -77,7 +77,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
 
     const [order, template] = await Promise.all([
-      fetchSalesOrderDocument(admin, orderGid, { asCreditNote: true }),
+      fetchSalesOrderDocument(admin, orderGid, {
+        asCreditNote: true,
+        shop: session.shop,
+      }),
       loadDocumentTemplateSettings(
         session.shop,
         "credit-note",
@@ -159,7 +162,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
 
     const [order, template, packingMeta, soNumbers] = await Promise.all([
-      fetchSalesOrderDocument(admin, orderGid),
+      fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
       loadDocumentTemplateSettings(
         session.shop,
         "packing-slip",
@@ -227,7 +230,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
 
     const [order, template] = await Promise.all([
-      fetchSalesOrderDocument(admin, orderGid),
+      fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
       loadDocumentTemplateSettings(session.shop, "invoice", templateId, admin),
     ]);
 
@@ -300,7 +303,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   );
 
   const [order, template] = await Promise.all([
-    fetchSalesOrderDocument(admin, orderGid),
+    fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
     loadSalesOrderTemplateSettings(session.shop, templateId, admin),
   ]);
 

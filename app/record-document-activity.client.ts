@@ -30,10 +30,13 @@ function toOrderGid(value?: string | null): string | null {
 
 function toOrderName(value?: string | null, gid?: string | null): string | null {
   const name = value?.trim();
-  if (name) return name.startsWith("#") ? name : `#${name.replace(/^#/, "")}`;
+  if (!name) return null;
+  const formatted = name.startsWith("#") ? name : `#${name.replace(/^#/, "")}`;
+  const bare = formatted.replace(/^#/, "");
   const fromGid = gid?.split("/").pop();
-  if (fromGid && /^\d+$/.test(fromGid)) return `#${fromGid}`;
-  return null;
+  // Never treat the Shopify numeric Order id as the merchant order name.
+  if (fromGid && bare === fromGid) return null;
+  return formatted;
 }
 
 async function activityHeaders(): Promise<HeadersInit> {

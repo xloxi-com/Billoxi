@@ -24,10 +24,14 @@ import {
   InlineStack,
   Modal,
   RadioButton,
+  Icon,
   ResourceItem,
   ResourceList,
+  Scrollable,
   Text,
+  TextField,
 } from "@shopify/polaris";
+import { SearchIcon } from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
@@ -223,6 +227,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const [order, template] = await Promise.all([
     fetchSalesOrderDocument(admin, orderGid, {
       asCreditNote: isCreditNote,
+      shop: session.shop,
     }),
     isIssuedDocument
       ? loadDocumentTemplateSettings(
@@ -769,6 +774,7 @@ export default function SalesOrderDocumentPage() {
   }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const paperRef = useRef<HTMLDivElement>(null);
+  const documentPageRef = useRef<HTMLDivElement>(null);
   const actionRanRef = useRef(false);
   const handledConvertDataRef = useRef<unknown>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -817,6 +823,7 @@ export default function SalesOrderDocumentPage() {
 
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
   const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
+  const [sidebarQuery, setSidebarQuery] = useState("");
   const [numberMode, setNumberMode] = useState<"continue" | "manual">(
     "continue",
   );
@@ -857,6 +864,46 @@ export default function SalesOrderDocumentPage() {
     data.settings.terms,
     isCreditNote,
   ]);
+
+  // Fill remaining viewport under the page header so no empty footer gap remains.
+  useEffect(() => {
+    const page = documentPageRef.current;
+    if (!page) return;
+
+    const BOTTOM_GAP_PX = 8;
+    const mobileQuery = window.matchMedia("(max-width: 900px)");
+
+    const syncHeight = () => {
+      if (mobileQuery.matches) {
+        page.style.removeProperty("--sales-order-doc-height");
+        return;
+      }
+      const top = page.getBoundingClientRect().top;
+      const next = Math.max(
+        240,
+        Math.floor(window.innerHeight - top - BOTTOM_GAP_PX),
+      );
+      page.style.setProperty("--sales-order-doc-height", `${next}px`);
+    };
+
+    syncHeight();
+    const rafId = window.requestAnimationFrame(syncHeight);
+    window.addEventListener("resize", syncHeight);
+    mobileQuery.addEventListener("change", syncHeight);
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(syncHeight)
+        : null;
+    observer?.observe(document.documentElement);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", syncHeight);
+      mobileQuery.removeEventListener("change", syncHeight);
+      observer?.disconnect();
+      page.style.removeProperty("--sales-order-doc-height");
+    };
+  }, []);
 
   const previewOrder = useMemo(() => {
     if (!invoiceEditOpen) return data.order;
@@ -1624,6 +1671,25 @@ export default function SalesOrderDocumentPage() {
     revalidator,
   ]);
 
+  const handleReload = useCallback(() => {
+    if (
+      isConverting ||
+      isDownloading ||
+      isPrinting ||
+      isSendingEmail ||
+      revalidator.state !== "idle"
+    ) {
+      return;
+    }
+    revalidator.revalidate();
+  }, [
+    isConverting,
+    isDownloading,
+    isPrinting,
+    isSendingEmail,
+    revalidator,
+  ]);
+
   return (
     <s-page
       heading={previewOrder.documentNumber || data.order.name}
@@ -1654,6 +1720,22 @@ export default function SalesOrderDocumentPage() {
         }}
       >
         {isDownloading ? "Downloading…" : "Download"}
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        icon="refresh"
+        loading={revalidator.state !== "idle" || undefined}
+        disabled={
+          isConverting ||
+          isDownloading ||
+          isPrinting ||
+          isSendingEmail ||
+          revalidator.state !== "idle" ||
+          undefined
+        }
+        onClick={handleReload}
+      >
+        Reload
       </s-button>
       {!isPackingSlip ? (
         <s-button
@@ -1742,12 +1824,8 @@ export default function SalesOrderDocumentPage() {
         </s-button>
       ) : null}
 
-      <div className="sales-order-document-page">
-        <s-grid
-          gridTemplateColumns="minmax(340px, 400px) minmax(0, 1fr)"
-          gap="small-200"
-          alignItems="stretch"
-        >
+      <div ref={documentPageRef} className="sales-order-document-page">
+        <div className="sales-order-document-layout">
           <aside className="sales-order-document-sidebar no-print">
             <AppProvider i18n={enTranslations}>
               <div className="sales-order-document-sidebar__card">
@@ -1757,22 +1835,52 @@ export default function SalesOrderDocumentPage() {
                     paddingBlockStart="400"
                     paddingBlockEnd="300"
                   >
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingSm">
-                        {isCreditNote
-                          ? "Credit notes"
-                          : isInvoice
-                            ? "Invoices"
-                            : isPackingSlip
-                              ? "Packing slips"
-                              : "Sales orders"}
-                      </Text>
-                      <Button onClick={() => navigate(listPath)} variant="plain">
-                        View all
-                      </Button>
-                    </InlineStack>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h2" variant="headingSm">
+                          {isCreditNote
+                            ? "Credit notes"
+                            : isInvoice
+                              ? "Invoices"
+                              : isPackingSlip
+                                ? "Packing slips"
+                                : "Sales orders"}
+                        </Text>
+                        <Button
+                          onClick={() => navigate(listPath)}
+                          variant="plain"
+                        >
+                          View all
+                        </Button>
+                      </InlineStack>
+                      <TextField
+                        label="Search"
+                        labelHidden
+                        value={sidebarQuery}
+                        onChange={setSidebarQuery}
+                        autoComplete="off"
+                        placeholder={
+                          isCreditNote
+                            ? "Search credit notes"
+                            : isInvoice
+                              ? "Search invoices"
+                              : isPackingSlip
+                                ? "Search packing slips"
+                                : "Search orders"
+                        }
+                        prefix={<Icon source={SearchIcon} tone="subdued" />}
+                        clearButton
+                        onClearButtonClick={() => setSidebarQuery("")}
+                      />
+                    </BlockStack>
                   </Box>
-                  <div className="sales-order-document-sidebar__list">
+                  <Scrollable
+                    className="sales-order-document-sidebar__list"
+                    vertical
+                    horizontal={false}
+                    focusable
+                    scrollbarWidth="thin"
+                  >
                     <Suspense
                       fallback={
                         <div className="sales-order-document-sidebar__loading">
@@ -1781,7 +1889,26 @@ export default function SalesOrderDocumentPage() {
                       }
                     >
                       <Await resolve={data.salesOrders}>
-                        {(salesOrders) => (
+                        {(salesOrders) => {
+                          const query = sidebarQuery.trim().toLowerCase();
+                          const filteredOrders = query
+                            ? salesOrders.filter((item) => {
+                                const haystack = [
+                                  item.customer,
+                                  item.documentNumber,
+                                  item.name,
+                                  item.total,
+                                  item.paymentStatus,
+                                  formatStatus(item.paymentStatus || ""),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")
+                                  .toLowerCase();
+                                return haystack.includes(query);
+                              })
+                            : salesOrders;
+
+                          return (
                     <ResourceList
                       resourceName={
                         isCreditNote
@@ -1798,8 +1925,17 @@ export default function SalesOrderDocumentPage() {
                                   plural: "sales orders",
                                 }
                       }
-                      items={salesOrders}
+                      items={filteredOrders}
                       idForItem={(item) => item.id}
+                      emptyState={
+                        query ? (
+                          <Box padding="400">
+                            <Text as="p" tone="subdued" alignment="center">
+                              No matches for “{sidebarQuery.trim()}”
+                            </Text>
+                          </Box>
+                        ) : undefined
+                      }
                       renderItem={(item) => {
                         const isActive = item.id === data.order.id;
                         const salesOrderLabel =
@@ -1897,46 +2033,55 @@ export default function SalesOrderDocumentPage() {
                         );
                       }}
                     />
-                        )}
+                          );
+                        }}
                       </Await>
                     </Suspense>
-                  </div>
+                  </Scrollable>
                 </Card>
               </div>
             </AppProvider>
           </aside>
 
           <div className="sales-order-document-stage">
-            <PaperScaleFrame>
-              <div
-                ref={paperRef}
-                className={`template-editor__paper template-editor__paper--${data.settings.orientation} template-editor__paper--${data.settings.paperSize.toLowerCase()}`}
-                style={{
-                  backgroundColor: data.settings.backgroundColor,
-                  fontFamily: resolveDocumentFontFamily(
-                    data.settings.fontFamily,
-                  ),
-                  padding: paperPaddingCss(data.settings.margins),
-                }}
-              >
-                {documentStatusRibbon ? (
-                  <div
-                    className={`sales-order-status-ribbon sales-order-status-ribbon--${documentStatusRibbon.variant} no-print`}
-                    aria-label={documentStatusRibbon.label}
-                  >
-                    <span>{documentStatusRibbon.label}</span>
-                  </div>
-                ) : null}
-                <SalesOrderLiveDocument
-                  settings={previewSettings}
-                  templateId={data.templateId}
-                  storeDetails={data.storeDetails}
-                  order={previewOrder}
-                />
-              </div>
-            </PaperScaleFrame>
+            <Scrollable
+              className="sales-order-document-stage__scroll"
+              vertical
+              horizontal={false}
+              focusable
+              scrollbarWidth="thin"
+            >
+              <PaperScaleFrame>
+                <div
+                  ref={paperRef}
+                  className={`template-editor__paper template-editor__paper--${data.settings.orientation} template-editor__paper--${data.settings.paperSize.toLowerCase()}`}
+                  style={{
+                    backgroundColor: data.settings.backgroundColor,
+                    fontFamily: resolveDocumentFontFamily(
+                      data.settings.fontFamily,
+                    ),
+                    padding: paperPaddingCss(data.settings.margins),
+                  }}
+                >
+                  {documentStatusRibbon ? (
+                    <div
+                      className={`sales-order-status-ribbon sales-order-status-ribbon--${documentStatusRibbon.variant} no-print`}
+                      aria-label={documentStatusRibbon.label}
+                    >
+                      <span>{documentStatusRibbon.label}</span>
+                    </div>
+                  ) : null}
+                  <SalesOrderLiveDocument
+                    settings={previewSettings}
+                    templateId={data.templateId}
+                    storeDetails={data.storeDetails}
+                    order={previewOrder}
+                  />
+                </div>
+              </PaperScaleFrame>
+            </Scrollable>
           </div>
-        </s-grid>
+        </div>
       </div>
       <AppProvider i18n={enTranslations}>
         <Modal

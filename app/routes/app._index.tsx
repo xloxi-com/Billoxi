@@ -23,8 +23,15 @@ import {
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { requireAdminAuth } from "../shopify-context.server";
-import { loadShopMonthlyUsage } from "../shop-monthly-usage.server";
-import { loadRecentDocumentEvents } from "../document-event-log.server";
+import {
+  loadDailyUsageSeries,
+  loadShopMonthlyUsage,
+  type DailyUsagePoint,
+} from "../shop-monthly-usage.server";
+import {
+  enrichDocumentEventsWithOrderNames,
+  loadRecentDocumentEvents,
+} from "../document-event-log.server";
 import {
   documentKindLabel,
   formatEventLogTime,
@@ -34,6 +41,148 @@ import {
 import prisma from "../db.server";
 import offrefyLogo from "../assets/recommended/offrefy.png";
 import approvefyLogo from "../assets/recommended/approvefy.png";
+
+const CHART_SERIES = [
+  { key: "printed" as const, label: "Printed", color: "#2C6ECB" },
+  { key: "downloaded" as const, label: "Downloaded", color: "#1A7F64" },
+  { key: "sent" as const, label: "Sent", color: "#B98900" },
+];
+
+function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
+  const width = 720;
+  const height = 220;
+  const pad = { top: 16, right: 12, bottom: 36, left: 36 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const maxValue = Math.max(
+    1,
+    ...series.flatMap((point) => [
+      point.printed,
+      point.downloaded,
+      point.sent,
+    ]),
+  );
+  const groupCount = Math.max(series.length, 1);
+  const groupWidth = plotW / groupCount;
+  const barGap = 2;
+  const barWidth = Math.max(
+    3,
+    Math.min(14, (groupWidth - 8) / CHART_SERIES.length - barGap),
+  );
+  const yTicks = [0, 0.5, 1].map((ratio) => Math.round(maxValue * ratio));
+
+  return (
+    <BlockStack gap="300">
+      <InlineStack align="space-between" blockAlign="center" wrap>
+        <Text as="h3" variant="headingSm">
+          Last 14 days
+        </Text>
+        <InlineStack gap="300" wrap>
+          {CHART_SERIES.map((item) => (
+            <InlineStack key={item.key} gap="100" blockAlign="center">
+              <span
+                aria-hidden
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 2,
+                  background: item.color,
+                  display: "inline-block",
+                }}
+              />
+              <Text as="span" variant="bodySm" tone="subdued">
+                {item.label}
+              </Text>
+            </InlineStack>
+          ))}
+        </InlineStack>
+      </InlineStack>
+
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          width="100%"
+          height="220"
+          role="img"
+          aria-label="Printed, downloaded, and sent activity for the last 14 days"
+        >
+          {yTicks.map((tick) => {
+            const y = pad.top + plotH - (tick / maxValue) * plotH;
+            return (
+              <g key={`y-${tick}`}>
+                <line
+                  x1={pad.left}
+                  x2={width - pad.right}
+                  y1={y}
+                  y2={y}
+                  stroke="#E3E3E3"
+                  strokeWidth={1}
+                />
+                <text
+                  x={pad.left - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  fill="#8A8A8A"
+                  fontSize={11}
+                  fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+                >
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          {series.map((point, index) => {
+            const groupX = pad.left + index * groupWidth;
+            const clusterWidth =
+              CHART_SERIES.length * barWidth +
+              (CHART_SERIES.length - 1) * barGap;
+            const startX = groupX + (groupWidth - clusterWidth) / 2;
+            const showLabel = index % 2 === 0 || index === series.length - 1;
+
+            return (
+              <g key={point.date}>
+                {CHART_SERIES.map((item, barIndex) => {
+                  const value = point[item.key];
+                  const barH = (value / maxValue) * plotH;
+                  const x = startX + barIndex * (barWidth + barGap);
+                  const y = pad.top + plotH - barH;
+                  return (
+                    <rect
+                      key={item.key}
+                      x={x}
+                      y={y}
+                      width={barWidth}
+                      height={Math.max(barH, value > 0 ? 2 : 0)}
+                      rx={2}
+                      fill={item.color}
+                    >
+                      <title>
+                        {item.label}: {value} on {point.label}
+                      </title>
+                    </rect>
+                  );
+                })}
+                {showLabel ? (
+                  <text
+                    x={groupX + groupWidth / 2}
+                    y={height - 12}
+                    textAnchor="middle"
+                    fill="#8A8A8A"
+                    fontSize={10}
+                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+                  >
+                    {point.label}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </BlockStack>
+  );
+}
 
 const RECOMMENDED_APPS = [
   {
@@ -90,14 +239,21 @@ async function loadShopInstalledAt(shop: string): Promise<Date> {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await requireAdminAuth(request);
+  const { admin, session } = await requireAdminAuth(request);
   const shop = session.shop;
 
-  const [monthlyUsage, installedAt, eventLogs] = await Promise.all([
-    loadShopMonthlyUsage(shop),
-    loadShopInstalledAt(shop),
-    loadRecentDocumentEvents(shop, 15),
-  ]);
+  const [monthlyUsage, usageSeries, installedAt, rawEventLogs] =
+    await Promise.all([
+      loadShopMonthlyUsage(shop),
+      loadDailyUsageSeries(shop, 14),
+      loadShopInstalledAt(shop),
+      loadRecentDocumentEvents(shop, 15),
+    ]);
+
+  const eventLogs = await enrichDocumentEventsWithOrderNames(
+    admin,
+    rawEventLogs,
+  );
 
   const trialEndsAt = new Date(installedAt);
   trialEndsAt.setDate(trialEndsAt.getDate() + PLAN_SUMMARY.trialDays);
@@ -107,6 +263,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       printed: monthlyUsage.printed,
       downloaded: monthlyUsage.downloaded,
       sent: monthlyUsage.sent,
+      series: usageSeries,
     },
     plan: {
       name: PLAN_SUMMARY.planName,
@@ -158,7 +315,7 @@ export default function AppHomePage() {
         ]}
       >
         <Layout>
-          <Layout.Section variant="oneHalf">
+          <Layout.Section>
             <BlockStack gap="400">
               <Card>
                 <BlockStack gap="400">
@@ -184,6 +341,13 @@ export default function AppHomePage() {
                       </Box>
                     ))}
                   </InlineGrid>
+                  <Box
+                    background="bg-surface-secondary"
+                    borderRadius="200"
+                    padding="400"
+                  >
+                    <UsageStatisticsChart series={analytics.series} />
+                  </Box>
                 </BlockStack>
               </Card>
 
