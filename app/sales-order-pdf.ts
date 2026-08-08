@@ -102,6 +102,14 @@ async function loadPdfFonts() {
   return fontLoadPromise;
 }
 
+/** Start font/jsPDF fetches early (extension download tab). */
+export function warmDomVectorPdfDeps() {
+  if (typeof window === "undefined") return;
+  void loadPdfFonts();
+  void loadJsPdf();
+  void ensureDomMeasureFont();
+}
+
 /**
  * Load Noto Sans as a CSS font so DOM measurement uses the same metrics
  * as jsPDF vector text (preview layout → PDF positions stay aligned).

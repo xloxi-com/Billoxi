@@ -2,7 +2,8 @@
   "name": "billoxi",
   "private": true,
   "scripts": {
-    "build": "react-router build",
+    "build": "npm run build:extension-pdf && react-router build",
+    "build:extension-pdf": "vite build --config vite.extension-pdf.config.ts",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",

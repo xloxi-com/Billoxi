@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 
+import { createDomDownloadTicket } from "../extension-dom-download-ticket.server";
 import { extensionPublicOrigin } from "../extension-public-origin.server";
 import { markOrderInvoiced } from "../order-invoice-status.server";
 import { markOrderPackingSlip } from "../order-packing-slip-status.server";
@@ -116,6 +117,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   );
   downloadUrl.searchParams.set("orderId", orderId);
   downloadUrl.searchParams.set("document", documentKind);
+
+  const ticketResult = await createDomDownloadTicket({
+    request,
+    orderId,
+    documentKind,
+    shop: session.shop,
+  });
+  if ("ticket" in ticketResult) {
+    downloadUrl.searchParams.set("ticket", ticketResult.ticket);
+  }
 
   return cors(
     corsJson(request, {

@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 
+import { createDomDownloadTicket } from "../extension-dom-download-ticket.server";
 import { extensionPublicOrigin } from "../extension-public-origin.server";
 import { getInvoicedOrderGids } from "../order-invoice-status.server";
 import { getPackingSlipOrderGids } from "../order-packing-slip-status.server";
@@ -7,9 +8,9 @@ import { toOrderGid } from "../sales-order-document";
 import { authenticate } from "../shopify.server";
 
 /**
- * Lightweight prep for Admin UI extensions.
- * Returns DOM-PDF download URL, or needsConvert when invoice/packing slip
- * does not exist yet (same gate as in-app).
+ * Prep for Admin UI extensions.
+ * Prefetches export payload into a ticket so Save PDF's tab skips GraphQL
+ * (same DOM template — just faster).
  */
 function extensionCorsHeaders(request: Request): HeadersInit {
   const origin =
@@ -56,6 +57,19 @@ async function withAdminCors(request: Request) {
   }
 }
 
+type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+
+function parseDocumentKind(value: string): DocumentKind {
+  if (
+    value === "invoice" ||
+    value === "credit-note" ||
+    value === "packing-slip"
+  ) {
+    return value;
+  }
+  return "sales-order";
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   if (request.method === "OPTIONS") {
     return corsPreflight(request);
@@ -66,8 +80,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const orderId = String(url.searchParams.get("orderId") || "")
     .replace(/^gid:\/\/shopify\/Order\//i, "")
     .trim();
-  const documentKind = String(
-    url.searchParams.get("document") || "sales-order",
+  const documentKind = parseDocumentKind(
+    String(url.searchParams.get("document") || "sales-order"),
   );
 
   if (!orderId || !/^\d+$/.test(orderId)) {
@@ -78,36 +92,64 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const orderGid = toOrderGid(orderId);
   let needsConvert = false;
+  let isConverted = false;
 
   if (documentKind === "invoice") {
     const invoiced = await getInvoicedOrderGids(session.shop, [orderGid]);
-    needsConvert = !invoiced.has(orderGid);
+    isConverted = invoiced.has(orderGid);
+    needsConvert = !isConverted;
   } else if (documentKind === "packing-slip") {
     const packing = await getPackingSlipOrderGids(session.shop, [orderGid]);
-    needsConvert = !packing.has(orderGid);
+    isConverted = packing.has(orderGid);
+    needsConvert = !isConverted;
   }
 
   const origin = extensionPublicOrigin(request);
-
   const downloadUrl = new URL("/extension-dom-download", origin);
   downloadUrl.searchParams.set("orderId", orderId);
   downloadUrl.searchParams.set("document", documentKind);
 
-  // Relative path — extension fetch must stay on the HTTPS app proxy.
-  const convertPath = needsConvert
-    ? `/extension-document-convert?${new URLSearchParams({
-        orderId,
-        document: documentKind,
-      })}`
-    : null;
+  const convertPath =
+    documentKind === "invoice" || documentKind === "packing-slip"
+      ? `/extension-document-convert?${new URLSearchParams({
+          orderId,
+          document: documentKind,
+        })}`
+      : null;
+
+  const statusOnly = url.searchParams.get("statusOnly") === "1";
+
+  // Prefetch export while the merchant reads the modal (skip when convert first
+  // or when caller only needs needsConvert / isConverted).
+  if (!needsConvert && !statusOnly) {
+    const ticketResult = await createDomDownloadTicket({
+      request,
+      orderId,
+      documentKind,
+      shop: session.shop,
+    });
+    if ("ticket" in ticketResult) {
+      downloadUrl.searchParams.set("ticket", ticketResult.ticket);
+    } else {
+      console.warn("[extension-document-pdf] ticket prefetch failed", ticketResult);
+    }
+  }
 
   return cors(
     corsJson(request, {
       ok: true,
       needsConvert,
+      isConverted,
       fileName: `${documentKind}-${orderId}.pdf`,
       downloadUrl: downloadUrl.toString(),
       convertPath,
+      // Extension can warm these while the merchant reads the modal.
+      warmUrls: [
+        "/fonts/NotoSans-Regular.ttf",
+        "/fonts/NotoSans-Bold.ttf",
+        "/extension-pdf-download.js",
+        "/extension-pdf-download.css",
+      ],
     }),
   );
 }

@@ -2041,6 +2041,18 @@ export default function SalesOrderPage() {
               </Text>
             </IndexTable.Cell>
           );
+        case "shopifyOrderNumber":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <Text
+                as="span"
+                variant="bodyMd"
+                tone={order.name ? undefined : "subdued"}
+              >
+                {order.name || "—"}
+              </Text>
+            </IndexTable.Cell>
+          );
         case "salesOrderNumber":
           return (
             <IndexTable.Cell key={col.id}>

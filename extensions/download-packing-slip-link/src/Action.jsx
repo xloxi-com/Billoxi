@@ -1,11 +1,11 @@
 import "@shopify/ui-extensions/preact";
 import { render } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 const DOCUMENT_KIND = "packing-slip";
-const HEADING = "Download packing slip";
-const CONVERT_LABEL = "Convert to packing slip";
-const FETCH_TIMEOUT_MS = 20000;
+const HEADING_DOWNLOAD = "Packing slip download";
+const HEADING_CONVERT = "Convert to packing slip & download";
+const FETCH_TIMEOUT_MS = 25000;
 
 export default async () => {
   render(<Extension />, document.body);
@@ -20,105 +20,50 @@ function withHttpsDownloadUrl(downloadUrl, token) {
   return url.toString();
 }
 
+function resolveNeedsConvert(payload) {
+  if (typeof payload?.needsConvert === "boolean") {
+    return payload.needsConvert;
+  }
+  return Boolean(payload?.convertPath) && payload?.isConverted !== true;
+}
+
 function Extension() {
   const { data, close, auth } = shopify;
-  const [busy, setBusy] = useState(true);
-  const [converting, setConverting] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
-  const [needsConvert, setNeedsConvert] = useState(false);
-  const [ready, setReady] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [didConvert, setDidConvert] = useState(false);
+  const [readyUrl, setReadyUrl] = useState("");
+  const [needsConvert, setNeedsConvert] = useState(null);
   const [convertPath, setConvertPath] = useState("");
   const [token, setToken] = useState("");
+  const prepRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
-    const timer = window.setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
 
-    (async () => {
-      try {
-        const orderGid = data?.selected?.[0]?.id;
-        if (!orderGid) throw new Error("No order selected");
-        const orderId = String(orderGid).split("/").pop();
-        if (!orderId) throw new Error("Invalid order id");
+    prepRef.current = (async () => {
+      const orderGid = data?.selected?.[0]?.id;
+      if (!orderGid) throw new Error("No order selected");
+      const orderId = String(orderGid).split("/").pop();
+      if (!orderId) throw new Error("Invalid order id");
 
-        const idToken = await auth.idToken();
-        if (!idToken) throw new Error("Could not authenticate with Shopify");
+      const idToken = await auth.idToken();
+      if (!idToken) throw new Error("Could not authenticate with Shopify");
 
-        const qs = new URLSearchParams({
-          orderId,
-          document: DOCUMENT_KIND,
-        });
-        const res = await fetch(`/extension-document-pdf?${qs}`, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${idToken}` },
-          signal: ac.signal,
-        });
-
-        let payload = null;
-        try {
-          payload = await res.json();
-        } catch {
-          // ignore
-        }
-
-        if (!res.ok || !payload?.ok || !payload?.downloadUrl) {
-          throw new Error(payload?.error || `Download failed (${res.status})`);
-        }
-
-        if (cancelled) return;
-
-        setToken(idToken);
-        setDownloadUrl(withHttpsDownloadUrl(payload.downloadUrl, idToken));
-
-        if (payload.needsConvert) {
-          setNeedsConvert(true);
-          setConvertPath(
-            String(
-              payload.convertPath ||
-                `/extension-document-convert?${qs.toString()}`,
-            ),
-          );
-        } else {
-          setNeedsConvert(false);
-          setConvertPath("");
-        }
-
-        setReady(true);
-        setBusy(false);
-      } catch (err) {
-        if (cancelled) return;
-        const message =
-          err?.name === "AbortError"
-            ? "Timed out — try again"
-            : err instanceof Error
-              ? err.message
-              : "Something went wrong";
-        setError(message);
-        setBusy(false);
-      } finally {
-        window.clearTimeout(timer);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      ac.abort();
-      window.clearTimeout(timer);
-    };
-  }, [auth, data?.selected]);
-
-  const handleConvert = async () => {
-    if (!convertPath || !token || converting) return;
-    setConverting(true);
-    setError("");
-    try {
-      const res = await fetch(convertPath, {
+      const qs = new URLSearchParams({
+        orderId,
+        document: DOCUMENT_KIND,
+      });
+      const res = await fetch(`/extension-document-pdf?${qs}`, {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          Accept: "application/json",
+        },
+        signal: ac.signal,
       });
       let payload = null;
       try {
@@ -127,52 +72,136 @@ function Extension() {
         // ignore
       }
       if (!res.ok || !payload?.ok || !payload?.downloadUrl) {
-        throw new Error(payload?.error || `Convert failed (${res.status})`);
+        throw new Error(payload?.error || `Download failed (${res.status})`);
       }
-      setDownloadUrl(withHttpsDownloadUrl(payload.downloadUrl, token));
-      setNeedsConvert(false);
-      setConvertPath("");
+
+      const url = withHttpsDownloadUrl(payload.downloadUrl, idToken);
+      const convertNeeded = resolveNeedsConvert(payload);
+      const path =
+        payload.convertPath ||
+        `/extension-document-convert?${qs.toString()}`;
+
+      if (!cancelled) {
+        setToken(idToken);
+        setReadyUrl(url);
+        setNeedsConvert(convertNeeded);
+        setConvertPath(String(path));
+        setChecking(false);
+      }
+      return {
+        url,
+        token: idToken,
+        needsConvert: convertNeeded,
+        convertPath: path,
+      };
+    })().catch((err) => {
+      if (cancelled || err?.name === "AbortError") return null;
+      if (!cancelled) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+        setChecking(false);
+        setNeedsConvert(null);
+      }
+      return null;
+    });
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [auth, data?.selected]);
+
+  const handlePrimary = async () => {
+    if (working || checking || needsConvert === null) return;
+    setWorking(true);
+    setError("");
+    setSaved(false);
+    setDidConvert(false);
+
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+
+    try {
+      let prep = {
+        url: readyUrl,
+        token,
+        needsConvert: Boolean(needsConvert),
+        convertPath,
+      };
+      if ((!prep.url || !prep.token) && prepRef.current) {
+        const loaded = await prepRef.current;
+        if (!loaded) throw new Error("Download failed");
+        prep = loaded;
+      }
+      if (!prep.url || !prep.token) throw new Error("Download URL missing");
+
+      let url = prep.url;
+      if (prep.needsConvert) {
+        const res = await fetch(prep.convertPath, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${prep.token}`,
+            Accept: "application/json",
+          },
+          signal: ac.signal,
+        });
+        let payload = null;
+        try {
+          payload = await res.json();
+        } catch {
+          // ignore
+        }
+        if (!res.ok || !payload?.ok || !payload?.downloadUrl) {
+          throw new Error(payload?.error || `Convert failed (${res.status})`);
+        }
+        url = withHttpsDownloadUrl(payload.downloadUrl, prep.token);
+        setNeedsConvert(false);
+        setDidConvert(true);
+        setReadyUrl(url);
+      }
+
+      open(url, "_blank", "noopener,noreferrer");
+      setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Convert failed");
+      const message =
+        err?.name === "AbortError"
+          ? "Timed out — try again"
+          : err instanceof Error
+            ? err.message
+            : "Download failed";
+      setError(message);
     } finally {
-      setConverting(false);
+      window.clearTimeout(timer);
+      setWorking(false);
     }
   };
 
-  const handleSave = () => {
-    if (!downloadUrl || saving || needsConvert) return;
-    setSaving(true);
-    setError("");
-    open(downloadUrl, "_blank", "noopener,noreferrer");
-    setSaving(false);
-    setSaved(true);
-  };
+  const showConvert = needsConvert === true;
+  const showDownload = needsConvert === false;
+  const heading = showConvert
+    ? HEADING_CONVERT
+    : showDownload
+      ? HEADING_DOWNLOAD
+      : "Download packing slip";
+
+  let primaryLabel = "…";
+  if (working) {
+    primaryLabel = showConvert || didConvert ? "Converting…" : "Opening…";
+  } else if (showConvert) {
+    primaryLabel = HEADING_CONVERT;
+  } else if (showDownload) {
+    primaryLabel = HEADING_DOWNLOAD;
+  }
 
   return (
-    <s-admin-action heading={HEADING} loading={busy && !error}>
-      {ready && needsConvert ? (
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={handleConvert}
-          disabled={converting}
-        >
-          {converting ? "Converting…" : CONVERT_LABEL}
-        </s-button>
-      ) : ready ? (
-        <s-button
-          slot="primary-action"
-          variant="primary"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? "Opening…" : "Save PDF"}
-        </s-button>
-      ) : (
-        <s-button slot="primary-action" onClick={() => close()} disabled={busy}>
-          Close
-        </s-button>
-      )}
+    <s-admin-action heading={heading} loading={checking && !error}>
+      <s-button
+        slot="primary-action"
+        variant="primary"
+        onClick={handlePrimary}
+        disabled={working || checking || needsConvert === null}
+      >
+        {primaryLabel}
+      </s-button>
       <s-button slot="secondary-actions" onClick={() => close()}>
         Cancel
       </s-button>
@@ -180,21 +209,28 @@ function Extension() {
         <s-banner heading="Could not continue" tone="critical">
           {error}
         </s-banner>
-      ) : busy ? (
-        <s-text>Checking packing slip…</s-text>
-      ) : needsConvert ? (
-        <s-banner heading="Not a packing slip yet" tone="warning">
-          Convert this order to a packing slip first, then download the PDF
-          (same as in Billoxi).
-        </s-banner>
+      ) : checking || needsConvert === null ? (
+        <s-text>Checking packing slip status…</s-text>
       ) : saved ? (
-        <s-banner heading="Downloading" tone="success">
-          PDF is generating — check the new tab / downloads folder.
+        <s-banner
+          heading={didConvert ? "Converted in Billoxi" : "Downloading"}
+          tone="success"
+        >
+          {didConvert
+            ? "Packing slip created in Billoxi. PDF downloading — check downloads."
+            : "PDF downloading — check your downloads folder."}
         </s-banner>
+      ) : showConvert ? (
+        <s-banner heading="Convert to packing slip & download" tone="warning">
+          This order is not a packing slip yet. Tap the button to convert it in
+          Billoxi, then download the PDF.
+        </s-banner>
+      ) : working ? (
+        <s-text>Opening download…</s-text>
       ) : (
-        <s-text>
-          Tap Save PDF to download (same layout as in the Billoxi app).
-        </s-text>
+        <s-banner heading="Packing slip download" tone="info">
+          This order already has a packing slip. Tap to download the PDF.
+        </s-banner>
       )}
     </s-admin-action>
   );

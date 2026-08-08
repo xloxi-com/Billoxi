@@ -12,4 +12,4 @@ network_access = true
 
 [[extensions.targeting]]
 module = "./src/Action.jsx"
-target = "admin.order-details.action.render"
+target = "admin.order-details.print-action.render"

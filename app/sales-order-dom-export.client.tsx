@@ -31,29 +31,85 @@ function toNumericOrderId(orderGid: string) {
     : orderGid;
 }
 
-async function waitForPaperReady(paper: HTMLElement, timeoutMs = 8000) {
+async function waitForPaperReady(
+  paper: HTMLElement,
+  timeoutMs = 8000,
+  options?: {
+    skipLongFontWait?: boolean;
+    /** After this many ms, continue even if some images are still loading. */
+    imageGraceMs?: number;
+  },
+) {
   const started = Date.now();
+  const fontBudgetMs = options?.skipLongFontWait ? 100 : 2000;
+  const imageGraceMs = options?.imageGraceMs ?? timeoutMs;
+
   while (Date.now() - started < timeoutMs) {
     const live = paper.querySelector(".live-document");
     const images = Array.from(paper.querySelectorAll("img"));
-    const imagesReady = images.every((img) => img.complete);
+    const elapsed = Date.now() - started;
+    const imagesReady =
+      images.length === 0 ||
+      images.every((img) => img.complete) ||
+      elapsed >= imageGraceMs;
     if (live && paper.offsetHeight > 40 && imagesReady) {
       if (typeof document !== "undefined" && document.fonts?.ready) {
         try {
-          await document.fonts.ready;
+          await Promise.race([
+            document.fonts.ready,
+            new Promise<void>((resolve) =>
+              window.setTimeout(resolve, fontBudgetMs),
+            ),
+          ]);
         } catch {
           // ignore font readiness failures
         }
       }
-      // One more frame so layout settles after images/fonts.
       await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        requestAnimationFrame(() => resolve());
       });
       return;
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
+    await new Promise((resolve) => window.setTimeout(resolve, 24));
   }
 }
+
+async function withOffscreenPaperPayload<T>(
+  payload: ExportPayload,
+  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
+  options?: {
+    readyTimeoutMs?: number;
+    skipLongFontWait?: boolean;
+    imageGraceMs?: number;
+    fastMount?: boolean;
+  },
+): Promise<T> {
+  // Warm PDF fonts/jsPDF in parallel with mounting the live document.
+  const warmPromise = import("./sales-order-pdf").then((mod) => {
+    mod.warmDomVectorPdfDeps();
+    return mod;
+  });
+
+  const { host, paper, root } = mountOffscreenPaper(payload, {
+    fastMount: options?.fastMount,
+  });
+
+  try {
+    await Promise.all([
+      waitForPaperReady(paper, options?.readyTimeoutMs ?? 8000, {
+        skipLongFontWait: options?.skipLongFontWait,
+        imageGraceMs: options?.imageGraceMs,
+      }),
+      warmPromise,
+    ]);
+    return await run(paper, payload);
+  } finally {
+    root.unmount();
+    host.remove();
+  }
+}
+
 
 async function fetchExportPayload(
   orderId: string,
@@ -95,7 +151,10 @@ async function fetchExportPayload(
   return payload;
 }
 
-function mountOffscreenPaper(payload: ExportPayload): {
+function mountOffscreenPaper(
+  payload: ExportPayload,
+  options?: { fastMount?: boolean },
+): {
   host: HTMLDivElement;
   paper: HTMLDivElement;
   root: Root;
@@ -103,15 +162,26 @@ function mountOffscreenPaper(payload: ExportPayload): {
   const host = document.createElement("div");
   host.setAttribute("aria-hidden", "true");
   host.className = "sales-order-dom-export-host";
-  host.style.cssText = [
-    "position:fixed",
-    "left:0",
-    "top:0",
-    "opacity:0",
-    "pointer-events:none",
-    "z-index:-1",
-    "overflow:visible",
-  ].join(";");
+  // Off-screen but opacity:1 so browsers paint layout/fonts faster than opacity:0.
+  host.style.cssText = options?.fastMount
+    ? [
+        "position:fixed",
+        "left:-10000px",
+        "top:0",
+        "opacity:1",
+        "pointer-events:none",
+        "z-index:-1",
+        "overflow:visible",
+      ].join(";")
+    : [
+        "position:fixed",
+        "left:0",
+        "top:0",
+        "opacity:0",
+        "pointer-events:none",
+        "z-index:-1",
+        "overflow:visible",
+      ].join(";");
 
   const stage = document.createElement("div");
   stage.className = "sales-order-document-stage";
@@ -146,22 +216,6 @@ function mountOffscreenPaper(payload: ExportPayload): {
   );
 
   return { host, paper, root };
-}
-
-async function withOffscreenPaperPayload<T>(
-  payload: ExportPayload,
-  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
-  run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
-): Promise<T> {
-  const { host, paper, root } = mountOffscreenPaper(payload);
-
-  try {
-    await waitForPaperReady(paper);
-    return await run(paper, payload);
-  } finally {
-    root.unmount();
-    host.remove();
-  }
 }
 
 async function withOffscreenPaper<T>(
@@ -213,9 +267,18 @@ export async function buildSalesOrderDomPdfBlobFromPayload(
     | "invoice"
     | "credit-note"
     | "packing-slip" = "sales-order",
+  options?: {
+    readyTimeoutMs?: number;
+    skipLongFontWait?: boolean;
+    imageGraceMs?: number;
+    fastMount?: boolean;
+  },
 ): Promise<{ blob: Blob; fileName: string }> {
-  return withOffscreenPaperPayload(payload, documentKind, (paper, p) =>
-    buildDomPdfBlobFromPaper(paper, p, documentKind),
+  return withOffscreenPaperPayload(
+    payload,
+    documentKind,
+    (paper, p) => buildDomPdfBlobFromPaper(paper, p, documentKind),
+    options,
   );
 }
 
@@ -226,10 +289,17 @@ export async function downloadSalesOrderDomPdfFromPayload(
     | "invoice"
     | "credit-note"
     | "packing-slip" = "sales-order",
+  options?: {
+    readyTimeoutMs?: number;
+    skipLongFontWait?: boolean;
+    imageGraceMs?: number;
+    fastMount?: boolean;
+  },
 ) {
   const { blob, fileName } = await buildSalesOrderDomPdfBlobFromPayload(
     payload,
     documentKind,
+    options,
   );
   triggerBlobDownload(blob, fileName);
 }

@@ -35,6 +35,7 @@ import {
   DragHandleIcon,
   EditIcon,
   EmailIcon,
+  ExternalIcon,
   NoteIcon,
   OrderIcon,
   StoreIcon,
@@ -1634,6 +1635,7 @@ export default function SettingsPage() {
                             borderColor="border"
                             borderRadius="200"
                             background="bg-surface-secondary"
+                            width="100%"
                           >
                             <button
                               type="button"
@@ -1641,15 +1643,24 @@ export default function SettingsPage() {
                               aria-expanded={smtpHelpOpen}
                               aria-controls="smtp-help-collapsible"
                               onClick={() => setSmtpHelpOpen((open) => !open)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                width: "100%",
+                                boxSizing: "border-box",
+                              }}
                             >
-                              <InlineStack align="space-between" blockAlign="center">
-                                <Text as="span" fontWeight="semibold">
-                                  How to set up SMTP
-                                </Text>
+                              <Text as="span" fontWeight="semibold">
+                                How to set up SMTP
+                              </Text>
+                              <span className="settings-smtp-help__toggle-icon">
                                 <Icon
-                                  source={smtpHelpOpen ? ChevronUpIcon : ChevronDownIcon}
+                                  source={
+                                    smtpHelpOpen ? ChevronUpIcon : ChevronDownIcon
+                                  }
                                 />
-                              </InlineStack>
+                              </span>
                             </button>
                             <Collapsible id="smtp-help-collapsible" open={smtpHelpOpen}>
                               <Box padding="300" paddingBlockStart="0">
@@ -2104,55 +2115,50 @@ export default function SettingsPage() {
                       className="settings-recommend-column"
                       aria-label="Recommended apps"
                     >
-                      <BlockStack gap="400">
+                      <BlockStack gap="300">
                         <Text as="h2" variant="headingSm" tone="subdued">
                           More from XLOXI
                         </Text>
                         {RECOMMENDED_APPS.map((app) => (
-                          <Card key={app.id}>
-                            <BlockStack gap="300">
-                              <InlineStack
-                                align="space-between"
-                                blockAlign="start"
-                                gap="300"
-                                wrap={false}
-                              >
-                                <InlineStack
-                                  gap="300"
-                                  blockAlign="center"
-                                  wrap={false}
-                                >
-                                  <img
-                                    src={app.logo}
-                                    alt={`${app.name} logo`}
-                                    className="settings-recommend-card__logo"
-                                    width={48}
-                                    height={48}
-                                  />
-                                  <BlockStack gap="100">
-                                    <Text as="h3" variant="headingSm">
-                                      {app.name}
-                                    </Text>
-                                    <Text as="p" tone="subdued" variant="bodySm">
-                                      {app.tagline}
-                                    </Text>
-                                  </BlockStack>
-                                </InlineStack>
-                                <Badge>{app.badge}</Badge>
-                              </InlineStack>
-                              <Text as="p" variant="bodySm">
-                                {app.description}
-                              </Text>
-                              <Button
-                                url={app.href}
-                                external
-                                variant="primary"
-                                fullWidth
-                              >
-                                View on App Store
-                              </Button>
-                            </BlockStack>
-                          </Card>
+                          <a
+                            key={app.id}
+                            className="settings-recommend-card"
+                            href={app.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <div className="settings-recommend-card__header">
+                              <img
+                                src={app.logo}
+                                alt=""
+                                className="settings-recommend-card__logo"
+                                width={40}
+                                height={40}
+                              />
+                              <div className="settings-recommend-card__meta">
+                                <div className="settings-recommend-card__title-row">
+                                  <Text as="h3" variant="headingSm">
+                                    {app.name}
+                                  </Text>
+                                  <Badge size="small" tone="info">
+                                    {app.badge}
+                                  </Badge>
+                                </div>
+                                <Text as="p" tone="subdued" variant="bodySm">
+                                  {app.tagline}
+                                </Text>
+                              </div>
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              {app.description}
+                            </Text>
+                            <span className="settings-recommend-card__cta">
+                              <span>View on App Store</span>
+                              <span className="settings-recommend-card__cta-icon">
+                                <Icon source={ExternalIcon} tone="base" />
+                              </span>
+                            </span>
+                          </a>
                         ))}
                       </BlockStack>
                     </div>

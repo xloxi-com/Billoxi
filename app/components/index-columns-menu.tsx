@@ -46,6 +46,7 @@ export const SALES_ORDER_INDEX_COLUMNS: IndexColumnDef[] = [
 export const INVOICE_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "document", label: "Invoice", locked: true },
   { id: "reference", label: "Reference" },
+  { id: "shopifyOrderNumber", label: "Order", defaultHidden: true },
   { id: "date", label: "Date" },
   { id: "company", label: "Company" },
   { id: "customer", label: "Customer" },

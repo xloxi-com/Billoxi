@@ -1,24 +1,12 @@
-import { useEffect, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
 
+import { peekExtensionDownloadTicket } from "../extension-download-ticket.server";
 import { authenticate } from "../shopify.server";
 import { loader as exportLoader } from "./app.sales-order.export.$orderId";
 
-type ExportPayload = {
-  ok: true;
-  order: Record<string, unknown> & {
-    documentNumber?: string;
-    name: string;
-  };
-  templateId: string;
-  settings: Record<string, unknown>;
-  storeDetails: Record<string, unknown>;
-};
-
 /**
- * Admin UI extension download bridge.
- * Uses the same DOM vector PDF pipeline as in-app Download (not server jsPDF).
+ * Ultra-light PDF bridge — same DOM template as in-app Download.
+ * Serves HTML that loads a prebundled /extension-pdf-download.js (fast).
  */
 function withBearerFromQuery(request: Request) {
   if (request.headers.get("Authorization")) return request;
@@ -42,10 +30,41 @@ function parseDocumentKind(value: string): DocumentKind {
   return "sales-order";
 }
 
-export async function loader({ request }: LoaderFunctionArgs) {
-  const authedRequest = withBearerFromQuery(request);
-  await authenticate.admin(authedRequest);
+function escapeJsonForScript(value: unknown) {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
 
+function downloadHtmlPage(payloadJson: string) {
+  // Cache-bust when merchants re-download in the same session.
+  const bust = Date.now();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Downloading…</title>
+  <link rel="icon" href="/extension-pdf-favicon.png" type="image/png" />
+  <link rel="shortcut icon" href="/extension-pdf-favicon.png" />
+  <link rel="preload" href="/fonts/NotoSans-Regular.ttf" as="font" type="font/ttf" crossorigin />
+  <link rel="preload" href="/fonts/NotoSans-Bold.ttf" as="font" type="font/ttf" crossorigin />
+  <link rel="stylesheet" href="/extension-pdf-download.css?v=${bust}" />
+  <link rel="modulepreload" href="/extension-pdf-download.js?v=${bust}" />
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; color: #202223; margin: 0; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    p { margin: 0; }
+  </style>
+  <script type="application/json" id="billoxi-pdf-payload">${payloadJson}</script>
+  <script type="module" src="/extension-pdf-download.js?v=${bust}"></script>
+</head>
+<body>
+  <h1>Download PDF</h1>
+  <p id="billoxi-pdf-status">Starting download…</p>
+</body>
+</html>`;
+}
+
+export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const orderId = String(url.searchParams.get("orderId") || "")
     .replace(/^gid:\/\/shopify\/Order\//i, "")
@@ -53,93 +72,67 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const documentKind = parseDocumentKind(
     String(url.searchParams.get("document") || "sales-order"),
   );
+  const ticketId = String(url.searchParams.get("ticket") || "").trim();
 
   if (!orderId || !/^\d+$/.test(orderId)) {
     throw new Response("Order not found", { status: 404 });
   }
 
-  const exportUrl = new URL(
-    `/app/sales-order/export/${encodeURIComponent(orderId)}`,
-    url.origin,
-  );
-  exportUrl.searchParams.set("document", documentKind);
+  let payload: unknown = null;
+  let kind: DocumentKind = documentKind;
 
-  const exportRequest = new Request(exportUrl.toString(), {
-    method: "GET",
-    headers: authedRequest.headers,
-  });
-
-  const exportResponse = await exportLoader({
-    request: exportRequest,
-    params: { orderId },
-    context: {},
-  } as LoaderFunctionArgs);
-
-  const payload = (await exportResponse.json()) as
-    | ExportPayload
-    | { ok: false; error?: string };
-
-  if (!exportResponse.ok || !payload || payload.ok !== true) {
-    const message =
-      !payload || payload.ok === true
-        ? "Document not found"
-        : payload.error || "Document not found";
-    throw new Response(message, { status: exportResponse.status || 404 });
+  if (ticketId) {
+    const cached = peekExtensionDownloadTicket(ticketId);
+    if (cached) {
+      payload = cached.payload;
+      kind = cached.documentKind;
+    }
   }
 
-  return { payload, documentKind };
-}
+  if (!payload) {
+    const authedRequest = withBearerFromQuery(request);
+    await authenticate.admin(authedRequest);
 
-export default function ExtensionDomDownload() {
-  const { payload, documentKind } = useLoaderData<typeof loader>();
-  const [status, setStatus] = useState("Preparing PDF…");
-  const [error, setError] = useState("");
+    const exportUrl = new URL(
+      `/app/sales-order/export/${encodeURIComponent(orderId)}`,
+      url.origin,
+    );
+    exportUrl.searchParams.set("document", documentKind);
 
-  useEffect(() => {
-    let cancelled = false;
+    const exportRequest = new Request(exportUrl.toString(), {
+      method: "GET",
+      headers: authedRequest.headers,
+    });
 
-    (async () => {
-      try {
-        const { downloadSalesOrderDomPdfFromPayload } = await import(
-          "../sales-order-dom-export.client"
-        );
-        await downloadSalesOrderDomPdfFromPayload(payload, documentKind);
-        if (cancelled) return;
-        setStatus("Downloaded — you can close this tab.");
-        window.setTimeout(() => {
-          try {
-            window.close();
-          } catch {
-            // ignore
-          }
-        }, 900);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Download failed");
-        setStatus("");
-      }
-    })();
+    const exportResponse = await exportLoader({
+      request: exportRequest,
+      params: { orderId },
+      context: {},
+    } as LoaderFunctionArgs);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [payload, documentKind]);
+    const body = await exportResponse.json();
+    if (!exportResponse.ok || !body || body.ok !== true) {
+      const message =
+        body && typeof body === "object" && "error" in body && body.error
+          ? String(body.error)
+          : "Document not found";
+      throw new Response(message, { status: exportResponse.status || 404 });
+    }
+    payload = body;
+    kind = documentKind;
+  }
 
-  return (
-    <main
-      style={{
-        fontFamily: "Inter, system-ui, sans-serif",
-        padding: 24,
-        color: "#202223",
-        maxWidth: 480,
-      }}
-    >
-      <h1 style={{ fontSize: 18, margin: "0 0 8px" }}>Download PDF</h1>
-      {error ? (
-        <p style={{ color: "#d72c0d", margin: 0 }}>{error}</p>
-      ) : (
-        <p style={{ margin: 0 }}>{status}</p>
-      )}
-    </main>
-  );
+  const payloadJson = escapeJsonForScript({
+    payload,
+    documentKind: kind,
+  });
+
+  // throw Response short-circuits RR document pipeline (avoids "Body unusable").
+  throw new Response(downloadHtmlPage(payloadJson), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
