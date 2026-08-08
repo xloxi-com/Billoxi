@@ -210,7 +210,9 @@ async function prepareOrdersForPdf(args: {
         const credit = creditMeta.get(orderGid);
         if (!credit) return null;
 
-        const order = await fetchSalesOrderDocument(args.admin, orderGid);
+        const order = await fetchSalesOrderDocument(args.admin, orderGid, {
+          asCreditNote: true,
+        });
         if (!order) return null;
 
         const invoice = invoiceMeta.get(order.id);

@@ -77,7 +77,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     );
 
     const [order, template] = await Promise.all([
-      fetchSalesOrderDocument(admin, orderGid),
+      fetchSalesOrderDocument(admin, orderGid, { asCreditNote: true }),
       loadDocumentTemplateSettings(
         session.shop,
         "credit-note",

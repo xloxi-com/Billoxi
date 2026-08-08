@@ -9,8 +9,8 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { requireAdminAuth } from "../shopify-context.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Warm auth for nested loaders (shared WeakMap memo). SO number backfill
-  // stays on afterAuth only — do not compete with every navigation.
+  // Warm auth for nested loaders (shared WeakMap memo).
+  // Existing-order SO number sync is merchant-triggered from Settings.
   await requireAdminAuth(request);
 
   // eslint-disable-next-line no-undef
@@ -25,6 +25,9 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
+        <s-link href="/app" rel="home">
+          Home
+        </s-link>
         <s-link href="/app/sales-order">Sales Orders</s-link>
         <s-link href="/app/invoice">Invoice</s-link>
         <s-link href="/app/credit-note">Credit Note</s-link>

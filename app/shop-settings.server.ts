@@ -16,6 +16,14 @@ import {
   type EmailTemplatesSettings,
 } from "./email-templates";
 import {
+  normalizeCreditNoteSettings,
+  type CreditNoteSettings,
+} from "./credit-note-settings";
+import {
+  normalizeInvoiceSettings,
+  type InvoiceSettings,
+} from "./invoice-settings";
+import {
   mergeStoreDetails,
   normalizeStoreDetails,
   type StoreDetails,
@@ -29,6 +37,8 @@ type ShopSettingsRow = {
   storeDetails: unknown;
   smtpSettings?: unknown;
   emailTemplates?: unknown;
+  creditNoteSettings?: unknown;
+  invoiceSettings?: unknown;
   selectedTemplates?: unknown;
   numberSeries?: unknown;
 };
@@ -95,6 +105,117 @@ export async function loadSmtpSettingsForShop(shop: string): Promise<SmtpSetting
   `;
 
   return normalizeSmtpSettings(rows[0]?.smtpSettings);
+}
+
+export async function loadCreditNoteSettingsForShop(
+  shop: string,
+): Promise<CreditNoteSettings> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ creditNoteSettings: unknown }>
+    >`
+      SELECT "creditNoteSettings"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    return normalizeCreditNoteSettings(rows[0]?.creditNoteSettings);
+  } catch {
+    return normalizeCreditNoteSettings(null);
+  }
+}
+
+export async function saveCreditNoteSettingsForShop(
+  shop: string,
+  creditNoteSettings: CreditNoteSettings,
+): Promise<CreditNoteSettings> {
+  const normalized = normalizeCreditNoteSettings(creditNoteSettings);
+  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "ShopSettings" WHERE shop = ${shop} LIMIT 1
+  `;
+
+  if (existing[0]) {
+    await prisma.$executeRaw`
+      UPDATE "ShopSettings"
+      SET "creditNoteSettings" = ${JSON.stringify(normalized)}::jsonb,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE shop = ${shop}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "ShopSettings" (
+        id, shop, "storeDetails", "smtpSettings", "creditNoteSettings",
+        "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${shop},
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify(normalized)}::jsonb,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+  }
+
+  return normalized;
+}
+
+export async function loadInvoiceSettingsForShop(
+  shop: string,
+): Promise<InvoiceSettings> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ invoiceSettings: unknown }>
+    >`
+      SELECT "invoiceSettings"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    return normalizeInvoiceSettings(rows[0]?.invoiceSettings);
+  } catch {
+    return normalizeInvoiceSettings(null);
+  }
+}
+
+export async function saveInvoiceSettingsForShop(
+  shop: string,
+  invoiceSettings: InvoiceSettings,
+): Promise<InvoiceSettings> {
+  const normalized = normalizeInvoiceSettings(invoiceSettings);
+  const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "ShopSettings" WHERE shop = ${shop} LIMIT 1
+  `;
+
+  if (existing[0]) {
+    await prisma.$executeRaw`
+      UPDATE "ShopSettings"
+      SET "invoiceSettings" = ${JSON.stringify(normalized)}::jsonb,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE shop = ${shop}
+    `;
+  } else {
+    await prisma.$executeRaw`
+      INSERT INTO "ShopSettings" (
+        id, shop, "storeDetails", "smtpSettings", "creditNoteSettings",
+        "invoiceSettings", "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${shop},
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify({})}::jsonb,
+        ${JSON.stringify(normalized)}::jsonb,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+  }
+
+  return normalized;
 }
 
 export async function saveSmtpSettingsForShop(

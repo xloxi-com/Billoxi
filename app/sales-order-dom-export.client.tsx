@@ -1,6 +1,7 @@
 import { createRoot, type Root } from "react-dom/client";
 
 import { SalesOrderLiveDocument } from "./components/sales-order-live-document";
+import { recordDocumentActivity } from "./record-document-activity.client";
 import {
   paperPaddingCss,
   type SalesOrderDocumentData,
@@ -19,6 +20,7 @@ export type ExportPayload = {
 };
 
 type ExportMode = "download" | "print";
+type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
 
 function resolveDocumentFontFamily(value: string | undefined): string {
   if (!value) return "Inter, system-ui, sans-serif";
@@ -29,6 +31,21 @@ function toNumericOrderId(orderGid: string) {
   return orderGid.includes("/")
     ? orderGid.split("/").pop() || orderGid
     : orderGid;
+}
+
+function recordExportActivity(
+  metric: "downloaded" | "printed",
+  payload: ExportPayload,
+  documentKind: DocumentKind,
+) {
+  recordDocumentActivity(metric, {
+    documentKind,
+    documentNumber: payload.order.documentNumber || null,
+    orderGid: payload.order.id,
+    orderName: payload.order.name,
+    orderId: payload.order.id,
+    processType: "manual",
+  });
 }
 
 async function waitForPaperReady(
@@ -323,8 +340,21 @@ export async function downloadSalesOrderDomPdfFromList(args: {
   templateId: string;
   documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
 }) {
-  const { blob, fileName } = await buildSalesOrderDomPdfBlobFromList(args);
-  triggerBlobDownload(blob, fileName);
+  const documentKind = args.documentKind ?? "sales-order";
+  await withOffscreenPaper(
+    args.orderId,
+    args.templateId,
+    documentKind,
+    async (paper, payload) => {
+      const { blob, fileName } = await buildDomPdfBlobFromPaper(
+        paper,
+        payload,
+        documentKind,
+      );
+      triggerBlobDownload(blob, fileName);
+      recordExportActivity("downloaded", payload, documentKind);
+    },
+  );
 }
 
 export async function printSalesOrderDomPdfFromList(args: {
@@ -346,6 +376,7 @@ export async function printSalesOrderDomPdfFromList(args: {
         fontFamily: resolveDocumentFontFamily(payload.settings.fontFamily),
         margins: payload.settings.margins,
       });
+      recordExportActivity("printed", payload, documentKind);
     },
   );
 }

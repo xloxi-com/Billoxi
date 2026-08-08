@@ -27,6 +27,7 @@ import {
   DropZone,
   Icon,
   Thumbnail,
+  Modal,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
@@ -38,6 +39,7 @@ import {
   ExternalIcon,
   NoteIcon,
   OrderIcon,
+  ReceiptIcon,
   StoreIcon,
 } from "@shopify/polaris-icons";
 
@@ -51,11 +53,11 @@ const EmailBodyEditor = lazy(() =>
 import { requireAdminAuth } from "../shopify-context.server";
 import {
   formatNumberSeriesNextPreview,
+  formatNumberSeriesValue,
   normalizeNumberSeries,
   NUMBER_SERIES_MODULES,
   numberingFromSeries,
   parseNumberSeriesDigits,
-  resolveNumberSeriesNextSequence,
   widenStartingNumberPad,
   type NumberSeriesEntry,
   type NumberSeriesMap,
@@ -92,25 +94,86 @@ import {
 } from "../store-details";
 import {
   loadEmailTemplatesForShop,
+  loadCreditNoteSettingsForShop,
+  loadInvoiceSettingsForShop,
   loadNumberSeriesForShop,
   loadSelectedTemplateForShop,
   loadSmtpSettingsForShop,
   loadStoreDetailsForShop,
   resetStoreDetailsFromShopify,
   saveEmailTemplatesForShop,
+  saveCreditNoteSettingsForShop,
+  saveInvoiceSettingsForShop,
   saveNumberSeriesForShop,
   saveSmtpSettingsForShop,
   saveStoreDetailsForShop,
 } from "../shop-settings.server";
 import {
+  normalizeCreditNoteSettings,
+  type CreditNoteSettings,
+} from "../credit-note-settings";
+import {
+  normalizeInvoiceSettings,
+  type InvoiceSettings,
+} from "../invoice-settings";
+import {
   getLastAllocatedSequence,
   syncNumberCounter,
   validateStartingNumber,
 } from "../sales-order-number.server";
+import {
+  getSalesOrderNumbersSyncStatus,
+  resetSalesOrderNumbersSync,
+  syncSalesOrderNumbersForShop,
+} from "../sales-order-number-sync.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
+import { backfillAutoCreditNotesForShop } from "../auto-credit-note.server";
 import offrefyLogo from "../assets/recommended/offrefy.png";
 import approvefyLogo from "../assets/recommended/approvefy.png";
 import "../settings.css";
+
+function getNumberSeriesAlreadyUsedError(
+  current: NumberSeriesMap,
+  saved: NumberSeriesMap,
+  lastByModule: Record<NumberSeriesModuleId, number | null>,
+): string | null {
+  const modules: NumberSeriesModuleId[] = ["sales-order", "invoice"];
+  for (const moduleId of modules) {
+    const entry = current[moduleId];
+    const last = lastByModule[moduleId];
+    if (last == null) continue;
+
+    const startAt = Number.parseInt(entry.startingNumber, 10);
+    const prevStart = Number.parseInt(saved[moduleId].startingNumber, 10);
+    const start =
+      Number.isFinite(startAt) && startAt >= 0 ? startAt : 1;
+    const previousStart =
+      Number.isFinite(prevStart) && prevStart >= 0 ? prevStart : null;
+
+    if (
+      (previousStart == null || previousStart !== start) &&
+      start <= last
+    ) {
+      const used = formatNumberSeriesValue(entry, start);
+      const min = formatNumberSeriesValue(entry, last + 1);
+      return `${used} is already used. Enter ${min} or higher.`;
+    }
+
+    if (
+      typeof entry.nextSequence === "number" &&
+      Number.isFinite(entry.nextSequence) &&
+      entry.nextSequence <= last
+    ) {
+      const used = formatNumberSeriesValue(
+        entry,
+        Math.floor(entry.nextSequence),
+      );
+      const min = formatNumberSeriesValue(entry, last + 1);
+      return `${used} is already used. Enter ${min} or higher.`;
+    }
+  }
+  return null;
+}
 
 const RECOMMENDED_APPS = [
   {
@@ -138,6 +201,7 @@ const RECOMMENDED_APPS = [
 type SettingsSection =
   | "store-details"
   | "number-series"
+  | "credit-notes"
   | "smtp"
   | "email-sales-order"
   | "email-invoice"
@@ -148,7 +212,7 @@ type SettingsMenuItem = {
   id: SettingsSection;
   label: string;
   description: string;
-  icon: "store" | "order" | "email" | "note";
+  icon: "store" | "order" | "email" | "note" | "receipt";
 };
 
 type SettingsMenuGroup = {
@@ -204,6 +268,12 @@ const settingsMenu: Array<SettingsMenuItem | SettingsMenuGroup> = [
     icon: "order",
   },
   {
+    id: "credit-notes",
+    label: "Advanced",
+    description: "Auto-create on cancel and refund.",
+    icon: "receipt",
+  },
+  {
     id: "smtp",
     label: "SMTP",
     description: "Email server for sending documents.",
@@ -222,6 +292,7 @@ const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = 
   order: OrderIcon,
   email: EmailIcon,
   note: NoteIcon,
+  receipt: ReceiptIcon,
 };
 
 function isEmailTemplatesSection(section: SettingsSection): boolean {
@@ -236,6 +307,8 @@ function isEmailTemplatesSection(section: SettingsSection): boolean {
 function parseSettingsSection(value: string | null): SettingsSection {
   if (
     value === "number-series" ||
+    value === "transaction-numbers" ||
+    value === "credit-notes" ||
     value === "smtp" ||
     value === "store-details" ||
     value === "email-sales-order" ||
@@ -243,7 +316,7 @@ function parseSettingsSection(value: string | null): SettingsSection {
     value === "email-credit-note" ||
     value === "email-packing-slip"
   ) {
-    return value;
+    return value === "transaction-numbers" ? "number-series" : value;
   }
   // Legacy ?section=email-templates
   if (value === "email-templates") return "email-invoice";
@@ -284,22 +357,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
     smtpSettings,
     emailTemplates,
     numberSeries,
+    creditNoteSettings,
+    invoiceSettings,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
     loadEmailTemplatesForShop(session.shop),
     loadNumberSeriesForShop(session.shop),
+    loadCreditNoteSettingsForShop(session.shop),
+    loadInvoiceSettingsForShop(session.shop),
   ]);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
     selectedSalesOrderTemplateIdRaw,
   );
-  const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
-    await Promise.all([
-      getLastAllocatedSequence(session.shop),
-      getLastInvoiceAllocatedSequence(session.shop),
-      getInvoiceNumberDigitWidth(session.shop),
-    ]);
+  const [
+    lastAllocatedSequence,
+    lastInvoiceSequence,
+    invoiceDigitWidth,
+    salesOrderSync,
+  ] = await Promise.all([
+    getLastAllocatedSequence(session.shop),
+    getLastInvoiceAllocatedSequence(session.shop),
+    getInvoiceNumberDigitWidth(session.shop),
+    getSalesOrderNumbersSyncStatus(session.shop),
+  ]);
   const lastAllocatedByModule: Record<NumberSeriesModuleId, number | null> = {
     "sales-order": lastAllocatedSequence,
     invoice: lastInvoiceSequence,
@@ -315,6 +397,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     lastAllocatedByModule,
     invoiceDigitWidth,
     hasSmtpPassword: Boolean(smtpSettings.password),
+    salesOrderSync,
+    creditNoteSettings,
+    invoiceSettings,
   };
 }
 
@@ -338,6 +423,61 @@ export async function action({ request }: ActionFunctionArgs) {
       admin,
     );
     return { saved: true, section: "store-details" as const, storeDetails };
+  }
+
+  if (intent === "save-credit-notes") {
+    const raw = formData.get("creditNoteSettings");
+    const rawInvoice = formData.get("invoiceSettings");
+    if (typeof raw !== "string") {
+      return Response.json(
+        { saved: false, error: "Credit note settings are required." },
+        { status: 400 },
+      );
+    }
+    if (typeof rawInvoice !== "string") {
+      return Response.json(
+        { saved: false, error: "Invoice settings are required." },
+        { status: 400 },
+      );
+    }
+
+    let parsed: unknown;
+    let parsedInvoice: unknown;
+    try {
+      parsed = JSON.parse(raw);
+      parsedInvoice = JSON.parse(rawInvoice);
+    } catch {
+      return Response.json(
+        { saved: false, error: "Invalid advanced settings." },
+        { status: 400 },
+      );
+    }
+
+    const creditNoteSettings = normalizeCreditNoteSettings(parsed);
+    const invoiceSettings = normalizeInvoiceSettings(parsedInvoice);
+    const [saved, savedInvoice] = await Promise.all([
+      saveCreditNoteSettingsForShop(session.shop, creditNoteSettings),
+      saveInvoiceSettingsForShop(session.shop, invoiceSettings),
+    ]);
+
+    let backfilled = 0;
+    try {
+      const result = await backfillAutoCreditNotesForShop(
+        session.shop,
+        admin,
+      );
+      backfilled = result.created;
+    } catch (error) {
+      console.error("credit-note settings backfill failed", error);
+    }
+
+    return {
+      saved: true,
+      section: "credit-notes" as const,
+      creditNoteSettings: saved,
+      invoiceSettings: savedInvoice,
+      backfilledCreditNotes: backfilled,
+    };
   }
 
   if (intent === "save-smtp") {
@@ -435,10 +575,59 @@ export async function action({ request }: ActionFunctionArgs) {
       selectedTemplateId,
       numbering,
       previousNumbering,
+      { nextSequence: numberSeries["sales-order"].nextSequence },
     );
     if (numberingError) {
       return Response.json(
         { saved: false, error: numberingError },
+        { status: 400 },
+      );
+    }
+
+    const invoiceLast = await getLastInvoiceAllocatedSequence(session.shop);
+    const invoiceEntry = numberSeries.invoice;
+    const previousInvoice = previous.invoice;
+    const invoiceStart = Number.parseInt(invoiceEntry.startingNumber, 10);
+    const previousInvoiceStart = Number.parseInt(
+      previousInvoice.startingNumber,
+      10,
+    );
+    const invoiceStartAt =
+      Number.isFinite(invoiceStart) && invoiceStart >= 0 ? invoiceStart : 1;
+    const previousInvoiceStartAt =
+      Number.isFinite(previousInvoiceStart) && previousInvoiceStart >= 0
+        ? previousInvoiceStart
+        : null;
+    if (
+      invoiceLast != null &&
+      (previousInvoiceStartAt == null ||
+        previousInvoiceStartAt !== invoiceStartAt) &&
+      invoiceStartAt <= invoiceLast
+    ) {
+      const used = formatNumberSeriesValue(invoiceEntry, invoiceStartAt);
+      const min = formatNumberSeriesValue(invoiceEntry, invoiceLast + 1);
+      return Response.json(
+        {
+          saved: false,
+          error: `${used} is already used. Enter ${min} or higher.`,
+        },
+        { status: 400 },
+      );
+    }
+    const invoiceNext = invoiceEntry.nextSequence;
+    if (
+      typeof invoiceNext === "number" &&
+      Number.isFinite(invoiceNext) &&
+      invoiceLast != null &&
+      invoiceNext <= invoiceLast
+    ) {
+      const used = formatNumberSeriesValue(invoiceEntry, Math.floor(invoiceNext));
+      const min = formatNumberSeriesValue(invoiceEntry, invoiceLast + 1);
+      return Response.json(
+        {
+          saved: false,
+          error: `${used} is already used. Enter ${min} or higher.`,
+        },
         { status: 400 },
       );
     }
@@ -450,12 +639,17 @@ export async function action({ request }: ActionFunctionArgs) {
       numbering,
       saved["sales-order"].nextSequence,
     );
-    const [lastAllocatedSequence, lastInvoiceSequence, invoiceDigitWidth] =
-      await Promise.all([
-        getLastAllocatedSequence(session.shop),
-        getLastInvoiceAllocatedSequence(session.shop),
-        getInvoiceNumberDigitWidth(session.shop),
-      ]);
+    const [
+      lastAllocatedSequence,
+      lastInvoiceSequence,
+      invoiceDigitWidth,
+      salesOrderSync,
+    ] = await Promise.all([
+      getLastAllocatedSequence(session.shop),
+      getLastInvoiceAllocatedSequence(session.shop),
+      getInvoiceNumberDigitWidth(session.shop),
+      getSalesOrderNumbersSyncStatus(session.shop),
+    ]);
     return {
       saved: true,
       section: "number-series" as const,
@@ -468,6 +662,75 @@ export async function action({ request }: ActionFunctionArgs) {
         "packing-slip": null,
       } satisfies Record<NumberSeriesModuleId, number | null>,
       invoiceDigitWidth,
+      salesOrderSync,
+    };
+  }
+
+  if (intent === "sync-sales-order-numbers") {
+    try {
+      const result = await syncSalesOrderNumbersForShop(session.shop, admin);
+      const [lastInvoiceSequence, invoiceDigitWidth] = await Promise.all([
+        getLastInvoiceAllocatedSequence(session.shop),
+        getInvoiceNumberDigitWidth(session.shop),
+      ]);
+      const lastAllocatedSequence = result.lastAllocatedSequence;
+      return {
+        saved: true,
+        section: "number-series-sync" as const,
+        assigned: result.assigned,
+        skipped: result.skipped,
+        lastNumber: result.lastNumber,
+        lastAllocatedSequence,
+        lastAllocatedByModule: {
+          "sales-order": lastAllocatedSequence,
+          invoice: lastInvoiceSequence,
+          "credit-note": null,
+          "packing-slip": null,
+        } satisfies Record<NumberSeriesModuleId, number | null>,
+        invoiceDigitWidth,
+        salesOrderSync: result.salesOrderSync,
+        numberSeries: result.numberSeries,
+      };
+    } catch (error) {
+      return Response.json(
+        {
+          saved: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to sync sales order numbers.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (intent === "reset-sales-order-number-sync") {
+    const result = await resetSalesOrderNumbersSync(session.shop);
+    if (!result.ok) {
+      return Response.json(
+        { saved: false, error: result.error },
+        { status: 400 },
+      );
+    }
+    const [lastInvoiceSequence, invoiceDigitWidth] = await Promise.all([
+      getLastInvoiceAllocatedSequence(session.shop),
+      getInvoiceNumberDigitWidth(session.shop),
+    ]);
+    return {
+      saved: true,
+      section: "number-series-reset" as const,
+      reverted: result.reverted,
+      lastAllocatedSequence: result.lastAllocatedSequence,
+      lastAllocatedByModule: {
+        "sales-order": result.lastAllocatedSequence,
+        invoice: lastInvoiceSequence,
+        "credit-note": null,
+        "packing-slip": null,
+      } satisfies Record<NumberSeriesModuleId, number | null>,
+      invoiceDigitWidth,
+      salesOrderSync: result.salesOrderSync,
+      numberSeries: result.numberSeries,
     };
   }
 
@@ -525,7 +788,7 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function SettingsPage() {
   const data = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
   const initialSection = parseSettingsSection(requestedSection);
   const [activeSection, setActiveSection] =
@@ -537,6 +800,11 @@ export default function SettingsPage() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>(
     data.smtpSettings,
+  );
+  const [creditNoteSettings, setCreditNoteSettings] =
+    useState<CreditNoteSettings>(data.creditNoteSettings);
+  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettings>(
+    data.invoiceSettings,
   );
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplatesSettings>(
     data.emailTemplates,
@@ -552,6 +820,10 @@ export default function SettingsPage() {
   const [savedSmtpSettings, setSavedSmtpSettings] = useState<SmtpSettings>(
     data.smtpSettings,
   );
+  const [savedCreditNoteSettings, setSavedCreditNoteSettings] =
+    useState<CreditNoteSettings>(data.creditNoteSettings);
+  const [savedInvoiceSettings, setSavedInvoiceSettings] =
+    useState<InvoiceSettings>(data.invoiceSettings);
   const [savedEmailTemplates, setSavedEmailTemplates] =
     useState<EmailTemplatesSettings>(data.emailTemplates);
   const [savedNumberSeries, setSavedNumberSeries] = useState<NumberSeriesMap>(
@@ -566,11 +838,16 @@ export default function SettingsPage() {
   const [invoiceDigitWidth, setInvoiceDigitWidth] = useState(
     data.invoiceDigitWidth,
   );
+  const [salesOrderSync, setSalesOrderSync] = useState(data.salesOrderSync);
+  const [syncConfirmAction, setSyncConfirmAction] = useState<
+    "sync" | "reset" | null
+  >(null);
   const [previewDrafts, setPreviewDrafts] = useState<
     Partial<Record<NumberSeriesModuleId, string>>
   >({});
   const [isStoreDirty, setIsStoreDirty] = useState(false);
   const [isSmtpDirty, setIsSmtpDirty] = useState(false);
+  const [isCreditNoteDirty, setIsCreditNoteDirty] = useState(false);
   const [isEmailTemplatesDirty, setIsEmailTemplatesDirty] = useState(false);
   const [isNumberSeriesDirty, setIsNumberSeriesDirty] = useState(false);
   const [isEditingSeries, setIsEditingSeries] = useState(false);
@@ -594,9 +871,11 @@ export default function SettingsPage() {
       ? isStoreDirty
       : activeSection === "smtp"
         ? isSmtpDirty
-        : isEmailTemplatesSection(activeSection)
-          ? isEmailTemplatesDirty
-          : isNumberSeriesDirty;
+        : activeSection === "credit-notes"
+          ? isCreditNoteDirty
+          : isEmailTemplatesSection(activeSection)
+            ? isEmailTemplatesDirty
+            : isNumberSeriesDirty;
   const activeEmailChild =
     EMAIL_TEMPLATE_SECTIONS.find((item) => item.id === activeSection) ?? null;
   const activeItem = (() => {
@@ -648,6 +927,14 @@ export default function SettingsPage() {
   }, [emailTemplateKind, emailTemplates, storeDetails.name]);
 
   useEffect(() => {
+    const next = parseSettingsSection(requestedSection);
+    setActiveSection((current) => (current === next ? current : next));
+    if (next !== "number-series") {
+      setIsEditingSeries(false);
+    }
+  }, [requestedSection]);
+
+  useEffect(() => {
     setStoreDetails(data.storeDetails);
     setSavedStoreDetails(data.storeDetails);
     setIsStoreDirty(false);
@@ -661,6 +948,14 @@ export default function SettingsPage() {
   }, [data.smtpSettings, data.hasSmtpPassword]);
 
   useEffect(() => {
+    setCreditNoteSettings(data.creditNoteSettings);
+    setSavedCreditNoteSettings(data.creditNoteSettings);
+    setInvoiceSettings(data.invoiceSettings);
+    setSavedInvoiceSettings(data.invoiceSettings);
+    setIsCreditNoteDirty(false);
+  }, [data.creditNoteSettings, data.invoiceSettings]);
+
+  useEffect(() => {
     setEmailTemplates(data.emailTemplates);
     setSavedEmailTemplates(data.emailTemplates);
     setIsEmailTemplatesDirty(false);
@@ -672,6 +967,7 @@ export default function SettingsPage() {
     setLastAllocatedSequence(data.lastAllocatedSequence);
     setLastAllocatedByModule(data.lastAllocatedByModule);
     setInvoiceDigitWidth(data.invoiceDigitWidth);
+    setSalesOrderSync(data.salesOrderSync);
     setIsNumberSeriesDirty(false);
     setIsEditingSeries(false);
   }, [
@@ -679,6 +975,7 @@ export default function SettingsPage() {
     data.lastAllocatedSequence,
     data.lastAllocatedByModule,
     data.invoiceDigitWidth,
+    data.salesOrderSync,
   ]);
 
   useEffect(() => {
@@ -710,6 +1007,21 @@ export default function SettingsPage() {
       if ("hasSmtpPassword" in fetcher.data) {
         setHasSmtpPassword(Boolean(fetcher.data.hasSmtpPassword));
       }
+    }
+
+    if (
+      "creditNoteSettings" in fetcher.data &&
+      fetcher.data.creditNoteSettings
+    ) {
+      setCreditNoteSettings(fetcher.data.creditNoteSettings);
+      setSavedCreditNoteSettings(fetcher.data.creditNoteSettings);
+      setIsCreditNoteDirty(false);
+    }
+
+    if ("invoiceSettings" in fetcher.data && fetcher.data.invoiceSettings) {
+      setInvoiceSettings(fetcher.data.invoiceSettings);
+      setSavedInvoiceSettings(fetcher.data.invoiceSettings);
+      setIsCreditNoteDirty(false);
     }
 
     if ("emailTemplates" in fetcher.data && fetcher.data.emailTemplates) {
@@ -748,20 +1060,103 @@ export default function SettingsPage() {
       ) {
         setInvoiceDigitWidth(fetcher.data.invoiceDigitWidth);
       }
+      if ("salesOrderSync" in fetcher.data && fetcher.data.salesOrderSync) {
+        setSalesOrderSync(
+          fetcher.data.salesOrderSync as typeof data.salesOrderSync,
+        );
+      }
+    }
+
+    if (
+      (fetcher.data.section === "number-series-sync" ||
+        fetcher.data.section === "number-series-reset") &&
+      "lastAllocatedByModule" in fetcher.data &&
+      fetcher.data.lastAllocatedByModule
+    ) {
+      setLastAllocatedByModule(
+        fetcher.data.lastAllocatedByModule as Record<
+          NumberSeriesModuleId,
+          number | null
+        >,
+      );
+      if (
+        "lastAllocatedSequence" in fetcher.data &&
+        (typeof fetcher.data.lastAllocatedSequence === "number" ||
+          fetcher.data.lastAllocatedSequence === null)
+      ) {
+        setLastAllocatedSequence(fetcher.data.lastAllocatedSequence);
+      }
+      if ("salesOrderSync" in fetcher.data && fetcher.data.salesOrderSync) {
+        setSalesOrderSync(
+          fetcher.data.salesOrderSync as typeof data.salesOrderSync,
+        );
+      }
+      if ("numberSeries" in fetcher.data && fetcher.data.numberSeries) {
+        setNumberSeries(fetcher.data.numberSeries as typeof data.numberSeries);
+        setSavedNumberSeries(
+          fetcher.data.numberSeries as typeof data.numberSeries,
+        );
+        setIsNumberSeriesDirty(false);
+        setIsEditingSeries(false);
+        setPreviewDrafts({});
+      }
     }
 
     if (typeof shopify !== "undefined" && shopify.toast) {
       shopify.toast.show(
         fetcher.data.section === "smtp"
           ? "SMTP settings saved"
-          : fetcher.data.section === "email-templates"
-            ? "Email templates saved"
-            : fetcher.data.section === "number-series"
-              ? "Transaction numbers saved"
-              : fetcher.data.section === "store-details" &&
-                  "storeDetails" in fetcher.data
-                ? "Store details saved"
-                : "Settings saved",
+          : fetcher.data.section === "credit-notes"
+            ? (() => {
+                const backfilled =
+                  "backfilledCreditNotes" in fetcher.data &&
+                  typeof fetcher.data.backfilledCreditNotes === "number"
+                    ? fetcher.data.backfilledCreditNotes
+                    : 0;
+                if (backfilled > 0) {
+                  return `Credit note settings saved · created ${backfilled} missing credit note${backfilled === 1 ? "" : "s"}`;
+                }
+                return "Credit note settings saved";
+              })()
+            : fetcher.data.section === "email-templates"
+              ? "Email templates saved"
+              : fetcher.data.section === "number-series"
+                ? "Transaction numbers saved"
+                : fetcher.data.section === "number-series-sync"
+                ? (() => {
+                    const assigned =
+                      "assigned" in fetcher.data &&
+                      typeof fetcher.data.assigned === "number"
+                        ? fetcher.data.assigned
+                        : 0;
+                    const skipped =
+                      "skipped" in fetcher.data &&
+                      typeof fetcher.data.skipped === "number"
+                        ? fetcher.data.skipped
+                        : 0;
+                    if (assigned === 0 && skipped > 0) {
+                      return `All ${skipped} orders already have numbers`;
+                    }
+                    if (assigned === 0) {
+                      return "No orders to sync";
+                    }
+                    return `Synced ${assigned} sales order number${assigned === 1 ? "" : "s"}`;
+                  })()
+                : fetcher.data.section === "number-series-reset"
+                  ? (() => {
+                      const reverted =
+                        "reverted" in fetcher.data &&
+                        typeof fetcher.data.reverted === "number"
+                          ? fetcher.data.reverted
+                          : 0;
+                      return reverted > 0
+                        ? `Reset sync for ${reverted} order${reverted === 1 ? "" : "s"}`
+                        : "Sync reset";
+                    })()
+                  : fetcher.data.section === "store-details" &&
+                      "storeDetails" in fetcher.data
+                    ? "Store details saved"
+                    : "Settings saved",
       );
     }
   }, [fetcher.state, fetcher.data]);
@@ -917,11 +1312,8 @@ export default function SettingsPage() {
       );
     if (!parsed) return;
 
-    const last = lastAllocatedByModule[moduleId] ?? null;
-    const startAt = Number.parseInt(entry.startingNumber, 10);
-    const start = Number.isFinite(startAt) && startAt >= 0 ? startAt : 1;
-    const minNext = last == null ? start : last + 1;
-    const nextSequence = Math.max(minNext, parsed.sequence);
+    // Keep the merchant's typed sequence even if already used — Save rejects it.
+    const nextSequence = parsed.sequence;
     const width = Math.max(
       parsed.digitWidth,
       moduleId === "invoice" ? invoiceDigitWidth : 0,
@@ -942,9 +1334,15 @@ export default function SettingsPage() {
   };
 
   const commitPreviewDraft = (moduleId: NumberSeriesModuleId) => {
+    const entry = numberSeries[moduleId];
+    const label =
+      typeof entry.nextSequence === "number" &&
+      Number.isFinite(entry.nextSequence)
+        ? formatNumberSeriesValue(entry, entry.nextSequence)
+        : previewForModule(moduleId);
     setPreviewDrafts((current) => ({
       ...current,
-      [moduleId]: previewForModule(moduleId),
+      [moduleId]: label,
     }));
   };
 
@@ -1009,6 +1407,18 @@ export default function SettingsPage() {
       return;
     }
 
+    if (activeSection === "credit-notes") {
+      fetcher.submit(
+        {
+          intent: "save-credit-notes",
+          creditNoteSettings: JSON.stringify(creditNoteSettings),
+          invoiceSettings: JSON.stringify(invoiceSettings),
+        },
+        { method: "post" },
+      );
+      return;
+    }
+
     if (isEmailTemplatesSection(activeSection)) {
       fetcher.submit(
         {
@@ -1021,6 +1431,17 @@ export default function SettingsPage() {
     }
 
     if (activeSection === "number-series") {
+      const conflictError = getNumberSeriesAlreadyUsedError(
+        numberSeries,
+        savedNumberSeries,
+        lastAllocatedByModule,
+      );
+      if (conflictError) {
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(conflictError, { isError: true });
+        }
+        return;
+      }
       fetcher.submit(
         {
           intent: "save-number-series",
@@ -1044,6 +1465,12 @@ export default function SettingsPage() {
     if (activeSection === "smtp") {
       setSmtpSettings(savedSmtpSettings);
       setIsSmtpDirty(false);
+      return;
+    }
+    if (activeSection === "credit-notes") {
+      setCreditNoteSettings(savedCreditNoteSettings);
+      setInvoiceSettings(savedInvoiceSettings);
+      setIsCreditNoteDirty(false);
       return;
     }
     if (isEmailTemplatesSection(activeSection)) {
@@ -1078,22 +1505,42 @@ export default function SettingsPage() {
     if (section !== "number-series") {
       setIsEditingSeries(false);
     }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (section === "store-details") {
+          next.delete("section");
+        } else {
+          next.set("section", section);
+        }
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const previewForModule = (moduleId: NumberSeriesModuleId) => {
     const entry = numberSeries[moduleId];
     const last = lastAllocatedByModule[moduleId] ?? null;
-    if (moduleId === "invoice") {
-      const padded = {
-        ...entry,
-        startingNumber: widenStartingNumberPad(
-          entry.startingNumber,
-          Math.max(invoiceDigitWidth, entry.startingNumber.length),
-        ),
-      };
-      return formatNumberSeriesNextPreview(padded, last);
+    const padded =
+      moduleId === "invoice"
+        ? {
+            ...entry,
+            startingNumber: widenStartingNumberPad(
+              entry.startingNumber,
+              Math.max(invoiceDigitWidth, entry.startingNumber.length),
+            ),
+          }
+        : entry;
+    // While editing, show the merchant's typed next number even if already used.
+    if (
+      isEditingSeries &&
+      typeof padded.nextSequence === "number" &&
+      Number.isFinite(padded.nextSequence)
+    ) {
+      return formatNumberSeriesValue(padded, padded.nextSequence);
     }
-    return formatNumberSeriesNextPreview(entry, last);
+    return formatNumberSeriesNextPreview(padded, last);
   };
 
   const beginEditingSeries = () => {
@@ -1105,14 +1552,69 @@ export default function SettingsPage() {
     setIsEditingSeries(true);
   };
 
+  const syncSalesOrderNumbers = () => {
+    if (isNumberSeriesDirty || isEditingSeries) return;
+    setSyncConfirmAction("sync");
+  };
+
+  const resetSalesOrderNumberSync = () => {
+    if (!salesOrderSync.canReset) return;
+    setSyncConfirmAction("reset");
+  };
+
+  const closeSyncConfirm = () => setSyncConfirmAction(null);
+
+  const confirmSyncAction = () => {
+    const action = syncConfirmAction;
+    setSyncConfirmAction(null);
+    if (action === "sync") {
+      fetcher.submit(
+        { intent: "sync-sales-order-numbers" },
+        { method: "post" },
+      );
+      return;
+    }
+    if (action === "reset") {
+      fetcher.submit(
+        { intent: "reset-sales-order-number-sync" },
+        { method: "post" },
+      );
+    }
+  };
+
+  const syncConfirmCopy =
+    syncConfirmAction === "reset"
+      ? {
+          title: "Reset Sales Order sync?",
+          confirm: "Reset sync",
+          destructive: true,
+          warning:
+            "This permanently clears Sales Order numbers from all orders that were numbered by sync. Invoice and packing slip documents are not deleted, but reset is blocked if any synced order already has those.",
+          message:
+            "Are you sure you want to reset? After reset you must Sync again so orders get numbers from your saved Prefix and Starting number (oldest → newest).",
+        }
+      : syncConfirmAction === "sync"
+        ? {
+            title: "Sync existing orders?",
+            confirm: "Sync existing orders",
+            destructive: false,
+            warning:
+              "This assigns Sales Order numbers to existing Shopify orders using your saved Prefix and Starting number. Oldest order gets the starting number (e.g. FS-0001); newer orders get the next numbers. Orders that already have a number are left unchanged.",
+            message:
+              "Are you sure you want to sync now? Make sure Prefix and Starting number are saved before continuing.",
+          }
+        : null;
+
   const mainCardHeading =
     activeSection === "store-details"
       ? "Store details"
       : activeSection === "number-series"
         ? "Transaction numbers"
-        : activeSection === "smtp"
-          ? "SMTP"
-          : `Email · ${activeEmailChild?.label ?? "Template"}`;
+        : activeSection === "credit-notes"
+          ? "Advanced"
+          : activeSection === "smtp"
+            ? "SMTP"
+            : `Email · ${activeEmailChild?.label ?? "Template"}`;
 
   return (
     <>
@@ -1131,6 +1633,37 @@ export default function SettingsPage() {
       </SaveBar>
 
       <AppProvider i18n={enTranslations}>
+        <Modal
+          open={syncConfirmAction !== null}
+          onClose={closeSyncConfirm}
+          title={syncConfirmCopy?.title ?? "Are you sure?"}
+          primaryAction={{
+            content: syncConfirmCopy?.confirm ?? "Yes",
+            destructive: syncConfirmCopy?.destructive,
+            onAction: confirmSyncAction,
+          }}
+          secondaryActions={[
+            {
+              content: "No, cancel",
+              onAction: closeSyncConfirm,
+            },
+          ]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              {syncConfirmCopy?.warning ? (
+                <Banner tone="warning" title="Important">
+                  <p>{syncConfirmCopy.warning}</p>
+                </Banner>
+              ) : null}
+              <Text as="p">
+                {syncConfirmCopy?.message ??
+                  "Are you sure you want to continue?"}
+              </Text>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+
         <Page
           title="Settings"
           fullWidth
@@ -1248,6 +1781,99 @@ export default function SettingsPage() {
 
                 <Layout.Section>
                   <div className="settings-form-column">
+                  {activeSection === "credit-notes" ? (
+                    <BlockStack gap="400">
+                      <Card>
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h2" variant="headingMd">
+                              Credit Note
+                            </Text>
+                            <Text as="p" tone="subdued">
+                              Auto-create when an order is cancelled or
+                              refunded. Needs an invoice first.
+                            </Text>
+                          </BlockStack>
+
+                          <BlockStack gap="300">
+                            <Text as="h3" variant="headingSm">
+                              Automation
+                            </Text>
+                            <Checkbox
+                              label="On cancel"
+                              helpText="When the order is cancelled."
+                              checked={creditNoteSettings.autoOnCancel}
+                              onChange={(checked) => {
+                                setCreditNoteSettings((current) => ({
+                                  ...current,
+                                  autoOnCancel: checked,
+                                }));
+                                setIsCreditNoteDirty(true);
+                              }}
+                            />
+                            <Checkbox
+                              label="On full refund"
+                              helpText="When fully refunded."
+                              checked={creditNoteSettings.autoOnRefund}
+                              onChange={(checked) => {
+                                setCreditNoteSettings((current) => ({
+                                  ...current,
+                                  autoOnRefund: checked,
+                                }));
+                                setIsCreditNoteDirty(true);
+                              }}
+                            />
+                            <Checkbox
+                              label="On partial refund"
+                              helpText="When partially refunded."
+                              checked={creditNoteSettings.autoOnPartialRefund}
+                              onChange={(checked) => {
+                                setCreditNoteSettings((current) => ({
+                                  ...current,
+                                  autoOnPartialRefund: checked,
+                                }));
+                                setIsCreditNoteDirty(true);
+                              }}
+                            />
+                          </BlockStack>
+                        </BlockStack>
+                      </Card>
+
+                      <Card>
+                        <BlockStack gap="400">
+                          <BlockStack gap="100">
+                            <Text as="h2" variant="headingMd">
+                              Invoice
+                            </Text>
+                            <Text as="p" tone="subdued">
+                              Auto-create when an order is paid in Shopify.
+                            </Text>
+                          </BlockStack>
+
+                          <BlockStack gap="300">
+                            <Text as="h3" variant="headingSm">
+                              Automation
+                            </Text>
+                            <Checkbox
+                              label="On paid"
+                              helpText="Convert to invoice when the order is paid."
+                              checked={invoiceSettings.autoOnPaid}
+                              onChange={(checked) => {
+                                setInvoiceSettings({ autoOnPaid: checked });
+                                setIsCreditNoteDirty(true);
+                              }}
+                            />
+                          </BlockStack>
+                        </BlockStack>
+                      </Card>
+
+                      {isCreditNoteDirty ? (
+                        <Text as="p" tone="subdued">
+                          Unsaved changes
+                        </Text>
+                      ) : null}
+                    </BlockStack>
+                  ) : (
                   <Card>
                     <BlockStack gap="400">
                       <Text as="h2" variant="headingMd">
@@ -1623,6 +2249,110 @@ export default function SettingsPage() {
                               Unsaved changes
                             </Text>
                           ) : null}
+
+                          <Divider />
+
+                          <BlockStack gap="300">
+                            <InlineStack
+                              align="space-between"
+                              blockAlign="center"
+                              gap="300"
+                              wrap
+                            >
+                              <BlockStack gap="100">
+                                <InlineStack gap="200" blockAlign="center">
+                                  <Text as="h3" variant="headingSm">
+                                    Sales Order sync
+                                  </Text>
+                                  {salesOrderSync.synced ? (
+                                    <Badge tone="success">Synced</Badge>
+                                  ) : (
+                                    <Badge>Not synced</Badge>
+                                  )}
+                                </InlineStack>
+                                <Text as="p" tone="subdued">
+                                  Set Prefix and Starting number, save, then
+                                  Sync. Oldest Shopify order gets the starting
+                                  number (e.g. FS-0001); newer orders get the
+                                  next numbers. Newest orders stay at the top of
+                                  the Sales Orders list. Reset clears numbers so
+                                  you can sync again.
+                                </Text>
+                              </BlockStack>
+                              <InlineStack gap="200" wrap>
+                                {salesOrderSync.assignedCount > 0 ||
+                                salesOrderSync.synced ? (
+                                  <Button
+                                    onClick={resetSalesOrderNumberSync}
+                                    disabled={
+                                      isSaving || !salesOrderSync.canReset
+                                    }
+                                    loading={
+                                      isSaving &&
+                                      fetcher.formData?.get("intent") ===
+                                        "reset-sales-order-number-sync"
+                                    }
+                                  >
+                                    Reset sync
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  variant="primary"
+                                  onClick={syncSalesOrderNumbers}
+                                  disabled={
+                                    isSaving ||
+                                    isNumberSeriesDirty ||
+                                    isEditingSeries ||
+                                    numberSeries["sales-order"].entryMode ===
+                                      "manual"
+                                  }
+                                  loading={
+                                    isSaving &&
+                                    fetcher.formData?.get("intent") ===
+                                      "sync-sales-order-numbers"
+                                  }
+                                >
+                                  Sync existing orders
+                                </Button>
+                              </InlineStack>
+                            </InlineStack>
+                            {isNumberSeriesDirty || isEditingSeries ? (
+                              <Banner tone="info">
+                                <p>
+                                  Save your Transaction numbers first, then
+                                  sync.
+                                </p>
+                              </Banner>
+                            ) : null}
+                            {numberSeries["sales-order"].entryMode ===
+                            "manual" ? (
+                              <Banner tone="warning">
+                                <p>
+                                  Sales Order numbering is manual — sync is
+                                  disabled. New numbers are entered per order.
+                                </p>
+                              </Banner>
+                            ) : null}
+                            {salesOrderSync.blockedCount > 0 ? (
+                              <Banner tone="warning">
+                                <p>
+                                  Reset disabled:{" "}
+                                  {salesOrderSync.invoicedCount > 0
+                                    ? `${salesOrderSync.invoicedCount} invoice${salesOrderSync.invoicedCount === 1 ? "" : "s"}`
+                                    : null}
+                                  {salesOrderSync.invoicedCount > 0 &&
+                                  salesOrderSync.packingSlipCount > 0
+                                    ? " and "
+                                    : null}
+                                  {salesOrderSync.packingSlipCount > 0
+                                    ? `${salesOrderSync.packingSlipCount} packing slip${salesOrderSync.packingSlipCount === 1 ? "" : "s"}`
+                                    : null}{" "}
+                                  on synced orders. Delete those documents to
+                                  enable reset.
+                                </p>
+                              </Banner>
+                            ) : null}
+                          </BlockStack>
                         </BlockStack>
                       ) : activeSection === "smtp" ? (
                         <BlockStack gap="400">
@@ -2014,6 +2744,7 @@ export default function SettingsPage() {
                       ) : null}
                     </BlockStack>
                   </Card>
+                  )}
                   </div>
                 </Layout.Section>
 

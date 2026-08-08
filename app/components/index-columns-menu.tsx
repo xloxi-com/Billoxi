@@ -63,7 +63,7 @@ export const CREDIT_NOTE_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "date", label: "Date" },
   { id: "company", label: "Company" },
   { id: "customer", label: "Customer" },
-  { id: "total", label: "Amount" },
+  { id: "total", label: "Credit Total" },
   { id: "paymentStatus", label: "Status" },
   { id: "reason", label: "Reason" },
   { id: "actions", label: "Actions", locked: true },

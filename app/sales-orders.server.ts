@@ -1,6 +1,7 @@
 import {
   ensureSalesOrderDocumentNumbers,
   getSalesOrderDocumentNumbersByOrderGids,
+  hasCompletedSalesOrderNumberSync,
 } from "./sales-order-number.server";
 import {
   getAllInvoicedOrderGids,
@@ -69,6 +70,7 @@ type RawSalesOrder = {
   displayFinancialStatus: string | null;
   displayFulfillmentStatus: string;
   currentTotalPriceSet: { shopMoney: Money };
+  totalRefundedSet?: { shopMoney: Money } | null;
   totalReceivedSet?: { shopMoney: Money } | null;
   totalOutstandingSet?: { shopMoney: Money } | null;
 };
@@ -193,6 +195,12 @@ const SALES_ORDERS_QUERY = `#graphql
             currencyCode
           }
         }
+        totalRefundedSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
         totalReceivedSet {
           shopMoney {
             amount
@@ -239,6 +247,12 @@ const SALES_ORDERS_BY_IDS_QUERY = `#graphql
         displayFinancialStatus
         displayFulfillmentStatus
         currentTotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        totalRefundedSet {
           shopMoney {
             amount
             currencyCode
@@ -705,6 +719,8 @@ function toRow(
   creditNoteVoided = false,
   packingSlipNumber = "",
   packingSlipAt: Date | null = null,
+  /** Credit note index: Amount column = Credit Total (refunded), not order total. */
+  useCreditNoteAmount = false,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
@@ -719,6 +735,14 @@ function toRow(
   const displayDateIso = documentDate
     ? documentDate.toISOString()
     : order.createdAt;
+  const creditTotalMoney = order.totalRefundedSet?.shopMoney;
+  const creditTotalAmount = Number(creditTotalMoney?.amount ?? NaN);
+  const listTotal =
+    useCreditNoteAmount &&
+    Number.isFinite(creditTotalAmount) &&
+    creditTotalAmount > 0
+      ? formatMoney(creditTotalMoney!)
+      : formatMoney(order.currentTotalPriceSet.shopMoney);
   return {
     id: order.id,
     name: order.name,
@@ -728,7 +752,7 @@ function toRow(
     company: resolveCompany(order),
     customer: order.customer?.displayName || "Guest customer",
     email: order.email?.trim() || "",
-    total: formatMoney(order.currentTotalPriceSet.shopMoney),
+    total: listTotal,
     balanceDue: formatMoney(resolveBalanceDue(order)),
     invoiced,
     packingSlip,
@@ -848,6 +872,49 @@ export async function loadSalesOrdersPage(
   if (!params.bypassCache) {
     const cached = listCache.get(cacheKeyBase);
     if (cached && cached.expires > now) {
+      // Sales Orders list: heal "—" gaps on cached pages (new orders / missed webhook).
+      if (
+        !isInvoicedView &&
+        !isCreditNoteView &&
+        !isPackingSlipView &&
+        cached.data.orders.some(
+          (order) => !String(order.salesOrderNumber || "").trim(),
+        )
+      ) {
+        const missingGids = cached.data.orders
+          .filter((order) => !String(order.salesOrderNumber || "").trim())
+          .map((order) => order.id);
+        if (missingGids.length > 0) {
+          const synced = await hasCompletedSalesOrderNumberSync(shop);
+          if (synced) {
+            const ensured = await ensureSalesOrderDocumentNumbers(
+              shop,
+              templateId,
+              missingGids,
+            );
+            let changed = false;
+            const orders = cached.data.orders.map((order) => {
+              const next = ensured.get(order.id)?.trim();
+              if (!next || order.salesOrderNumber === next) return order;
+              changed = true;
+              return { ...order, salesOrderNumber: next };
+            });
+            if (changed) {
+              const data = { ...cached.data, orders };
+              listCache.set(cacheKeyBase, {
+                expires: now + CACHE_TTL_MS,
+                data,
+              });
+              return {
+                ...data,
+                selectedView,
+                availableViews,
+              };
+            }
+          }
+        }
+      }
+
       return {
         ...cached.data,
         selectedView,
@@ -946,8 +1013,9 @@ export async function loadSalesOrdersPage(
       }
     }
 
-    // Do not leave "—" on the Sales Order column for new orders: allocate
-    // missing numbers for this page only (usually 0–few rows → fast).
+    // Do not invent historical numbers newest-first (list is date desc).
+    // Before Sync: leave "—" — Settings Sync assigns oldest → newest (FS-0001…).
+    // After Sync: only fill gaps, oldest-first among this page.
     if (
       !forceInvoiced &&
       !forceCreditNote &&
@@ -958,13 +1026,24 @@ export async function loadSalesOrdersPage(
         (gid) => !documentNumbers.get(gid)?.trim(),
       );
       if (missing.length > 0) {
-        const ensured = await ensureSalesOrderDocumentNumbers(
-          shop,
-          templateId,
-          missing,
-        );
-        for (const [gid, num] of ensured) {
-          if (num?.trim()) documentNumbers.set(gid, num);
+        const synced = await hasCompletedSalesOrderNumberSync(shop);
+        if (synced) {
+          const missingOldestFirst = nodes
+            .filter((order) => missing.includes(order.id))
+            .sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime(),
+            )
+            .map((order) => order.id);
+          const ensured = await ensureSalesOrderDocumentNumbers(
+            shop,
+            templateId,
+            missingOldestFirst,
+          );
+          for (const [gid, num] of ensured) {
+            if (num?.trim()) documentNumbers.set(gid, num);
+          }
         }
       }
     }
@@ -1044,6 +1123,7 @@ export async function loadSalesOrdersPage(
           Boolean(cnMeta?.voidedAt),
           packingSlipNumber,
           psMeta?.convertedAt ?? null,
+          forceCreditNote,
         );
       }),
       pageInfo,

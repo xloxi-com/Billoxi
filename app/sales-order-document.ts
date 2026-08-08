@@ -101,10 +101,77 @@ export type TemplateAppearance = {
   taxSummaryBorderColor: string;
 };
 
+export type TemplateDateFormat =
+  | "YYYY/MM/DD"
+  | "YYYY-MM-DD"
+  | "YYYY.MM.DD"
+  | "DD/MM/YYYY"
+  | "DD-MM-YYYY"
+  | "DD.MM.YYYY"
+  | "YYYY MMMM DD"
+  | "MMMM DD, YYYY"
+  | "DD MMMM, YYYY"
+  | "DD MMMM YYYY";
+
+export const TEMPLATE_DATE_FORMATS: ReadonlyArray<{
+  value: TemplateDateFormat;
+  /** Example label for Aug 8, 2026 — mirrors the Select options. */
+  label: string;
+}> = [
+  { value: "YYYY/MM/DD", label: "2026/08/08" },
+  { value: "YYYY-MM-DD", label: "2026-08-08" },
+  { value: "YYYY.MM.DD", label: "2026.08.08" },
+  { value: "DD/MM/YYYY", label: "08/08/2026" },
+  { value: "DD-MM-YYYY", label: "08-08-2026" },
+  { value: "DD.MM.YYYY", label: "08.08.2026" },
+  { value: "YYYY MMMM DD", label: "2026 August 08" },
+  { value: "MMMM DD, YYYY", label: "August 08, 2026" },
+  { value: "DD MMMM, YYYY", label: "08 August, 2026" },
+  { value: "DD MMMM YYYY", label: "08 August 2026" },
+];
+
+export const DEFAULT_TEMPLATE_DATE_FORMAT: TemplateDateFormat = "DD-MM-YYYY";
+
+export function normalizeTemplateDateFormat(
+  value: unknown,
+  fallback: TemplateDateFormat = DEFAULT_TEMPLATE_DATE_FORMAT,
+): TemplateDateFormat {
+  if (typeof value === "string") {
+    const match = TEMPLATE_DATE_FORMATS.find((entry) => entry.value === value);
+    if (match) return match.value;
+  }
+  return fallback;
+}
+
+export type TemplateCurrencyDisplay = "symbol" | "code";
+
+export const TEMPLATE_CURRENCY_DISPLAYS: ReadonlyArray<{
+  value: TemplateCurrencyDisplay;
+  label: string;
+}> = [
+  { value: "symbol", label: "Symbol (e.g. $, ₹, €, ฿)" },
+  { value: "code", label: "Letters (e.g. USD, INR, EUR, THB)" },
+];
+
+export const DEFAULT_TEMPLATE_CURRENCY_DISPLAY: TemplateCurrencyDisplay =
+  "symbol";
+
+export function normalizeTemplateCurrencyDisplay(
+  value: unknown,
+  fallback: TemplateCurrencyDisplay = DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
+): TemplateCurrencyDisplay {
+  if (value === "symbol" || value === "code") return value;
+  return fallback;
+}
+
 export type TemplateEditorSettings = {
   name: string;
   /** Document label language (Bill To, totals, columns, etc.). */
   language?: string;
+  /** How order / document dates render on the template. */
+  dateFormat?: TemplateDateFormat;
+  /** Currency as symbol ($) or ISO letters (USD). */
+  currencyDisplay?: TemplateCurrencyDisplay;
   paperSize: "A5" | "A4" | "Letter";
   orientation: "portrait" | "landscape";
   margins: { top: number; bottom: number; left: number; right: number };
@@ -376,6 +443,8 @@ export type CustomerOrderListItem = {
   customer: string;
   createdAt: string;
   total: string;
+  /** Shopify totalRefundedSet — used as Credit Total on credit-note lists. */
+  refundedTotal?: string;
   currencyCode: string;
   paymentStatus: string | null;
   invoiced: boolean;
@@ -2980,6 +3049,174 @@ export function shouldShowDocumentRefundedAmount(
   return hasNonZeroAmount(order.refundedAmount);
 }
 
+/** Money cell with the same currency prefix used on Credit Total / PDF totals. */
+export function formatDocumentMoney(
+  value: string | number | null | undefined,
+  currencyCode: string,
+  display?: TemplateCurrencyDisplay | string | null,
+) {
+  return `${currencySymbol(currencyCode, display)}${formatAmountDisplay(value)}`;
+}
+
+export type CreditNoteRefundLineSource = {
+  quantity: number;
+  subtotal: string;
+  tax: string;
+  title: string;
+  variantTitle: string;
+  imageUrl: string;
+  sku: string;
+};
+
+export type CreditNoteRefundSource = {
+  refundLineItems: CreditNoteRefundLineSource[];
+  /** Shipping amount refunded (positive). */
+  shippingRefunded: number;
+};
+
+function emptyCreditLine(
+  title: string,
+  amount: string,
+): SalesOrderDocumentData["lineItems"][number] {
+  return {
+    title,
+    variantTitle: "",
+    imageUrl: "",
+    quantity: "1",
+    rate: amount,
+    compareAtPrice: "",
+    discount: "0.00",
+    discountPercentage: "0.00%",
+    taxPercentage: "0.00%",
+    taxAmount: "0.00",
+    amount,
+    sku: "",
+  };
+}
+
+/**
+ * Rebuild credit-note lines/totals from Shopify refunds.
+ * Credit Total = refunded amount (e.g. $50 partial), not the full invoice.
+ * Amount-only refunds → one "Partial Refund / Adjustment – $50" line.
+ */
+export function adaptDocumentForCreditNote(
+  order: SalesOrderDocumentData,
+  source?: CreditNoteRefundSource | null,
+  currencyDisplay?: TemplateCurrencyDisplay | string | null,
+): SalesOrderDocumentData {
+  const creditN =
+    Math.round((parseAmountNumber(order.refundedAmount) || 0) * 100) / 100;
+
+  // Cancel / no money refunded — keep invoice snapshot as the credit body.
+  if (creditN <= 0) {
+    return {
+      ...order,
+      paidAmount: "0.00",
+      balanceDue: "0.00",
+    };
+  }
+
+  const credit = creditN.toFixed(2);
+  const moneyLabel = formatDocumentMoney(
+    credit,
+    order.currencyCode,
+    currencyDisplay,
+  );
+  const productLines = source?.refundLineItems ?? [];
+  const shippingN = Math.max(
+    0,
+    Math.round((source?.shippingRefunded || 0) * 100) / 100,
+  );
+
+  let lineItems: SalesOrderDocumentData["lineItems"];
+  let subtotalN = 0;
+  let taxN = 0;
+
+  if (productLines.length === 0) {
+    lineItems = [
+      emptyCreditLine(
+        `Partial Refund / Adjustment – ${moneyLabel}`,
+        credit,
+      ),
+    ];
+    subtotalN = creditN;
+  } else {
+    lineItems = productLines.map((item) => {
+      const qty = Number(item.quantity) || 0;
+      const sub =
+        Math.round((parseAmountNumber(item.subtotal) || 0) * 100) / 100;
+      const taxAmt =
+        Math.round((parseAmountNumber(item.tax) || 0) * 100) / 100;
+      const rate = qty > 0 ? sub / qty : sub;
+      subtotalN += sub;
+      taxN += taxAmt;
+      const taxPct =
+        sub > 0 && taxAmt > 0
+          ? `${((taxAmt / sub) * 100).toFixed(2)}%`
+          : "0.00%";
+      return {
+        title: item.title || "Refunded item",
+        variantTitle: item.variantTitle || "",
+        imageUrl: item.imageUrl || "",
+        quantity: formatQuantityDisplay(qty || 1),
+        rate: rate.toFixed(2),
+        compareAtPrice: "",
+        discount: "0.00",
+        discountPercentage: "0.00%",
+        taxPercentage: taxPct,
+        taxAmount: taxAmt.toFixed(2),
+        amount: sub.toFixed(2),
+        sku: item.sku || "",
+      };
+    });
+
+    const accounted =
+      Math.round((subtotalN + taxN + shippingN) * 100) / 100;
+    const remainder = Math.round((creditN - accounted) * 100) / 100;
+    if (Math.abs(remainder) >= 0.01) {
+      const rem = Math.abs(remainder).toFixed(2);
+      lineItems.push(
+        emptyCreditLine(
+          `Partial Refund / Adjustment – ${formatDocumentMoney(
+            rem,
+            order.currencyCode,
+            currencyDisplay,
+          )}`,
+          rem,
+        ),
+      );
+      if (remainder > 0) subtotalN += remainder;
+    }
+  }
+
+  const taxSummary =
+    taxN > 0
+      ? [
+          {
+            title: "Tax",
+            rate: subtotalN > 0 ? `${((taxN / subtotalN) * 100).toFixed(2)}%` : "0.00%",
+            taxableAmount: subtotalN.toFixed(2),
+            taxAmount: taxN.toFixed(2),
+          },
+        ]
+      : [];
+
+  return {
+    ...order,
+    lineItems,
+    subtotal: (productLines.length === 0 ? creditN : subtotalN).toFixed(2),
+    discount: "0.00",
+    shippingPrice: shippingN > 0 ? shippingN.toFixed(2) : "0.00",
+    tax: taxN > 0 ? taxN.toFixed(2) : "0.00",
+    total: credit,
+    paidAmount: "0.00",
+    balanceDue: "0.00",
+    // Credit Total already shows the refund — hide duplicate Credit Amount row.
+    refundedAmount: "0.00",
+    taxSummary,
+  };
+}
+
 /**
  * Keep Paid / Balance / Refunded rows consistent with document Total.
  * Shopify outstanding/received can drift by cents from currentTotalPriceSet.
@@ -3184,16 +3421,39 @@ export function formatTaxLineLabel(row: {
   return `${title} (${normalized})`;
 }
 
-export function currencySymbol(currencyCode: string) {
-  if (currencyCode === "EUR") return "€";
-  if (currencyCode === "USD") return "$";
-  if (currencyCode === "GBP") return "£";
-  if (currencyCode === "INR") return "₹";
-  if (currencyCode === "JPY") return "¥";
-  if (currencyCode === "CNY") return "¥";
-  if (currencyCode === "AUD") return "A$";
-  if (currencyCode === "CAD") return "C$";
-  return `${currencyCode} `;
+export function currencySymbol(
+  currencyCode: string,
+  display:
+    | TemplateCurrencyDisplay
+    | string
+    | null
+    | undefined = DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
+) {
+  const code = (currencyCode || "USD").trim().toUpperCase() || "USD";
+  const mode = normalizeTemplateCurrencyDisplay(display);
+  if (mode === "code") return `${code} `;
+
+  // Prefer disambiguated symbols (A$, HK$, CA$), then narrow glyphs (฿, ₦, ₺).
+  // Covers Shopify/ISO currencies via Intl; unknown codes fall back to letters.
+  for (const currencyDisplay of ["symbol", "narrowSymbol"] as const) {
+    try {
+      const parts = new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: code,
+        currencyDisplay,
+      }).formatToParts(1);
+      const symbol = parts
+        .find((part) => part.type === "currency")
+        ?.value?.trim();
+      if (symbol && symbol.toUpperCase() !== code) {
+        return symbol;
+      }
+    } catch {
+      // Non-ISO / unsupported currency for this display mode
+    }
+  }
+
+  return `${code} `;
 }
 
 export function lineItemImageSizePx(
@@ -3470,14 +3730,49 @@ export function toOrderGid(orderIdParam: string) {
   return `gid://shopify/Order/${orderIdParam}`;
 }
 
-export function formatOrderDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  })
-    .format(new Date(value))
-    .replace(/\//g, "-");
+export function formatOrderDate(
+  value: string,
+  dateFormat: TemplateDateFormat | string | null | undefined = DEFAULT_TEMPLATE_DATE_FORMAT,
+) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const format = normalizeTemplateDateFormat(dateFormat);
+  // Use UTC so ISO order timestamps don't shift the calendar day by timezone.
+  const year = date.getUTCFullYear();
+  const monthIndex = date.getUTCMonth();
+  const day = date.getUTCDate();
+  const dd = String(day).padStart(2, "0");
+  const mm = String(monthIndex + 1).padStart(2, "0");
+  const yyyy = String(year);
+  const monthName = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(date);
+
+  switch (format) {
+    case "YYYY/MM/DD":
+      return `${yyyy}/${mm}/${dd}`;
+    case "YYYY-MM-DD":
+      return `${yyyy}-${mm}-${dd}`;
+    case "YYYY.MM.DD":
+      return `${yyyy}.${mm}.${dd}`;
+    case "DD/MM/YYYY":
+      return `${dd}/${mm}/${yyyy}`;
+    case "DD.MM.YYYY":
+      return `${dd}.${mm}.${yyyy}`;
+    case "YYYY MMMM DD":
+      return `${yyyy} ${monthName} ${dd}`;
+    case "MMMM DD, YYYY":
+      return `${monthName} ${dd}, ${yyyy}`;
+    case "DD MMMM, YYYY":
+      return `${dd} ${monthName}, ${yyyy}`;
+    case "DD MMMM YYYY":
+      return `${dd} ${monthName} ${yyyy}`;
+    case "DD-MM-YYYY":
+    default:
+      return `${dd}-${mm}-${yyyy}`;
+  }
 }
 
 export function defaultTemplateSettings(
@@ -3492,6 +3787,8 @@ export function defaultTemplateSettings(
   return {
     name,
     language: "en",
+    dateFormat: DEFAULT_TEMPLATE_DATE_FORMAT,
+    currencyDisplay: DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
     paperSize: "A4",
     orientation: "portrait",
     designVersion: isPremium ? PREMIUM_DESIGN_VERSION : 1,
@@ -3674,6 +3971,14 @@ export function mergeTemplateSettings(
     ...defaults,
     ...input,
     language: normalizeTemplateLanguage(input.language, "en"),
+    dateFormat: normalizeTemplateDateFormat(
+      input.dateFormat,
+      defaults.dateFormat ?? DEFAULT_TEMPLATE_DATE_FORMAT,
+    ),
+    currencyDisplay: normalizeTemplateCurrencyDisplay(
+      input.currencyDisplay,
+      defaults.currencyDisplay ?? DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
+    ),
     designVersion: isPremiumSales
       ? PREMIUM_DESIGN_VERSION
       : Number(input.designVersion ?? 1) || 1,

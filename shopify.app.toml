@@ -30,6 +30,15 @@ api_version = "2026-07"
   uri = "/webhooks/orders/paid"
   topics = [ "orders/paid" ]
 
+  # Advanced Credit Notes — auto create on cancel / refund
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/cancelled"
+  topics = [ "orders/cancelled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/refunds/create"
+  topics = [ "refunds/create" ]
+
   # Mandatory compliance webhooks (GDPR / privacy law)
   # See: https://shopify.dev/docs/apps/build/privacy-law-compliance
   [[webhooks.subscriptions]]

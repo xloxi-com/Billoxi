@@ -18,6 +18,7 @@ import {
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
 import { INVOICED_VIEW_INDEX } from "../sales-orders";
+import { ensureAutoCreditNotesForOrders } from "../auto-credit-note.server";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -58,12 +59,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
   );
-  const page = await loadSalesOrdersPage(
+  let page = await loadSalesOrdersPage(
     admin,
     session.shop,
     params,
     selectedTemplateId,
   );
+
+  // Heal: Auto on refund / partial — create missing CNs for this page.
+  const healed = await ensureAutoCreditNotesForOrders(
+    session.shop,
+    page.orders.map((order) => ({
+      orderGid: order.id,
+      financialStatus: order.paymentStatusKey,
+      hasInvoice: order.invoiced,
+      hasCreditNote: Boolean(order.creditNote) && !order.creditNoteVoided,
+    })),
+  );
+  if (healed.created > 0) {
+    page = await loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      selectedTemplateId,
+    );
+  }
 
   return {
     ...page,

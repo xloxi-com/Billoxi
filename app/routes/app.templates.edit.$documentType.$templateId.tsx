@@ -76,6 +76,8 @@ import {
   isPremiumTemplatePreset,
   mergeTaxSummarySettings,
   mergeTotalsSettings,
+  normalizeTemplateDateFormat,
+  normalizeTemplateCurrencyDisplay,
   paperPaddingCss,
   PAYMENT_STATUS_STYLES,
   PREMIUM_DESIGN_VERSION,
@@ -85,9 +87,15 @@ import {
   PACKING_SLIP_TEMPLATE_PRESETS,
   salesOrderLogoPosition,
   salesOrderMetaStyle,
+  TEMPLATE_DATE_FORMATS,
+  TEMPLATE_CURRENCY_DISPLAYS,
+  DEFAULT_TEMPLATE_DATE_FORMAT,
+  DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
   type PaymentStatusStyle,
   type SalesOrderLogoPosition,
   type SalesOrderMetaStyle,
+  type TemplateDateFormat,
+  type TemplateCurrencyDisplay,
   resolveDocumentNotes,
 } from "../sales-order-document";
 import {
@@ -224,6 +232,10 @@ type TemplateEditorSettings = {
   name: string;
   /** Document label language (Bill To, totals, columns, etc.). */
   language: TemplateLanguage;
+  /** How order / document dates render on the template. */
+  dateFormat: TemplateDateFormat;
+  /** Currency as symbol ($) or ISO letters (USD). */
+  currencyDisplay: TemplateCurrencyDisplay;
   paperSize: "A5" | "A4" | "Letter";
   orientation: "portrait" | "landscape";
   margins: { top: number; bottom: number; left: number; right: number };
@@ -971,6 +983,14 @@ function mergeSettings(
     ...defaults,
     ...restInput,
     language: normalizeTemplateLanguage(restInput.language, defaults.language),
+    dateFormat: normalizeTemplateDateFormat(
+      restInput.dateFormat,
+      defaults.dateFormat ?? DEFAULT_TEMPLATE_DATE_FORMAT,
+    ),
+    currencyDisplay: normalizeTemplateCurrencyDisplay(
+      restInput.currencyDisplay,
+      defaults.currencyDisplay ?? DEFAULT_TEMPLATE_CURRENCY_DISPLAY,
+    ),
     designVersion: isPremiumSales
       ? PREMIUM_DESIGN_VERSION
       : Number(restInput.designVersion ?? 1) || 1,
@@ -2556,6 +2576,37 @@ export default function TemplateEditorPage() {
                       value={normalizeTemplateLanguage(settings.language)}
                       onChange={changeTemplateLanguage}
                       helpText="Translates all document labels (Bill To, totals, columns, notes title, and more)."
+                    />
+                    <Select
+                      label="Date"
+                      options={TEMPLATE_DATE_FORMATS.map((entry) => ({
+                        value: entry.value,
+                        label: entry.label,
+                      }))}
+                      value={normalizeTemplateDateFormat(settings.dateFormat)}
+                      onChange={(dateFormat) =>
+                        updateSettings({
+                          dateFormat: normalizeTemplateDateFormat(dateFormat),
+                        })
+                      }
+                      helpText="Format used for Order Date and Expected Shipment Date on this template."
+                    />
+                    <Select
+                      label="Currency"
+                      options={TEMPLATE_CURRENCY_DISPLAYS.map((entry) => ({
+                        value: entry.value,
+                        label: entry.label,
+                      }))}
+                      value={normalizeTemplateCurrencyDisplay(
+                        settings.currencyDisplay,
+                      )}
+                      onChange={(currencyDisplay) =>
+                        updateSettings({
+                          currencyDisplay:
+                            normalizeTemplateCurrencyDisplay(currencyDisplay),
+                        })
+                      }
+                      helpText="Show money as a currency symbol or ISO letters. Works with every Shopify store currency."
                     />
                     <BlockStack gap="200">
                       <Text as="h3" variant="headingSm">

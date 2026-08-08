@@ -137,11 +137,17 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const logoPosition = salesOrderLogoPosition(templateId, settings);
   const metaStyle = salesOrderMetaStyle(templateId, settings);
   const isPackingSlip = templateId.startsWith("packing-");
-  const orderDate = formatOrderDate(order.documentDate || order.createdAt);
+  const orderDate = formatOrderDate(
+    order.documentDate || order.createdAt,
+    settings.dateFormat,
+  );
   const documentNumber =
     order.documentNumber ||
     formatSalesOrderDocumentNumber(settings.numbering);
-  const currencyPrefix = currencySymbol(order.currencyCode);
+  const currencyPrefix = currencySymbol(
+    order.currencyCode,
+    settings.currencyDisplay,
+  );
   const taxSummaryConfig = settings.taxSummary;
   // Treat missing/undefined as on (defaults); only explicit false hides it.
   const taxSummaryEnabled = taxSummaryConfig?.enabled !== false;
@@ -164,7 +170,10 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
     () => taxSummaryTotals(taxSummary, order.total),
     [order.total, taxSummary],
   );
-  const moneySymbol = currencySymbol(order.currencyCode);
+  const moneySymbol = currencySymbol(
+    order.currencyCode,
+    settings.currencyDisplay,
+  );
   const taxDetailsLabel = resolveTaxSummaryLabel(
     taxSummaryConfig?.detailsLabel || "Tax Details",
     moneySymbol,
@@ -367,25 +376,27 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         );
         return (
           <span className="live-document__rate-cell">
-            <span className="live-document__rate-value">{rate}</span>
+            <span className="live-document__rate-value">
+              {`${currencyPrefix}${rate}`}
+            </span>
             {compareAtPrice ? (
               <small className="live-document__compare-price">
-                {compareAtPrice}
+                {`${currencyPrefix}${compareAtPrice}`}
               </small>
             ) : null}
           </span>
         );
       }
       case "discount":
-        return formatAmountDisplay(item.discount || 0);
+        return `${currencyPrefix}${formatAmountDisplay(item.discount || 0)}`;
       case "discountPercentage":
         return item.discountPercentage || "0,00%";
       case "taxPercentage":
         return item.taxPercentage || "0,00%";
       case "taxAmount":
-        return formatAmountDisplay(item.taxAmount || 0);
+        return `${currencyPrefix}${formatAmountDisplay(item.taxAmount || 0)}`;
       case "amount":
-        return formatAmountDisplay(item.amount || 0);
+        return `${currencyPrefix}${formatAmountDisplay(item.amount || 0)}`;
       case "custom":
         return "—";
       default:
@@ -460,7 +471,12 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
             order.expectedShipmentDate ? (
               <>
                 <dt>{settings.transactionLabels.expectedShipmentDate}</dt>
-                <dd>{order.expectedShipmentDate}</dd>
+                <dd>
+                  {formatOrderDate(
+                    order.expectedShipmentDate,
+                    settings.dateFormat,
+                  )}
+                </dd>
               </>
             ) : null}
             {settings.header.showPaymentMethod && order.paymentMethod ? (
@@ -590,7 +606,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         {settings.totals.showSubtotal ? (
           <div>
             <span>{settings.totals.subtotalLabel}</span>
-            <span>{formatAmountDisplay(order.subtotal)}</span>
+            <span>{`${currencyPrefix}${formatAmountDisplay(order.subtotal)}`}</span>
           </div>
         ) : null}
         {settings.totals.showTaxLines
@@ -599,7 +615,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
               .map((row) => (
               <div key={`${row.title}-${row.rate}-${row.taxAmount}`}>
                 <span>{formatTaxLineLabel(row)}</span>
-                <span>{formatAmountDisplay(row.taxAmount)}</span>
+                <span>{`${currencyPrefix}${formatAmountDisplay(row.taxAmount)}`}</span>
               </div>
             ))
           : null}
@@ -607,20 +623,20 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         hasNonZeroAmount(order.discount) ? (
           <div>
             <span>{settings.totals.discountAmountLabel}</span>
-            <span>{formatAmountDisplay(order.discount)}</span>
+            <span>{`${currencyPrefix}${formatAmountDisplay(order.discount)}`}</span>
           </div>
         ) : null}
         {settings.totals.showShippingPrice &&
         hasNonZeroAmount(order.shippingPrice) ? (
           <div>
             <span>{settings.totals.shippingPriceLabel}</span>
-            <span>{formatAmountDisplay(order.shippingPrice)}</span>
+            <span>{`${currencyPrefix}${formatAmountDisplay(order.shippingPrice)}`}</span>
           </div>
         ) : null}
         {settings.totals.showVatAmount && hasNonZeroAmount(order.tax) ? (
           <div>
             <span>{settings.totals.vatAmountLabel}</span>
-            <span>{formatAmountDisplay(order.tax)}</span>
+            <span>{`${currencyPrefix}${formatAmountDisplay(order.tax)}`}</span>
           </div>
         ) : null}
         <div className="live-document__grand-total">
@@ -690,17 +706,17 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                     <td>{row.details}</td>
                     {showTaxable ? (
                       <td className="live-document__cell--numeric">
-                        {row.taxableAmount}
+                        {`${moneySymbol}${row.taxableAmount}`}
                       </td>
                     ) : null}
                     {showTaxAmt ? (
                       <td className="live-document__cell--numeric">
-                        {row.taxAmount}
+                        {`${moneySymbol}${row.taxAmount}`}
                       </td>
                     ) : null}
                     {showTotalAmt ? (
                       <td className="live-document__cell--numeric">
-                        {row.totalAmount}
+                        {`${moneySymbol}${row.totalAmount}`}
                       </td>
                     ) : null}
                   </tr>

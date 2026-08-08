@@ -7,6 +7,7 @@ import {
 } from "../sales-order-bulk-pdf.server";
 import { requireAdminAuth } from "../shopify-context.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { admin, session } = await requireAdminAuth(request);
@@ -40,6 +41,18 @@ export async function action({ request }: ActionFunctionArgs) {
         documentKind,
       });
 
+      void incrementShopMonthlyUsage(
+        session.shop,
+        intent === "print" ? "printed" : "downloaded",
+        1,
+        {
+          documentKind,
+          orderGid: orderIds[0],
+          orderName: null,
+          processType: "bulk",
+        },
+      );
+
       return new Response(Buffer.from(pdf), {
         status: 200,
         headers: {
@@ -57,6 +70,16 @@ export async function action({ request }: ActionFunctionArgs) {
       templateId,
       documentKind,
     });
+
+    void incrementShopMonthlyUsage(
+      session.shop,
+      intent === "print" ? "printed" : "downloaded",
+      orderIds.length,
+      {
+        documentKind,
+        processType: "bulk",
+      },
+    );
 
     return new Response(Buffer.from(zip), {
       status: 200,

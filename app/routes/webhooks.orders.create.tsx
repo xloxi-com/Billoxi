@@ -3,7 +3,7 @@ import { authenticate } from "../shopify.server";
 import { assertValidShopifyWebhookHmac } from "../webhook-hmac.server";
 import { numberingFromSeries } from "../number-series";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
-import { allocateSalesOrderDocumentNumber } from "../sales-order-number.server";
+import { allocateSalesOrderDocumentNumber, hasCompletedSalesOrderNumberSync } from "../sales-order-number.server";
 import {
   loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
@@ -55,15 +55,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const templateId = resolveSalesOrderTemplateId(selectedTemplateIdRaw);
 
     if (series.entryMode !== "manual") {
-      const documentNumber = await allocateSalesOrderDocumentNumber(
-        shop,
-        templateId,
-        orderGid,
-        numberingFromSeries(series),
-      );
-      console.log(
-        `orders/create: assigned ${documentNumber} → ${orderGid}`,
-      );
+      // Before Settings Sync, do not assign — Sync numbers oldest → newest.
+      if (await hasCompletedSalesOrderNumberSync(shop)) {
+        const documentNumber = await allocateSalesOrderDocumentNumber(
+          shop,
+          templateId,
+          orderGid,
+          numberingFromSeries(series),
+        );
+        console.log(
+          `orders/create: assigned ${documentNumber} → ${orderGid}`,
+        );
+      } else {
+        console.log(
+          `orders/create: skipped number (awaiting Settings sync) → ${orderGid}`,
+        );
+      }
     } else {
       console.log(
         `orders/create: skipped number (manual mode) → ${orderGid}`,

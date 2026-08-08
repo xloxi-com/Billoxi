@@ -9,6 +9,7 @@ import {
   createExtensionPrintTicket,
   peekExtensionPrintTicket,
 } from "../extension-print-ticket.server";
+import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import type {
   SalesOrderDocumentData,
   TemplateEditorSettings,
@@ -221,6 +222,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       shop: session.shop,
     });
     const src = `/extension-document-print?ticket=${encodeURIComponent(ticket)}`;
+
+    void incrementShopMonthlyUsage(session.shop, "printed", 1, {
+      documentKind: documentKinds[0] || "sales-order",
+      orderGid: orderId ? `gid://shopify/Order/${orderId}` : null,
+      orderName: orderId ? `#${orderId}` : null,
+      processType: "extension",
+    });
 
     console.info(
       "[extension-document-print] prepared html",

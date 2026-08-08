@@ -40,6 +40,7 @@ import {
 } from "../sales-order-document.server";
 import {
   allocateSalesOrderDocumentNumber,
+  hasCompletedSalesOrderNumberSync,
   getSalesOrderDocumentDetails,
   getSalesOrderDocumentNumbersByOrderGids,
   updateSalesOrderDocumentDetails,
@@ -59,6 +60,7 @@ import {
   toOrderGid,
 } from "../sales-order-ids";
 import {
+  loadInvoiceSettingsForShop,
   loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
   loadSelectedTemplatesForShop,
@@ -84,6 +86,7 @@ import {
 } from "../order-credit-note-status.server";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
+import { recordDocumentActivity } from "../record-document-activity.client";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
@@ -218,7 +221,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     : templateId;
 
   const [order, template] = await Promise.all([
-    fetchSalesOrderDocument(admin, orderGid),
+    fetchSalesOrderDocument(admin, orderGid, {
+      asCreditNote: isCreditNote,
+    }),
     isIssuedDocument
       ? loadDocumentTemplateSettings(
           session.shop,
@@ -346,15 +351,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     orderPackingSlip = packingGids.has(order.id);
 
     // Paid in Shopify → self-heal invoice mark without blocking first paint.
-    // Primary path is the orders/paid webhook.
+    // Primary path is the orders/paid webhook (respects Advanced → On paid).
     const financialStatus = (order.financialStatus || "").toUpperCase();
     if (!orderInvoiced && financialStatus === "PAID") {
-      orderInvoiced = true;
-      void markOrderInvoiced(session.shop, order.id)
-        .then(() => invalidateSalesOrdersCache(session.shop))
-        .catch((error) => {
-          console.error("[sales-order] Paid self-heal failed", error);
-        });
+      const invoiceSettings = await loadInvoiceSettingsForShop(session.shop);
+      if (invoiceSettings.autoOnPaid) {
+        orderInvoiced = true;
+        void markOrderInvoiced(session.shop, order.id)
+          .then(() => invalidateSalesOrdersCache(session.shop))
+          .catch((error) => {
+            console.error("[sales-order] Paid self-heal failed", error);
+          });
+      }
     }
 
     let soDetails = soDetailsInitial;
@@ -364,18 +372,20 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         "sales-order",
       );
       if (soSeries.entryMode !== "manual") {
-        const assigned = await allocateSalesOrderDocumentNumber(
-          session.shop,
-          template.templateId,
-          order.id,
-          numberingFromSeries(soSeries),
-        );
-        soDetails = {
-          documentNumber: assigned,
-          documentDate: soDetails?.documentDate ?? null,
-          customerNote: soDetails?.customerNote ?? null,
-          terms: soDetails?.terms ?? null,
-        };
+        if (await hasCompletedSalesOrderNumberSync(session.shop)) {
+          const assigned = await allocateSalesOrderDocumentNumber(
+            session.shop,
+            template.templateId,
+            order.id,
+            numberingFromSeries(soSeries),
+          );
+          soDetails = {
+            documentNumber: assigned,
+            documentDate: soDetails?.documentDate ?? null,
+            customerNote: soDetails?.customerNote ?? null,
+            terms: soDetails?.terms ?? null,
+          };
+        }
       }
     }
     documentNumber = soDetails?.documentNumber ?? "";
@@ -405,8 +415,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         .filter((item) => creditGidSet.has(item.id))
         .map((item) => {
           const meta = creditMeta.get(item.id);
+          const creditTotal = Number(item.refundedTotal ?? NaN);
           return {
             ...item,
+            // Sidebar Amount = Credit Total (refunded), matching the document.
+            total:
+              Number.isFinite(creditTotal) && creditTotal > 0
+                ? item.refundedTotal!
+                : item.total,
             documentNumber:
               meta?.documentNumber ||
               (item.id === order.id ? documentNumber : item.documentNumber),
@@ -1128,6 +1144,20 @@ export default function SalesOrderDocumentPage() {
         fontFamily: resolveDocumentFontFamily(data.settings.fontFamily),
         margins: data.settings.margins,
       });
+      recordDocumentActivity("printed", {
+        documentKind: isCreditNote
+          ? "credit-note"
+          : isInvoice
+            ? "invoice"
+            : isPackingSlip
+              ? "packing-slip"
+              : "sales-order",
+        documentNumber: previewOrder.documentNumber || null,
+        orderGid: data.order.id,
+        orderId: data.order.id,
+        orderName: data.order.name,
+        processType: "manual",
+      });
     } catch (error) {
       console.error("Print failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1136,7 +1166,17 @@ export default function SalesOrderDocumentPage() {
     } finally {
       setIsPrinting(false);
     }
-  }, [data.settings, isDownloading, isPrinting]);
+  }, [
+    data.order.id,
+    data.order.name,
+    data.settings,
+    isDownloading,
+    isCreditNote,
+    isInvoice,
+    isPackingSlip,
+    isPrinting,
+    previewOrder.documentNumber,
+  ]);
 
   const handleDownload = useCallback(async () => {
     if (isDownloading || isPrinting) return;
@@ -1170,6 +1210,20 @@ export default function SalesOrderDocumentPage() {
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show("PDF downloaded");
       }
+      recordDocumentActivity("downloaded", {
+        documentKind: isCreditNote
+          ? "credit-note"
+          : isInvoice
+            ? "invoice"
+            : isPackingSlip
+              ? "packing-slip"
+              : "sales-order",
+        documentNumber: previewOrder.documentNumber || null,
+        orderGid: data.order.id,
+        orderId: data.order.id,
+        orderName: data.order.name,
+        processType: "manual",
+      });
     } catch (error) {
       console.error("PDF download failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1179,6 +1233,7 @@ export default function SalesOrderDocumentPage() {
       setIsDownloading(false);
     }
   }, [
+    data.order.id,
     data.order.name,
     data.settings,
     isDownloading,

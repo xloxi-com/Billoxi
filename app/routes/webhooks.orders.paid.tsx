@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import { assertValidShopifyWebhookHmac } from "../webhook-hmac.server";
 import { markOrderInvoiced } from "../order-invoice-status.server";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
+import { loadInvoiceSettingsForShop } from "../shop-settings.server";
 
 function orderGidFromPaidPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
@@ -27,7 +28,7 @@ function orderGidFromPaidPayload(payload: unknown): string | null {
 
 /**
  * When Shopify marks an order paid, convert it to an invoice automatically
- * (same as manual "Convert to invoice").
+ * (same as manual "Convert to invoice") if Advanced → Invoice → On paid is on.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   await assertValidShopifyWebhookHmac(request);
@@ -42,6 +43,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
+    const settings = await loadInvoiceSettingsForShop(shop);
+    if (!settings.autoOnPaid) {
+      console.log(`orders/paid: skipped (auto on paid off) → ${orderGid}`);
+      return new Response();
+    }
+
     const documentNumber = await markOrderInvoiced(shop, orderGid);
     invalidateSalesOrdersCache(shop);
     console.log(

@@ -58,6 +58,10 @@ model ShopSettings {
   selectedTemplates  Json     @default("{}")
   numberSeries       Json     @default("{}")
   numberBackfillUndo Json?
+  /// Auto credit-note on cancel / refund / partial refund.
+  creditNoteSettings Json     @default("{}")
+  /// Auto invoice when order is paid.
+  invoiceSettings    Json     @default("{}")
   /// Set when existing Shopify orders were numbered on install / first sync.
   salesOrderNumbersSyncedAt DateTime?
   createdAt          DateTime @default(now())
@@ -151,4 +155,37 @@ model OrderCreditNoteStatus {
   @@unique([shop, sequence])
   @@unique([shop, documentNumber])
   @@index([shop])
+}
+
+/** Per-shop calendar-month counters for home Analytics. */
+model ShopMonthlyUsage {
+  id         String   @id @default(cuid())
+  shop       String
+  yearMonth  String
+  printed    Int      @default(0)
+  downloaded Int      @default(0)
+  sent       Int      @default(0)
+  uploaded   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([shop, yearMonth])
+  @@index([shop])
+}
+
+/** Recent print / download / send activity for home Event Logs. */
+model DocumentEventLog {
+  id             String   @id @default(cuid())
+  shop           String
+  action         String
+  documentKind   String?
+  documentNumber String?
+  orderGid       String?
+  orderName      String?
+  processType    String?
+  count          Int      @default(1)
+  message        String?
+  createdAt      DateTime @default(now())
+
+  @@index([shop, createdAt])
 }

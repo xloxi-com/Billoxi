@@ -1,6 +1,7 @@
 import prisma from "./db.server";
 import { randomUUID } from "node:crypto";
 import { getInvoicedOrderGids } from "./order-invoice-status.server";
+import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
 import {
   parseNumberSeriesDigits,
   widenStartingNumberPad,
@@ -49,6 +50,50 @@ export async function getLastAllocatedSequence(
     select: { sequence: true },
   });
   return last?.sequence ?? null;
+}
+
+/** True after merchant Sync. Before that, list must not allocate history out of order. */
+export async function hasCompletedSalesOrderNumberSync(
+  shop: string,
+): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ salesOrderNumbersSyncedAt: Date | null }>
+    >`
+      SELECT "salesOrderNumbersSyncedAt"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    if (rows[0]?.salesOrderNumbersSyncedAt) return true;
+  } catch {
+    // Column / table may lag — fall through to number-row check.
+  }
+
+  // Heal: numbers already exist (Sync assigned them) but syncedAt flag was
+  // lost / never written — still allow new orders to get SO-… numbers.
+  try {
+    const any = await prisma.salesOrderDocumentNumber.findFirst({
+      where: { shop },
+      select: { id: true },
+    });
+    if (!any) return false;
+
+    // Best-effort restore the flag so webhooks / list stay consistent.
+    void prisma
+      .$executeRaw`
+        UPDATE "ShopSettings"
+        SET "salesOrderNumbersSyncedAt" = COALESCE("salesOrderNumbersSyncedAt", CURRENT_TIMESTAMP),
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE shop = ${shop}
+          AND "salesOrderNumbersSyncedAt" IS NULL
+      `
+      .catch(() => undefined);
+
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Batch lookup of already-assigned sales order numbers (does not allocate). */
@@ -158,29 +203,57 @@ export async function getNextSequence(
 }
 
 /**
- * Validates a new starting number against already-issued sequences.
- * Unchanged starting numbers are allowed (series origin). Changing to a used
- * or lower value is rejected so existing numbers are never overridden.
+ * Validates a new starting / next number against already-issued sequences.
+ * Unchanged starting numbers are allowed (series origin). Changing starting
+ * or preview/next to a used value is rejected with an "already used" notice.
  */
 export async function validateStartingNumber(
   shop: string,
   templateId: string,
   numbering: NumberingSettings,
   previousNumbering?: NumberingSettings | null,
+  options?: { nextSequence?: number | null },
 ): Promise<string | null> {
   const { startAt } = numberingMeta(numbering);
   const previousStart = previousNumbering
     ? numberingMeta(previousNumbering).startAt
     : null;
 
-  // Same starting number as before — counter continues; no override.
-  if (previousStart != null && previousStart === startAt) {
-    return null;
+  const last = await getLastAllocatedSequence(shop);
+  const minNextLabel =
+    last == null ? null : formatSequenceNumber(numbering, last + 1);
+
+  if (previousStart == null || previousStart !== startAt) {
+    if (last != null && startAt <= last) {
+      return `${formatSequenceNumber(numbering, startAt)} is already used. Enter ${minNextLabel} or higher.`;
+    }
   }
 
-  const last = await getLastAllocatedSequence(shop);
-  if (last != null && startAt <= last) {
-    return `Cannot set starting number to ${formatSequenceNumber(numbering, startAt)}. Numbers up to ${formatSequenceNumber(numbering, last)} are already used. Enter ${formatSequenceNumber(numbering, last + 1)} or higher.`;
+  const nextSeq =
+    typeof options?.nextSequence === "number" &&
+    Number.isFinite(options.nextSequence)
+      ? Math.floor(options.nextSequence)
+      : null;
+
+  if (nextSeq != null && last != null && nextSeq <= last) {
+    return `${formatSequenceNumber(numbering, nextSeq)} is already used. Enter ${minNextLabel} or higher.`;
+  }
+
+  // Prefix/pad change can collide with an existing document number string.
+  const candidateSeq =
+    nextSeq ??
+    (last == null ? startAt : Math.max(startAt, last + 1));
+  const candidate = formatSequenceNumber(numbering, candidateSeq);
+  const conflict = await prisma.salesOrderDocumentNumber.findFirst({
+    where: {
+      shop,
+      templateId,
+      documentNumber: candidate,
+    },
+    select: { id: true },
+  });
+  if (conflict) {
+    return `${candidate} is already used. Enter ${minNextLabel ?? formatSequenceNumber(numbering, candidateSeq + 1)} or higher.`;
   }
 
   return null;
@@ -225,6 +298,9 @@ export async function syncNumberCounter(
   } = {};
   if (requested != null) {
     updates.nextValue = requested;
+  } else if (last == null) {
+    // No allocations left — align counter to series starting number / prefix.
+    updates.nextValue = startAt;
   } else if (startAt > counter.nextValue) {
     updates.nextValue = startAt;
   }
@@ -235,6 +311,38 @@ export async function syncNumberCounter(
   await prisma.salesOrderNumberCounter.update({
     where: { id: counter.id },
     data: updates,
+  });
+}
+
+/** Force counter to series start (used after Reset sync). */
+export async function resetSalesOrderNumberCounter(
+  shop: string,
+  templateId: string,
+  numbering: NumberingSettings,
+) {
+  const { prefix, padLength, startAt } = numberingMeta(numbering);
+  const counter = await prisma.salesOrderNumberCounter.findUnique({
+    where: { shop_templateId: { shop, templateId } },
+  });
+  if (!counter) {
+    await prisma.salesOrderNumberCounter.create({
+      data: {
+        shop,
+        templateId,
+        nextValue: startAt,
+        prefix,
+        padLength,
+      },
+    });
+    return;
+  }
+  await prisma.salesOrderNumberCounter.update({
+    where: { id: counter.id },
+    data: {
+      nextValue: startAt,
+      prefix,
+      padLength,
+    },
   });
 }
 
@@ -596,24 +704,33 @@ export async function loadNumberBackfillUndo(
   }
 }
 
-/** Undo availability for Settings UI — blocked when any assigned order is invoiced. */
+/** Undo/reset availability — blocked when any assigned order is invoiced or packing-slipped. */
 export async function getNumberBackfillUndoStatus(shop: string): Promise<{
   assignedCount: number;
   assignedAt: string;
   canUndo: boolean;
   invoicedCount: number;
+  packingSlipCount: number;
+  blockedCount: number;
 } | null> {
   const snapshot = await loadNumberBackfillUndo(shop);
   if (!snapshot) return null;
 
-  const invoiced = await getInvoicedOrderGids(shop, snapshot.orderGids);
+  const [invoiced, packing] = await Promise.all([
+    getInvoicedOrderGids(shop, snapshot.orderGids),
+    getPackingSlipOrderGids(shop, snapshot.orderGids),
+  ]);
   const invoicedCount = invoiced.size;
+  const packingSlipCount = packing.size;
+  const blockedCount = new Set([...invoiced, ...packing]).size;
 
   return {
     assignedCount: snapshot.assignedCount,
     assignedAt: snapshot.assignedAt,
-    canUndo: invoicedCount === 0,
+    canUndo: blockedCount === 0,
     invoicedCount,
+    packingSlipCount,
+    blockedCount,
   };
 }
 
@@ -665,9 +782,9 @@ async function saveNumberBackfillUndo(
 }
 
 /**
- * Reverts the last "Assign to existing orders" run: deletes those SO numbers
- * and realigns the counter to remaining allocations.
- * Blocked when any of those orders has been converted to an invoice.
+ * Reverts the last "Assign to existing orders" / Sync run: deletes those SO
+ * numbers and realigns the counter. Blocked when any of those orders has been
+ * converted to an invoice or packing slip.
  */
 export async function revertLastSalesOrderNumberBackfill(
   shop: string,
@@ -682,6 +799,8 @@ export async function revertLastSalesOrderNumberBackfill(
       ok: false;
       error: string;
       invoicedCount: number;
+      packingSlipCount: number;
+      blockedCount: number;
     }
 > {
   const snapshot = await loadNumberBackfillUndo(shop);
@@ -694,13 +813,29 @@ export async function revertLastSalesOrderNumberBackfill(
     };
   }
 
-  const invoiced = await getInvoicedOrderGids(shop, snapshot.orderGids);
-  if (invoiced.size > 0) {
+  const [invoiced, packing] = await Promise.all([
+    getInvoicedOrderGids(shop, snapshot.orderGids),
+    getPackingSlipOrderGids(shop, snapshot.orderGids),
+  ]);
+  const blockedCount = new Set([...invoiced, ...packing]).size;
+  if (blockedCount > 0) {
+    const parts: string[] = [];
+    if (invoiced.size > 0) {
+      parts.push(
+        `${invoiced.size} invoice${invoiced.size === 1 ? "" : "s"}`,
+      );
+    }
+    if (packing.size > 0) {
+      parts.push(
+        `${packing.size} packing slip${packing.size === 1 ? "" : "s"}`,
+      );
+    }
     return {
       ok: false,
-      error:
-        "Cannot undo: one or more assigned orders were converted to invoice. Delete those invoices first, then undo.",
+      error: `Cannot reset: synced orders were converted (${parts.join(" and ")}). Delete those documents first, then reset.`,
       invoicedCount: invoiced.size,
+      packingSlipCount: packing.size,
+      blockedCount,
     };
   }
 

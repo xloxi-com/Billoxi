@@ -192,14 +192,6 @@ function hexToRgb(color: string): [number, number, number] {
   return [255, 255, 255];
 }
 
-function currencyPrefix(code: string) {
-  if (code === "EUR") return "€";
-  if (code === "USD") return "$";
-  if (code === "GBP") return "£";
-  if (code === "INR") return "₹";
-  return `${code} `;
-}
-
 function asText(value: unknown) {
   if (value == null) return "";
   return String(value);
@@ -502,6 +494,7 @@ function cellValue(
   item: SalesOrderDocumentData["lineItems"][number],
   index: number,
   settings?: TemplateEditorSettings,
+  currencyPrefix = "",
 ) {
   switch (columnKey) {
     case "number":
@@ -514,17 +507,17 @@ function cellValue(
     case "sku":
       return asText(item.sku) || "-";
     case "rate":
-      return formatAmountDisplay(item.rate);
+      return `${currencyPrefix}${formatAmountDisplay(item.rate)}`;
     case "discount":
-      return formatAmountDisplay(item.discount || 0);
+      return `${currencyPrefix}${formatAmountDisplay(item.discount || 0)}`;
     case "discountPercentage":
       return asText(item.discountPercentage) || "0,00%";
     case "taxPercentage":
       return asText(item.taxPercentage) || "0,00%";
     case "taxAmount":
-      return formatAmountDisplay(item.taxAmount || 0);
+      return `${currencyPrefix}${formatAmountDisplay(item.taxAmount || 0)}`;
     case "amount":
-      return formatAmountDisplay(item.amount || 0);
+      return `${currencyPrefix}${formatAmountDisplay(item.amount || 0)}`;
     default:
       return "-";
   }
@@ -779,11 +772,17 @@ async function buildSalesOrderVectorPdf({
   const organizationName = storeDetails.name || "Organization";
   const logoDataUrl = storeDetails.logoDataUrl || settings.logoDataUrl;
   const addressLines = formatStoreAddressLines(storeDetails);
-  const orderDate = formatOrderDate(order.documentDate || order.createdAt);
+  const orderDate = formatOrderDate(
+    order.documentDate || order.createdAt,
+    settings.dateFormat,
+  );
   const documentNumber =
     order.documentNumber ||
     formatSalesOrderDocumentNumber(settings.numbering);
-  const prefix = currencyPrefix(order.currencyCode);
+  const prefix = currencySymbol(
+    order.currencyCode,
+    settings.currencyDisplay,
+  );
   const columns = settings.columns.filter((column) => column.enabled);
   const totalColWidth =
     columns.reduce((sum, column) => sum + Math.max(column.width, 1), 0) || 1;
@@ -900,7 +899,7 @@ async function buildSalesOrderVectorPdf({
   ) {
     metaRows.push([
       settings.transactionLabels.expectedShipmentDate,
-      order.expectedShipmentDate,
+      formatOrderDate(order.expectedShipmentDate, settings.dateFormat),
     ]);
   }
   if (settings.header.showPaymentMethod && order.paymentMethod) {
@@ -1238,14 +1237,16 @@ async function buildSalesOrderVectorPdf({
         return lines.length > 0 ? lines : ["-"];
       }
       if (column.key === "rate") {
-        return [displayedRate.rate || "0,00"];
+        return [
+          `${prefix}${displayedRate.rate || formatAmountDisplay(0)}`,
+        ];
       }
       // Numeric cells are nowrap in live CSS — keep a single line.
       if (numericKeys.has(column.key)) {
-        return [cellValue(column.key, item, index, settings) || "-"];
+        return [cellValue(column.key, item, index, settings, prefix) || "-"];
       }
       return wrapCell(
-        cellValue(column.key, item, index, settings),
+        cellValue(column.key, item, index, settings, prefix),
         width,
         sizeTable,
       );
@@ -1304,7 +1305,7 @@ async function buildSalesOrderVectorPdf({
           const compareY = rateTop + compareLineH + emMm(sizeTable, 0.1);
           setFont("normal", compareSize);
           pdf.setTextColor(...comparePriceRgb);
-          const compareLabel = displayedRate.compareAtPrice;
+          const compareLabel = `${prefix}${displayedRate.compareAtPrice}`;
           pdf.text(compareLabel, cellX + width - cellPadX, compareY, {
             align: "right",
           });
@@ -1415,7 +1416,7 @@ async function buildSalesOrderVectorPdf({
   if (settings.totals.showSubtotal) {
     totals.push({
       label: settings.totals.subtotalLabel,
-      value: formatAmountDisplay(order.subtotal),
+      value: `${prefix}${formatAmountDisplay(order.subtotal)}`,
     });
   }
   if (settings.totals.showTaxLines) {
@@ -1427,7 +1428,7 @@ async function buildSalesOrderVectorPdf({
       if (!hasNonZeroAmount(row.taxAmount)) continue;
       totals.push({
         label: formatTaxLineLabel(row),
-        value: formatAmountDisplay(row.taxAmount),
+        value: `${prefix}${formatAmountDisplay(row.taxAmount)}`,
       });
     }
   }
@@ -1437,7 +1438,7 @@ async function buildSalesOrderVectorPdf({
   ) {
     totals.push({
       label: settings.totals.discountAmountLabel,
-      value: formatAmountDisplay(order.discount),
+      value: `${prefix}${formatAmountDisplay(order.discount)}`,
     });
   }
   if (
@@ -1446,13 +1447,13 @@ async function buildSalesOrderVectorPdf({
   ) {
     totals.push({
       label: settings.totals.shippingPriceLabel,
-      value: formatAmountDisplay(order.shippingPrice),
+      value: `${prefix}${formatAmountDisplay(order.shippingPrice)}`,
     });
   }
   if (settings.totals.showVatAmount && hasNonZeroAmount(order.tax)) {
     totals.push({
       label: settings.totals.vatAmountLabel,
-      value: formatAmountDisplay(order.tax),
+      value: `${prefix}${formatAmountDisplay(order.tax)}`,
     });
   }
 
@@ -1683,7 +1684,10 @@ async function buildSalesOrderVectorPdf({
   );
   const taxSummaryRows = taxSummaryDisplayRows(taxSummarySource);
   const taxTotals = taxSummaryTotals(taxSummarySource, order.total);
-  const moneySymbol = currencySymbol(order.currencyCode);
+  const moneySymbol = currencySymbol(
+    order.currencyCode,
+    settings.currencyDisplay,
+  );
   const taxSummaryConfig = settings.taxSummary;
   const taxSummaryEnabled = taxSummaryConfig?.enabled !== false;
   const showTaxable = taxSummaryConfig?.showTaxableAmount !== false;
@@ -1781,9 +1785,9 @@ async function buildSalesOrderVectorPdf({
     for (const row of taxSummaryRows) {
       const cells = [
         row.details,
-        ...(showTaxable ? [row.taxableAmount] : []),
-        ...(showTaxAmt ? [row.taxAmount] : []),
-        ...(showTotalAmt ? [row.totalAmount] : []),
+        ...(showTaxable ? [`${moneySymbol}${row.taxableAmount}`] : []),
+        ...(showTaxAmt ? [`${moneySymbol}${row.taxAmount}`] : []),
+        ...(showTotalAmt ? [`${moneySymbol}${row.totalAmount}`] : []),
       ];
       taxX = margin.left;
       cells.forEach((cell, index) => {

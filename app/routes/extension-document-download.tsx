@@ -3,6 +3,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { buildSalesOrderPdfFile } from "../sales-order-bulk-pdf.server";
 import { authenticate } from "../shopify.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
+import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 
 /**
  * Save PDF from Admin UI extensions.
@@ -108,6 +109,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       bytes: pdf.byteLength,
       ms: Date.now() - started,
       mode: wantRaw ? "raw" : "html",
+    });
+
+    void incrementShopMonthlyUsage(session.shop, "downloaded", 1, {
+      documentKind,
+      orderGid: `gid://shopify/Order/${orderId}`,
+      orderName: `#${orderId}`,
+      processType: "extension",
     });
 
     if (wantRaw) {

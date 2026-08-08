@@ -22,6 +22,7 @@ import {
   loadSmtpSettingsForShop,
   loadStoreDetailsForShop,
 } from "./shop-settings.server";
+import { incrementShopMonthlyUsage } from "./shop-monthly-usage.server";
 
 export type SendDocumentEmailResult =
   | {
@@ -225,6 +226,16 @@ export async function sendDocumentEmail(args: {
           : "Failed to send email via SMTP",
     };
   }
+
+  void incrementShopMonthlyUsage(args.shop, "sent", 1, {
+    documentKind: args.documentKind,
+    documentNumber: args.documentNumber || null,
+    orderGid: args.orderId.includes("gid://")
+      ? args.orderId
+      : `gid://shopify/Order/${args.orderId}`,
+    orderName: args.orderName || null,
+    processType: "manual",
+  });
 
   return {
     ok: true,

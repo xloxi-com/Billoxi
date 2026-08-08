@@ -897,7 +897,7 @@ export default function SalesOrderPage() {
         setQuickActionOrderId(null);
       }
     },
-    [activeDocumentKind, activeTemplateId, isBusy],
+    [activeDocumentKind, activeTemplateId, isBusy, orders],
   );
 
   const runQuickPrint = useCallback(
@@ -925,7 +925,7 @@ export default function SalesOrderPage() {
         setQuickActionOrderId(null);
       }
     },
-    [activeDocumentKind, activeTemplateId, isBusy],
+    [activeDocumentKind, activeTemplateId, isBusy, orders],
   );
 
   const runQuickSend = useCallback(

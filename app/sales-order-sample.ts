@@ -1,4 +1,7 @@
-import type { SalesOrderDocumentData } from "./sales-order-document";
+import {
+  adaptDocumentForCreditNote,
+  type SalesOrderDocumentData,
+} from "./sales-order-document";
 
 /**
  * Shared sample order for template Preview.
@@ -12,7 +15,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
   id: "gid://shopify/Order/0",
   name: "#1008",
   createdAt: "2026-07-19T10:00:00.000Z",
-  expectedShipmentDate: "25-07-2026",
+  expectedShipmentDate: "2026-07-25T12:00:00.000Z",
   paymentMethod: "Bank Transfer",
   email: "xloxi@acme.example",
   phone: "+1 (512) 555-0147",
@@ -127,19 +130,30 @@ export function sampleSalesOrderForShop(
   };
 }
 
-/** Sample credit-note preview — shows credit/refund amount on totals. */
+/** Sample credit-note preview — Credit Total matches refunded amount. */
 export function sampleCreditNoteForShop(
   currencyCode?: string | null,
 ): SalesOrderDocumentData {
   const base = sampleSalesOrderForShop(currencyCode);
-  return {
-    ...base,
-    financialStatus: "REFUNDED",
-    paidAmount: "0.00",
-    balanceDue: "0.00",
-    refundedAmount: base.total,
-    shippingPrice: "0.00",
-    // Invoice Ref# on credit notes — never the Shopify order name.
-    referenceNumber: "INV-0001",
-  };
+  return adaptDocumentForCreditNote(
+    {
+      ...base,
+      financialStatus: "REFUNDED",
+      refundedAmount: base.total,
+      // Invoice Ref# on credit notes — never the Shopify order name.
+      referenceNumber: "INV-0001",
+    },
+    {
+      refundLineItems: base.lineItems.map((item) => ({
+        quantity: Number(item.quantity) || 1,
+        subtotal: item.amount,
+        tax: item.taxAmount || "0.00",
+        title: item.title,
+        variantTitle: item.variantTitle,
+        imageUrl: item.imageUrl,
+        sku: item.sku,
+      })),
+      shippingRefunded: 0,
+    },
+  );
 }

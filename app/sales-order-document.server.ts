@@ -9,15 +9,16 @@ import {
   resolveSalesOrderTemplateId,
   salesOrderTemplateName,
   formatPercentOf,
-  formatOrderDate,
   buildTaxSummaryFromLineItems,
   reconcileTaxSummaryToOrderTotal,
   reconcilePaymentAmounts,
+  adaptDocumentForCreditNote,
   formatQuantityDisplay,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
+  type CreditNoteRefundSource,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
@@ -323,6 +324,41 @@ type OrderNode = {
   totalReceivedSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalOutstandingSet?: { shopMoney?: { amount: string; currencyCode: string } };
   totalRefundedSet?: { shopMoney?: { amount: string; currencyCode: string } };
+  refunds?: Array<{
+    id?: string | null;
+    totalRefundedSet?: { shopMoney?: { amount: string; currencyCode: string } };
+    refundLineItems?: {
+      nodes?: Array<{
+        quantity?: number | null;
+        subtotalSet?: { shopMoney?: { amount: string } } | null;
+        totalTaxSet?: { shopMoney?: { amount: string } } | null;
+        lineItem?: {
+          title?: string | null;
+          variantTitle?: string | null;
+          name?: string | null;
+          sku?: string | null;
+          image?: { url?: string | null } | null;
+          variant?: {
+            sku?: string | null;
+            product?: {
+              featuredImage?: { url?: string | null } | null;
+            } | null;
+          } | null;
+        } | null;
+      } | null> | null;
+    } | null;
+    orderAdjustments?: {
+      nodes?: Array<{
+        amountSet?: { shopMoney?: { amount: string } } | null;
+        reason?: string | null;
+      } | null> | null;
+    } | null;
+    refundShippingLines?: {
+      nodes?: Array<{
+        subtotalAmountSet?: { shopMoney?: { amount: string } } | null;
+      } | null> | null;
+    } | null;
+  } | null> | null;
   taxLines?: Array<{
     title?: string | null;
     rate?: number | null;
@@ -484,7 +520,8 @@ function resolveExpectedShipmentDate(
     .filter((value): value is string => Boolean(value?.trim()));
   if (dates.length === 0) return "";
   dates.sort();
-  return formatOrderDate(dates[0]);
+  // Keep ISO / raw Shopify timestamp — format with template dateFormat at render.
+  return dates[0];
 }
 
 /** Soft-fail: missing fulfillment scopes must not break the document. */
@@ -503,6 +540,55 @@ function expectedShipmentDateFromOrder(order: {
   }
 }
 
+function creditNoteRefundSourceFromOrder(
+  order: OrderNode,
+): CreditNoteRefundSource {
+  const refundLineItems: CreditNoteRefundSource["refundLineItems"] = [];
+  let shippingRefunded = 0;
+
+  for (const refund of order.refunds ?? []) {
+    if (!refund) continue;
+    for (const node of refund.refundLineItems?.nodes ?? []) {
+      if (!node) continue;
+      const line = node.lineItem;
+      const title = line?.title?.trim() || line?.name?.trim() || "Refunded item";
+      const variantTitle = (() => {
+        const raw = line?.variantTitle?.trim() || "";
+        if (
+          !raw ||
+          raw.toLowerCase() === "default title" ||
+          raw.toLowerCase() === title.toLowerCase()
+        ) {
+          return "";
+        }
+        return raw;
+      })();
+      refundLineItems.push({
+        quantity: Number(node.quantity) || 0,
+        subtotal: moneyAmount(node.subtotalSet?.shopMoney),
+        tax: moneyAmount(node.totalTaxSet?.shopMoney),
+        title,
+        variantTitle,
+        imageUrl:
+          line?.image?.url?.trim() ||
+          line?.variant?.product?.featuredImage?.url?.trim() ||
+          "",
+        sku: line?.variant?.sku?.trim() || line?.sku?.trim() || "",
+      });
+    }
+    for (const ship of refund.refundShippingLines?.nodes ?? []) {
+      if (!ship) continue;
+      const amount = Number(ship.subtotalAmountSet?.shopMoney?.amount ?? 0);
+      if (Number.isFinite(amount) && amount > 0) shippingRefunded += amount;
+    }
+  }
+
+  return {
+    refundLineItems,
+    shippingRefunded: Math.round(shippingRefunded * 100) / 100,
+  };
+}
+
 export async function fetchSalesOrderDocument(
   admin: {
     graphql: (
@@ -511,6 +597,7 @@ export async function fetchSalesOrderDocument(
     ) => Promise<Response>;
   },
   orderGid: string,
+  options?: { asCreditNote?: boolean },
 ): Promise<SalesOrderDocumentData | null> {
   const response = await admin.graphql(
     `#graphql
@@ -570,6 +657,41 @@ export async function fetchSalesOrderDocument(
           totalReceivedSet { shopMoney { amount currencyCode } }
           totalOutstandingSet { shopMoney { amount currencyCode } }
           totalRefundedSet { shopMoney { amount currencyCode } }
+          refunds(first: 50) {
+            id
+            totalRefundedSet { shopMoney { amount currencyCode } }
+            refundLineItems(first: 100) {
+              nodes {
+                quantity
+                subtotalSet { shopMoney { amount } }
+                totalTaxSet { shopMoney { amount } }
+                lineItem {
+                  title
+                  variantTitle
+                  name
+                  sku
+                  image { url }
+                  variant {
+                    sku
+                    product {
+                      featuredImage { url }
+                    }
+                  }
+                }
+              }
+            }
+            orderAdjustments(first: 20) {
+              nodes {
+                amountSet { shopMoney { amount } }
+                reason
+              }
+            }
+            refundShippingLines(first: 10) {
+              nodes {
+                subtotalAmountSet { shopMoney { amount } }
+              }
+            }
+          }
           taxLines {
             title
             rate
@@ -751,7 +873,7 @@ export async function fetchSalesOrderDocument(
     })
     .filter((row): row is NonNullable<typeof row> => row != null);
 
-  return {
+  const document: SalesOrderDocumentData = {
     id: order.id,
     name: order.name,
     createdAt: order.createdAt,
@@ -817,6 +939,15 @@ export async function fetchSalesOrderDocument(
       moneyAmount(order.currentTotalTaxSet?.shopMoney),
     ),
   };
+
+  if (options?.asCreditNote) {
+    return adaptDocumentForCreditNote(
+      document,
+      creditNoteRefundSourceFromOrder(order),
+    );
+  }
+
+  return document;
 }
 
 const SIDEBAR_LIST_TTL_MS = 60_000;
@@ -840,7 +971,7 @@ export async function fetchSalesOrderList(
     templateId?: string;
   },
 ): Promise<import("./sales-order-document").CustomerOrderListItem[]> {
-  const cacheKey = `${options?.shop || ""}|${options?.templateId || ""}`;
+  const cacheKey = `${options?.shop || ""}|${options?.templateId || ""}|v2-refunded`;
   const now = Date.now();
   if (options?.shop) {
     const hit = sidebarListCache.get(cacheKey);
@@ -864,6 +995,7 @@ export async function fetchSalesOrderList(
               name
             }
             currentTotalPriceSet { shopMoney { amount currencyCode } }
+            totalRefundedSet { shopMoney { amount currencyCode } }
           }
         }
       }`,
@@ -890,6 +1022,9 @@ export async function fetchSalesOrderList(
     currentTotalPriceSet?: {
       shopMoney?: { amount: string; currencyCode: string };
     };
+    totalRefundedSet?: {
+      shopMoney?: { amount: string; currencyCode: string };
+    };
   }>;
 
   const orderGids = nodes.map((node) => node.id);
@@ -913,6 +1048,7 @@ export async function fetchSalesOrderList(
       node.customer?.displayName?.trim() ||
       node.billingAddress?.name?.trim() ||
       "Guest customer";
+    const refunded = moneyAmount(node.totalRefundedSet?.shopMoney);
 
     return {
       id: node.id,
@@ -921,7 +1057,11 @@ export async function fetchSalesOrderList(
       customer: customerName,
       createdAt: node.createdAt,
       total: moneyAmount(node.currentTotalPriceSet?.shopMoney),
-      currencyCode: node.currentTotalPriceSet?.shopMoney?.currencyCode ?? "USD",
+      refundedTotal: refunded,
+      currencyCode:
+        node.totalRefundedSet?.shopMoney?.currencyCode ||
+        node.currentTotalPriceSet?.shopMoney?.currencyCode ||
+        "USD",
       paymentStatus: node.displayFinancialStatus ?? null,
       invoiced: invoicedGids.has(node.id),
     };

@@ -17,13 +17,21 @@ function createPrismaClient() {
   });
 }
 
-function clientHasInvoiceModel(client: PrismaClient) {
-  return typeof (client as { orderInvoiceStatus?: unknown }).orderInvoiceStatus ===
-    "object";
+function clientHasRequiredModels(client: PrismaClient) {
+  const c = client as {
+    orderInvoiceStatus?: unknown;
+    shopMonthlyUsage?: unknown;
+    documentEventLog?: unknown;
+  };
+  return (
+    typeof c.orderInvoiceStatus === "object" &&
+    typeof c.shopMonthlyUsage === "object" &&
+    typeof c.documentEventLog === "object"
+  );
 }
 
 // After `prisma generate`, recreate the cached client so new models are available.
-if (global.prismaGlobal && !clientHasInvoiceModel(global.prismaGlobal)) {
+if (global.prismaGlobal && !clientHasRequiredModels(global.prismaGlobal)) {
   void global.prismaGlobal.$disconnect().catch(() => undefined);
   global.prismaGlobal = undefined;
 }

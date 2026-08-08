@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 
 import { peekExtensionDownloadTicket } from "../extension-download-ticket.server";
 import { authenticate } from "../shopify.server";
+import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import { loader as exportLoader } from "./app.sales-order.export.$orderId";
 
 /**
@@ -80,18 +81,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   let payload: unknown = null;
   let kind: DocumentKind = documentKind;
+  let shop: string | null = null;
 
   if (ticketId) {
     const cached = peekExtensionDownloadTicket(ticketId);
     if (cached) {
       payload = cached.payload;
       kind = cached.documentKind;
+      shop = cached.shop;
     }
   }
 
   if (!payload) {
     const authedRequest = withBearerFromQuery(request);
-    await authenticate.admin(authedRequest);
+    const { session } = await authenticate.admin(authedRequest);
+    shop = session.shop;
 
     const exportUrl = new URL(
       `/app/sales-order/export/${encodeURIComponent(orderId)}`,
@@ -126,6 +130,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     payload,
     documentKind: kind,
   });
+
+  if (shop) {
+    void incrementShopMonthlyUsage(shop, "downloaded", 1, {
+      documentKind: kind,
+      orderGid: `gid://shopify/Order/${orderId}`,
+      orderName: `#${orderId}`,
+      processType: "extension",
+    });
+  }
 
   // throw Response short-circuits RR document pipeline (avoids "Body unusable").
   throw new Response(downloadHtmlPage(payloadJson), {

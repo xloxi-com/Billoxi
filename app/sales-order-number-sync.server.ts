@@ -5,10 +5,15 @@ import { numberingFromSeries } from "./number-series";
 import {
   loadNumberSeriesForShop,
   loadSelectedTemplateForShop,
+  saveNumberSeriesForShop,
 } from "./shop-settings.server";
+import { getInvoicedOrderGids } from "./order-invoice-status.server";
+import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
 import {
   backfillSalesOrderDocumentNumbers,
   fetchAllOrderGidsOldestFirst,
+  getLastAllocatedSequence,
+  resetSalesOrderNumberCounter,
   type AdminGraphql,
 } from "./sales-order-number.server";
 import { invalidateSalesOrdersCache } from "./sales-orders.server";
@@ -17,7 +22,22 @@ const syncInFlight = new Map<string, Promise<void>>();
 /** Process-local cache — skip DB check after first confirmed sync. */
 const syncedShops = new Set<string>();
 
-async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
+/** Every order that currently has a Sales Order document number. */
+async function listAssignedSalesOrderGids(shop: string): Promise<{
+  orderGids: string[];
+  templateIds: string[];
+}> {
+  const rows = await prisma.salesOrderDocumentNumber.findMany({
+    where: { shop },
+    select: { orderGid: true, templateId: true },
+  });
+  return {
+    orderGids: [...new Set(rows.map((row) => row.orderGid))],
+    templateIds: [...new Set(rows.map((row) => row.templateId))],
+  };
+}
+
+export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
   if (syncedShops.has(shop)) return true;
   try {
     const rows = await prisma.$queryRaw<
@@ -36,6 +56,75 @@ async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
   }
 }
 
+export type SalesOrderSyncStatus = {
+  synced: boolean;
+  syncedAt: string | null;
+  canReset: boolean;
+  assignedCount: number;
+  invoicedCount: number;
+  packingSlipCount: number;
+  blockedCount: number;
+};
+
+export async function getSalesOrderNumbersSyncStatus(
+  shop: string,
+): Promise<SalesOrderSyncStatus> {
+  const [synced, assigned] = await Promise.all([
+    hasSalesOrderNumbersSynced(shop),
+    listAssignedSalesOrderGids(shop),
+  ]);
+
+  let syncedAt: string | null = null;
+  if (synced) {
+    try {
+      const rows = await prisma.$queryRaw<
+        Array<{ salesOrderNumbersSyncedAt: Date | null }>
+      >`
+        SELECT "salesOrderNumbersSyncedAt"
+        FROM "ShopSettings"
+        WHERE shop = ${shop}
+        LIMIT 1
+      `;
+      const at = rows[0]?.salesOrderNumbersSyncedAt;
+      syncedAt = at ? at.toISOString() : null;
+    } catch {
+      syncedAt = null;
+    }
+  }
+
+  const orderGids = assigned.orderGids;
+  const assignedCount = orderGids.length;
+  if (assignedCount === 0) {
+    return {
+      synced,
+      syncedAt,
+      canReset: false,
+      assignedCount: 0,
+      invoicedCount: 0,
+      packingSlipCount: 0,
+      blockedCount: 0,
+    };
+  }
+
+  const [invoiced, packing] = await Promise.all([
+    getInvoicedOrderGids(shop, orderGids),
+    getPackingSlipOrderGids(shop, orderGids),
+  ]);
+  const invoicedCount = invoiced.size;
+  const packingSlipCount = packing.size;
+  const blockedCount = new Set([...invoiced, ...packing]).size;
+
+  return {
+    synced,
+    syncedAt,
+    canReset: blockedCount === 0,
+    assignedCount,
+    invoicedCount,
+    packingSlipCount,
+    blockedCount,
+  };
+}
+
 async function markSalesOrderNumbersSynced(shop: string): Promise<void> {
   const now = new Date();
   try {
@@ -45,7 +134,10 @@ async function markSalesOrderNumbersSynced(shop: string): Promise<void> {
           "updatedAt" = CURRENT_TIMESTAMP
       WHERE shop = ${shop}
     `;
-    if (Number(updated) > 0) return;
+    if (Number(updated) > 0) {
+      syncedShops.add(shop);
+      return;
+    }
 
     await prisma.$executeRaw`
       INSERT INTO "ShopSettings" (
@@ -67,6 +159,7 @@ async function markSalesOrderNumbersSynced(shop: string): Promise<void> {
       SET "salesOrderNumbersSyncedAt" = ${now},
           "updatedAt" = CURRENT_TIMESTAMP
     `;
+    syncedShops.add(shop);
   } catch (error) {
     console.error(
       "[sales-order-sync] Failed to mark numbers synced",
@@ -76,48 +169,222 @@ async function markSalesOrderNumbersSynced(shop: string): Promise<void> {
   }
 }
 
+async function clearSalesOrderNumbersSynced(shop: string): Promise<void> {
+  syncedShops.delete(shop);
+  try {
+    await prisma.$executeRaw`
+      UPDATE "ShopSettings"
+      SET "salesOrderNumbersSyncedAt" = NULL,
+          "numberBackfillUndo" = NULL,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE shop = ${shop}
+    `;
+  } catch (error) {
+    console.error(
+      "[sales-order-sync] Failed to clear numbers synced flag",
+      shop,
+      error,
+    );
+  }
+}
+
 /**
- * One-time sync: assign SO numbers to existing Shopify orders (oldest first).
- * Safe to call on every request — no-ops after the first successful run.
+ * Merchant-triggered sync: assign SO numbers to existing Shopify orders
+ * using the saved Prefix + Starting number (oldest → newest).
  */
-export async function ensureSalesOrderNumbersSynced(
+export async function syncSalesOrderNumbersForShop(
   shop: string,
   admin: AdminGraphql,
-): Promise<void> {
+): Promise<{
+  assigned: number;
+  skipped: number;
+  lastNumber: string | null;
+  lastAllocatedSequence: number | null;
+  canReset: boolean;
+  salesOrderSync: SalesOrderSyncStatus;
+  numberSeries: Awaited<ReturnType<typeof loadNumberSeriesForShop>>;
+}> {
   const existing = syncInFlight.get(shop);
-  if (existing) return existing;
+  if (existing) {
+    await existing;
+    const [lastAllocatedSequence, salesOrderSync, numberSeries] =
+      await Promise.all([
+        getLastAllocatedSequence(shop),
+        getSalesOrderNumbersSyncStatus(shop),
+        loadNumberSeriesForShop(shop),
+      ]);
+    return {
+      assigned: 0,
+      skipped: 0,
+      lastNumber: null,
+      lastAllocatedSequence,
+      canReset: salesOrderSync.canReset,
+      salesOrderSync,
+      numberSeries,
+    };
+  }
 
-  const run = (async () => {
-    if (await hasSalesOrderNumbersSynced(shop)) return;
+  let resolveInFlight!: () => void;
+  const inFlight = new Promise<void>((resolve) => {
+    resolveInFlight = resolve;
+  });
+  syncInFlight.set(shop, inFlight);
 
+  try {
     const [selectedTemplateId, numberSeries, orderGids] = await Promise.all([
       loadSelectedTemplateForShop(shop, "sales-order"),
       loadNumberSeriesForShop(shop),
       fetchAllOrderGidsOldestFirst(admin),
     ]);
     const templateId = resolveSalesOrderTemplateId(selectedTemplateId);
+    const soSeries = numberSeries["sales-order"];
 
-    await backfillSalesOrderDocumentNumbers(
+    if (soSeries.entryMode === "manual") {
+      throw new Error(
+        "Sales Order numbering is set to manual. Switch to auto before syncing existing orders.",
+      );
+    }
+
+    const numbering = numberingFromSeries(soSeries);
+
+    // Align counter to saved series before assigning (prefix + starting number).
+    const lastBefore = await getLastAllocatedSequence(shop);
+    if (lastBefore == null) {
+      await resetSalesOrderNumberCounter(shop, templateId, numbering);
+    }
+
+    const backfill = await backfillSalesOrderDocumentNumbers(
       shop,
       templateId,
-      numberingFromSeries(numberSeries["sales-order"]),
+      numbering,
       orderGids,
+      { persistUndo: true },
     );
     await markSalesOrderNumbersSynced(shop);
-    syncedShops.add(shop);
     invalidateSalesOrdersCache(shop);
-  })()
-    .catch((error) => {
-      console.error(
-        "[sales-order-sync] Failed to sync existing order numbers",
-        shop,
-        error,
-      );
-    })
-    .finally(() => {
-      syncInFlight.delete(shop);
-    });
+    const salesOrderSync = await getSalesOrderNumbersSyncStatus(shop);
 
-  syncInFlight.set(shop, run);
-  await run;
+    return {
+      assigned: backfill.assigned,
+      skipped: backfill.skipped,
+      lastNumber: backfill.lastNumber,
+      lastAllocatedSequence: backfill.lastAllocatedSequence,
+      canReset: salesOrderSync.canReset,
+      salesOrderSync,
+      numberSeries,
+    };
+  } finally {
+    syncInFlight.delete(shop);
+    resolveInFlight();
+  }
+}
+
+/**
+ * Reset Sales Order sync: wipe all SO numbers + counter so the next Sync
+ * starts from the saved Prefix and Starting number.
+ * Disabled when any numbered order has an invoice or packing slip.
+ */
+export async function resetSalesOrderNumbersSync(shop: string): Promise<
+  | {
+      ok: true;
+      reverted: number;
+      lastAllocatedSequence: number | null;
+      salesOrderSync: SalesOrderSyncStatus;
+      numberSeries: Awaited<ReturnType<typeof loadNumberSeriesForShop>>;
+    }
+  | {
+      ok: false;
+      error: string;
+      invoicedCount: number;
+      packingSlipCount: number;
+      blockedCount: number;
+    }
+> {
+  const assigned = await listAssignedSalesOrderGids(shop);
+  const [selectedTemplateId, numberSeries] = await Promise.all([
+    loadSelectedTemplateForShop(shop, "sales-order"),
+    loadNumberSeriesForShop(shop),
+  ]);
+  const templateId = resolveSalesOrderTemplateId(selectedTemplateId);
+  const numbering = numberingFromSeries(numberSeries["sales-order"]);
+
+  if (assigned.orderGids.length === 0) {
+    await resetSalesOrderNumberCounter(shop, templateId, numbering);
+    const clearedSo = { ...numberSeries["sales-order"] };
+    delete (clearedSo as { nextSequence?: number }).nextSequence;
+    const savedSeries = await saveNumberSeriesForShop(shop, {
+      ...numberSeries,
+      "sales-order": clearedSo,
+    });
+    await clearSalesOrderNumbersSynced(shop);
+    invalidateSalesOrdersCache(shop);
+    return {
+      ok: true,
+      reverted: 0,
+      lastAllocatedSequence: null,
+      salesOrderSync: await getSalesOrderNumbersSyncStatus(shop),
+      numberSeries: savedSeries,
+    };
+  }
+
+  const [invoiced, packing] = await Promise.all([
+    getInvoicedOrderGids(shop, assigned.orderGids),
+    getPackingSlipOrderGids(shop, assigned.orderGids),
+  ]);
+  const blockedCount = new Set([...invoiced, ...packing]).size;
+  if (blockedCount > 0) {
+    const parts: string[] = [];
+    if (invoiced.size > 0) {
+      parts.push(
+        `${invoiced.size} invoice${invoiced.size === 1 ? "" : "s"}`,
+      );
+    }
+    if (packing.size > 0) {
+      parts.push(
+        `${packing.size} packing slip${packing.size === 1 ? "" : "s"}`,
+      );
+    }
+    return {
+      ok: false,
+      error: `Cannot reset: synced orders were converted (${parts.join(" and ")}). Delete those documents first, then reset.`,
+      invoicedCount: invoiced.size,
+      packingSlipCount: packing.size,
+      blockedCount,
+    };
+  }
+
+  // Delete every SO number for this shop (all templates).
+  const result = await prisma.salesOrderDocumentNumber.deleteMany({
+    where: { shop },
+  });
+
+  // Reset counters for every template that had numbers + active template.
+  const templateIds = new Set(assigned.templateIds);
+  templateIds.add(templateId);
+  for (const id of templateIds) {
+    await resetSalesOrderNumberCounter(shop, id, numbering);
+  }
+
+  const clearedSo = { ...numberSeries["sales-order"] };
+  delete (clearedSo as { nextSequence?: number }).nextSequence;
+  const savedSeries = await saveNumberSeriesForShop(shop, {
+    ...numberSeries,
+    "sales-order": clearedSo,
+  });
+
+  await clearSalesOrderNumbersSynced(shop);
+  invalidateSalesOrdersCache(shop);
+
+  return {
+    ok: true,
+    reverted: result.count,
+    lastAllocatedSequence: null,
+    salesOrderSync: await getSalesOrderNumbersSyncStatus(shop),
+    numberSeries: savedSeries,
+  };
+}
+
+/** @deprecated Prefer resetSalesOrderNumbersSync */
+export async function undoSalesOrderNumbersSync(shop: string) {
+  return resetSalesOrderNumbersSync(shop);
 }
