@@ -67,6 +67,7 @@ import {
 import { loadNumberSeriesEntryForShop, loadStoreDetailsForShop } from "../shop-settings.server";
 import { numberingFromSeries } from "../number-series";
 import { fetchShopCurrencyCode } from "../store-details.server";
+import { invalidateDocumentTemplateSettingsCache } from "../sales-order-document.server";
 import {
   defaultColumnsForPreset,
   defaultTemplateSettings,
@@ -1752,6 +1753,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
     },
   });
 
+  invalidateDocumentTemplateSettingsCache(session.shop);
   await syncNumberCounter(session.shop, params.templateId, settings.numbering);
 
   return { saved: true };

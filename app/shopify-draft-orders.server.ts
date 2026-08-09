@@ -25,6 +25,27 @@ import { hasDraftOrderNumbersSynced } from "./draft-order-number-sync.server";
 
 const PAGE_SIZE = 25;
 
+const DRAFT_DOCUMENT_TTL_MS = 20_000;
+const draftDocumentCache = new Map<
+  string,
+  { expires: number; value: SalesOrderDocumentData }
+>();
+
+export function invalidateDraftOrderDocumentCache(
+  shop?: string,
+  draftOrderGid?: string,
+) {
+  if (!shop && !draftOrderGid) {
+    draftDocumentCache.clear();
+    return;
+  }
+  for (const key of draftDocumentCache.keys()) {
+    if (shop && !key.startsWith(`${shop}|`)) continue;
+    if (draftOrderGid && !key.endsWith(`|${draftOrderGid}`)) continue;
+    draftDocumentCache.delete(key);
+  }
+}
+
 type Money = {
   amount: string;
   currencyCode: string;
@@ -525,8 +546,17 @@ function resolveDraftVariantTitle(item: DraftOrderLineNode): string {
 export async function fetchDraftOrderDocument(
   admin: AdminGraphql,
   draftOrderGid: string,
-  options?: { shop?: string },
+  options?: { shop?: string; bypassCache?: boolean },
 ): Promise<SalesOrderDocumentData | null> {
+  const shopKey = options?.shop || "_";
+  const cacheKey = `${shopKey}|${draftOrderGid}`;
+  if (!options?.bypassCache) {
+    const cached = draftDocumentCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.value;
+    }
+  }
+
   const [response, multiCurrency] = await Promise.all([
     admin.graphql(DRAFT_ORDER_DOCUMENT_QUERY, {
       variables: { id: draftOrderGid },
@@ -663,7 +693,7 @@ export async function fetchDraftOrderDocument(
 
   const total = moneyAmount(documentTotalSet?.shopMoney);
 
-  return {
+  const document: SalesOrderDocumentData = {
     id: order.id,
     name: order.name,
     createdAt: order.createdAt,
@@ -720,6 +750,12 @@ export async function fetchDraftOrderDocument(
       moneyAmount(documentTaxSet?.shopMoney),
     ),
   };
+
+  draftDocumentCache.set(cacheKey, {
+    expires: Date.now() + DRAFT_DOCUMENT_TTL_MS,
+    value: document,
+  });
+  return document;
 }
 
 /** Recent Shopify draft orders for the document sidebar. */

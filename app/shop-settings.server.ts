@@ -56,6 +56,12 @@ const selectedTemplatesCache = new Map<
   { expires: number; value: SelectedTemplatesMap }
 >();
 
+const SMTP_SETTINGS_TTL_MS = 120_000;
+const smtpSettingsCache = new Map<
+  string,
+  { expires: number; value: SmtpSettings }
+>();
+
 const NUMBER_SERIES_TTL_MS = 120_000;
 const numberSeriesCache = new Map<
   string,
@@ -102,6 +108,9 @@ function normalizeSelectedTemplates(value: unknown): SelectedTemplatesMap {
 }
 
 export async function loadSmtpSettingsForShop(shop: string): Promise<SmtpSettings> {
+  const cached = smtpSettingsCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT id, shop, "smtpSettings"
     FROM "ShopSettings"
@@ -109,7 +118,12 @@ export async function loadSmtpSettingsForShop(shop: string): Promise<SmtpSetting
     LIMIT 1
   `;
 
-  return normalizeSmtpSettings(rows[0]?.smtpSettings);
+  const value = normalizeSmtpSettings(rows[0]?.smtpSettings);
+  smtpSettingsCache.set(shop, {
+    expires: Date.now() + SMTP_SETTINGS_TTL_MS,
+    value,
+  });
+  return value;
 }
 
 export async function loadCreditNoteSettingsForShop(
@@ -324,6 +338,7 @@ export async function saveSmtpSettingsForShop(
     `;
   }
 
+  smtpSettingsCache.delete(shop);
   return normalized;
 }
 
@@ -517,6 +532,11 @@ export async function saveStoreDetailsForShop(
   }
 
   invalidateStoreDetailsCache(shop);
+  // Template document payload embeds storeDetails (logo/name) — bust that cache too.
+  const { invalidateDocumentTemplateSettingsCache } = await import(
+    "./sales-order-document.server"
+  );
+  invalidateDocumentTemplateSettingsCache(shop);
   return normalized;
 }
 

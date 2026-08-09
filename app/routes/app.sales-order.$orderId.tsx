@@ -6,6 +6,7 @@ import type {
 } from "react-router";
 import {
   Await,
+  PrefetchPageLinks,
   useFetcher,
   useLoaderData,
   useNavigate,
@@ -39,12 +40,14 @@ import { requireAdminAuth } from "../shopify-context.server";
 import {
   fetchSalesOrderDocument,
   fetchSalesOrderList,
+  invalidateSalesOrderDocumentCache,
   loadDocumentTemplateSettings,
   loadSalesOrderTemplateSettings,
 } from "../sales-order-document.server";
 import {
   fetchDraftOrderDocument,
   fetchDraftOrderSidebarList,
+  invalidateDraftOrderDocumentCache,
 } from "../shopify-draft-orders.server";
 import {
   allocateSalesOrderDocumentNumber,
@@ -218,9 +221,28 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const isIssuedDocument =
     isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft;
   const url = new URL(request.url);
+  const bypassCache = url.searchParams.get("fresh") === "1";
 
-  const selectedMap = await loadSelectedTemplatesForShop(session.shop);
-  const smtpSettings = await loadSmtpSettingsForShop(session.shop);
+  const orderGid = isDraft
+    ? toDraftOrderGid(decodeURIComponent(orderId))
+    : toOrderGid(decodeURIComponent(orderId));
+
+  // Kick off Shopify order fetch immediately — don't wait on template/SMTP lookups.
+  const orderPromise = isDraft
+    ? fetchDraftOrderDocument(admin, orderGid, {
+        shop: session.shop,
+        bypassCache,
+      })
+    : fetchSalesOrderDocument(admin, orderGid, {
+        asCreditNote: isCreditNote,
+        shop: session.shop,
+        bypassCache,
+      });
+
+  const [selectedMap, smtpSettings] = await Promise.all([
+    loadSelectedTemplatesForShop(session.shop),
+    loadSmtpSettingsForShop(session.shop),
+  ]);
   const shopSelectedTemplateId =
     selectedMap[
       isCreditNote
@@ -262,9 +284,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
             : resolveSalesOrderTemplateId(
                 shopSelectedTemplateId || url.searchParams.get("template"),
               );
-  const orderGid = isDraft
-    ? toDraftOrderGid(decodeURIComponent(orderId))
-    : toOrderGid(decodeURIComponent(orderId));
 
   // Sidebar list still uses sales-order template ids for SO document numbers.
   const salesOrderTemplateId = isIssuedDocument
@@ -272,12 +291,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     : templateId;
 
   const [order, template] = await Promise.all([
-    isDraft
-      ? fetchDraftOrderDocument(admin, orderGid, { shop: session.shop })
-      : fetchSalesOrderDocument(admin, orderGid, {
-          asCreditNote: isCreditNote,
-          shop: session.shop,
-        }),
+    orderPromise,
     isIssuedDocument
       ? loadDocumentTemplateSettings(
           session.shop,
@@ -610,6 +624,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     return salesOrders;
   })();
 
+  // Keep logo only on storeDetails — avoids shipping base64 twice in the payload.
+  const settingsForClient = { ...template.settings };
+  if (template.storeDetails?.logoDataUrl) {
+    delete settingsForClient.logoDataUrl;
+    delete settingsForClient.logoFileName;
+  }
+
   return {
     documentMode,
     order: {
@@ -626,7 +647,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     orderDraft,
     templateId: template.templateId,
     templateName: template.templateName,
-    settings: template.settings,
+    settings: settingsForClient,
     storeDetails: template.storeDetails,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
     smtpReady: isSmtpReadyForSend(smtpSettings),
@@ -655,8 +676,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
     ? toDraftOrderGid(decodeURIComponent(orderId))
     : toOrderGid(decodeURIComponent(orderId));
 
+  if (intent === "reload") {
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({ ok: true, document: "reload" as const });
+  }
+
   if (intent === "convert-to-invoice") {
     await markOrderInvoiced(session.shop, orderGid);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -666,6 +696,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "finalize-draft") {
     await markOrderInvoiced(session.shop, orderGid);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -682,6 +714,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
     const draftNumber = await markOrderDraft(session.shop, orderGid);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -692,6 +726,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "convert-to-packing-slip") {
     await markOrderPackingSlip(session.shop, orderGid);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -701,6 +737,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "convert-to-return") {
     await markOrderReturn(session.shop, orderGid);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -723,6 +761,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       );
     }
     const deleted = await unmarkOrdersInvoiced(session.shop, [orderGid]);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -733,6 +773,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "delete-credit-note") {
     const deleted = await unmarkOrdersCreditNote(session.shop, [orderGid]);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -743,6 +785,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "delete-packing-slip") {
     const deleted = await unmarkOrdersPackingSlip(session.shop, [orderGid]);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -753,6 +797,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "delete-return") {
     const deleted = await unmarkOrdersReturn(session.shop, [orderGid]);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -763,6 +809,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   if (intent === "delete-draft") {
     const deleted = await unmarkOrdersDraft(session.shop, [orderGid]);
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -814,6 +862,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { status: 400 },
       );
     }
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -860,6 +910,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { status: 400 },
       );
     }
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -900,6 +952,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       customerNote,
       terms,
     });
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -959,6 +1013,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { status: 400 },
       );
     }
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -1061,6 +1117,9 @@ export default function SalesOrderDocumentPage() {
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
   const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState("");
+  const [prefetchOrderHref, setPrefetchOrderHref] = useState<string | null>(
+    null,
+  );
   const [numberMode, setNumberMode] = useState<"continue" | "manual">(
     "continue",
   );
@@ -1417,6 +1476,16 @@ export default function SalesOrderDocumentPage() {
       );
     },
     [documentBasePath, navigate, templateQuery],
+  );
+
+  const orderHref = useCallback(
+    (orderGid: string) => {
+      const numericId = orderGid.includes("/")
+        ? orderGid.split("/").pop() || orderGid
+        : orderGid;
+      return `${documentBasePath}/${encodeURIComponent(numericId)}${templateQuery}`;
+    },
+    [documentBasePath, templateQuery],
   );
 
   const handlePrint = useCallback(async () => {
@@ -1968,6 +2037,10 @@ export default function SalesOrderDocumentPage() {
       return;
     }
 
+    if (result.document === "reload") {
+      return;
+    }
+
     if (typeof shopify !== "undefined" && shopify.toast) {
       if (result.document === "update-credit-note") {
         shopify.toast.show("Credit note details saved");
@@ -2028,7 +2101,7 @@ export default function SalesOrderDocumentPage() {
         shopify.toast.show("Converted to invoice");
       }
     }
-    revalidator.revalidate();
+    // Fetcher POST already revalidates via shouldRevalidate — avoid a second full reload.
   }, [
     convertFetcher.data,
     convertFetcher.state,
@@ -2036,7 +2109,6 @@ export default function SalesOrderDocumentPage() {
     isDraft,
     listPath,
     navigate,
-    revalidator,
     templateQuery,
   ]);
 
@@ -2050,13 +2122,15 @@ export default function SalesOrderDocumentPage() {
     ) {
       return;
     }
-    revalidator.revalidate();
+    // Bust short-lived caches then revalidate via POST shouldRevalidate.
+    convertFetcher.submit({ intent: "reload" }, { method: "post" });
   }, [
+    convertFetcher,
     isConverting,
     isDownloading,
     isPrinting,
     isSendingEmail,
-    revalidator,
+    revalidator.state,
   ]);
 
   return (
@@ -2064,6 +2138,7 @@ export default function SalesOrderDocumentPage() {
       heading={previewOrder.documentNumber || data.order.name}
       inlineSize="large"
     >
+      {prefetchOrderHref ? <PrefetchPageLinks page={prefetchOrderHref} /> : null}
       <s-link slot="breadcrumb-actions" href={listPath}>
         {isCreditNote
           ? "Credit Note"
@@ -2097,7 +2172,9 @@ export default function SalesOrderDocumentPage() {
       <s-button
         slot="secondary-actions"
         icon="refresh"
-        loading={revalidator.state !== "idle" || undefined}
+        loading={
+          revalidator.state !== "idle" || isConverting || undefined
+        }
         disabled={
           isConverting ||
           isDownloading ||
@@ -2365,6 +2442,13 @@ export default function SalesOrderDocumentPage() {
                               if (!isActive) openOrder(item.id);
                             }}
                             name={salesOrderLabel}
+                            onMouseOver={() => {
+                              if (isActive) return;
+                              const href = orderHref(item.id);
+                              setPrefetchOrderHref((current) =>
+                                current === href ? current : href,
+                              );
+                            }}
                           >
                             <div
                               className={

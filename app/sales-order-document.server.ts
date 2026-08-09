@@ -39,6 +39,65 @@ import { getInvoicedOrderGids } from "./order-invoice-status.server";
 import type { StoreDetails } from "./store-details";
 import type { Prisma } from "@prisma/client";
 
+const ORDER_DOCUMENT_TTL_MS = 20_000;
+const orderDocumentCache = new Map<
+  string,
+  { expires: number; value: SalesOrderDocumentData }
+>();
+
+const SIDEBAR_LIST_TTL_MS = 60_000;
+const sidebarListCache = new Map<
+  string,
+  {
+    expires: number;
+    data: import("./sales-order-document").CustomerOrderListItem[];
+  }
+>();
+
+type CachedDocumentTemplate = {
+  templateId: string;
+  templateName: string;
+  settings: TemplateEditorSettings;
+  storeDetails: StoreDetails;
+};
+
+const TEMPLATE_SETTINGS_TTL_MS = 60_000;
+const templateSettingsCache = new Map<
+  string,
+  { expires: number; value: CachedDocumentTemplate }
+>();
+
+export function invalidateSalesOrderDocumentCache(
+  shop?: string,
+  orderGid?: string,
+) {
+  if (!shop && !orderGid) {
+    orderDocumentCache.clear();
+    sidebarListCache.clear();
+    return;
+  }
+  for (const key of orderDocumentCache.keys()) {
+    if (shop && !key.startsWith(`${shop}|`)) continue;
+    if (orderGid && !key.includes(`|${orderGid}|`)) continue;
+    orderDocumentCache.delete(key);
+  }
+  if (shop) {
+    for (const key of sidebarListCache.keys()) {
+      if (key.startsWith(`${shop}|`)) sidebarListCache.delete(key);
+    }
+  }
+}
+
+export function invalidateDocumentTemplateSettingsCache(shop?: string) {
+  if (!shop) {
+    templateSettingsCache.clear();
+    return;
+  }
+  for (const key of templateSettingsCache.keys()) {
+    if (key.startsWith(`${shop}|`)) templateSettingsCache.delete(key);
+  }
+}
+
 export type { SalesOrderDocumentData, TemplateEditorSettings };
 
 /**
@@ -89,6 +148,7 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
     })),
   });
 
+  invalidateDocumentTemplateSettingsCache(shop);
   return { deleted: deleted.count, seeded: seedPresets.length };
 }
 
@@ -223,6 +283,14 @@ export async function loadDocumentTemplateSettings(
     documentType === "sales-order"
       ? resolveSalesOrderTemplateId(templateId)
       : templateId;
+  const cacheKey = `${shop}|${documentType}|${resolvedId}`;
+  if (!preload) {
+    const cached = templateSettingsCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.value;
+    }
+  }
+
   const templateName = salesOrderTemplateName(resolvedId);
   const seriesId: NumberSeriesModuleId =
     documentType === "invoice"
@@ -313,12 +381,19 @@ export async function loadDocumentTemplateSettings(
     };
   }
 
-  return {
+  const result = {
     templateId: resolvedId,
     templateName,
     settings,
     storeDetails,
   };
+  if (!preload) {
+    templateSettingsCache.set(cacheKey, {
+      expires: Date.now() + TEMPLATE_SETTINGS_TTL_MS,
+      value: result,
+    });
+  }
+  return result;
 }
 
 export async function loadSalesOrderTemplateSettings(
@@ -669,8 +744,17 @@ export async function fetchSalesOrderDocument(
     ) => Promise<Response>;
   },
   orderGid: string,
-  options?: { asCreditNote?: boolean; shop?: string },
+  options?: { asCreditNote?: boolean; shop?: string; bypassCache?: boolean },
 ): Promise<SalesOrderDocumentData | null> {
+  const shopKey = options?.shop || "_";
+  const cacheKey = `${shopKey}|${orderGid}|cn:${options?.asCreditNote ? "1" : "0"}`;
+  if (!options?.bypassCache) {
+    const cached = orderDocumentCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.value;
+    }
+  }
+
   const [response, multiCurrency] = await Promise.all([
     admin.graphql(
     `#graphql
@@ -1036,23 +1120,23 @@ export async function fetchSalesOrderDocument(
   };
 
   if (options?.asCreditNote) {
-    return adaptDocumentForCreditNote(
+    const creditNoteDoc = adaptDocumentForCreditNote(
       document,
       creditNoteRefundSourceFromOrder(order),
     );
+    orderDocumentCache.set(cacheKey, {
+      expires: Date.now() + ORDER_DOCUMENT_TTL_MS,
+      value: creditNoteDoc,
+    });
+    return creditNoteDoc;
   }
 
+  orderDocumentCache.set(cacheKey, {
+    expires: Date.now() + ORDER_DOCUMENT_TTL_MS,
+    value: document,
+  });
   return document;
 }
-
-const SIDEBAR_LIST_TTL_MS = 60_000;
-const sidebarListCache = new Map<
-  string,
-  {
-    expires: number;
-    data: import("./sales-order-document").CustomerOrderListItem[];
-  }
->();
 
 export async function fetchSalesOrderList(
   admin: {
