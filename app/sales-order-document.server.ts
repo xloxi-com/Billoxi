@@ -20,8 +20,10 @@ import {
   formatQuantityDisplay,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  DRAFT_TEMPLATE_PRESETS,
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
+  RETURN_TEMPLATE_PRESETS,
   type CreditNoteRefundSource,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
@@ -57,12 +59,20 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
       documentType: "invoice" as const,
       preset,
     })),
+    ...DRAFT_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "draft" as const,
+      preset,
+    })),
     ...CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => ({
       documentType: "credit-note" as const,
       preset,
     })),
     ...PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => ({
       documentType: "packing-slip" as const,
+      preset,
+    })),
+    ...RETURN_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "return" as const,
       preset,
     })),
   ];
@@ -188,7 +198,13 @@ function personName(
 
 export async function loadDocumentTemplateSettings(
   shop: string,
-  documentType: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  documentType:
+    | "sales-order"
+    | "invoice"
+    | "draft"
+    | "credit-note"
+    | "packing-slip"
+    | "return",
   templateId: string,
   admin: { graphql: (query: string) => Promise<Response> },
   preload?: {
@@ -211,11 +227,15 @@ export async function loadDocumentTemplateSettings(
   const seriesId: NumberSeriesModuleId =
     documentType === "invoice"
       ? "invoice"
-      : documentType === "credit-note"
-        ? "credit-note"
-        : documentType === "packing-slip"
-          ? "packing-slip"
-          : "sales-order";
+      : documentType === "draft"
+        ? "draft"
+        : documentType === "credit-note"
+          ? "credit-note"
+          : documentType === "packing-slip"
+            ? "packing-slip"
+            : documentType === "return"
+              ? "return"
+              : "sales-order";
 
   const hasCustomizationPreload =
     preload != null && "customizationSettings" in preload;
@@ -272,6 +292,26 @@ export async function loadDocumentTemplateSettings(
   });
   const defaults = defaultTemplateSettings(templateName, resolvedId);
   settings.header = { ...settings.header, ...defaults.header };
+
+  // Draft / packing / credit / return: never show paid / balance-due payment rows.
+  if (
+    documentType === "draft" ||
+    documentType === "packing-slip" ||
+    documentType === "return" ||
+    documentType === "credit-note"
+  ) {
+    settings.totals = {
+      ...settings.totals,
+      showPaidAmount: false,
+      showBalanceDue: false,
+    };
+  }
+  if (documentType === "draft") {
+    settings.header = {
+      ...settings.header,
+      showPaymentMethod: false,
+    };
+  }
 
   return {
     templateId: resolvedId,

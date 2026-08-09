@@ -4,7 +4,9 @@ export type EmailDocumentKind =
   | "sales-order"
   | "invoice"
   | "credit-note"
-  | "packing-slip";
+  | "packing-slip"
+  | "return"
+  | "draft";
 
 export type EmailTemplateDesign = {
   headerColor: string;
@@ -22,12 +24,12 @@ export type EmailTemplate = {
 export type EmailTemplatesSettings = {
   design: EmailTemplateDesign;
   templates: Record<EmailDocumentKind, EmailTemplate>;
-  /** Bumped when built-in ready copy for all 4 document types changes. */
+  /** Bumped when built-in ready copy for all document types changes. */
   readySetVersion: number;
 };
 
-/** Current built-in ready email copy for Sales order / Invoice / Credit note / Packing slip. */
-export const EMAIL_TEMPLATES_READY_SET_VERSION = 1;
+/** Current built-in ready email copy — matched body style for all kinds. */
+export const EMAIL_TEMPLATES_READY_SET_VERSION = 4;
 
 export const EMAIL_DOCUMENT_KINDS: ReadonlyArray<{
   id: EmailDocumentKind;
@@ -35,8 +37,10 @@ export const EMAIL_DOCUMENT_KINDS: ReadonlyArray<{
 }> = [
   { id: "sales-order", label: "Sales order" },
   { id: "invoice", label: "Invoice" },
+  { id: "draft", label: "Draft" },
   { id: "credit-note", label: "Credit note" },
   { id: "packing-slip", label: "Packing slip" },
+  { id: "return", label: "Return" },
 ];
 
 export const EMAIL_TEMPLATE_PLACEHOLDERS = [
@@ -73,26 +77,37 @@ function defaultTemplate(kind: EmailDocumentKind): EmailTemplate {
   switch (kind) {
     case "sales-order":
       return {
-        subject: `Sales order {{documentNumber}} confirmed · {{storeName}}`,
+        subject: `Sales order {{documentNumber}} · {{storeName}}`,
         body: [
           `<p>Hello {{customerName}},</p>`,
-          `<p><strong>Thank you for your order.</strong> Your sales order is confirmed and ready for your records.</p>`,
-          `<p style="text-align:left"><strong>Sales order:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Total:</strong> {{currency}} {{total}}</p>`,
-          `<p>A PDF copy is attached. We’ll follow up when your order progresses — reply anytime if you need changes.</p>`,
+          `<p><strong>Your sales order is ready for review.</strong> Please check the details below.</p>`,
+          `<p><strong>Sales order:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Total:</strong> {{currency}} {{total}}</p>`,
+          `<p>The sales order PDF is attached. Reply to this email if you need any changes.</p>`,
           `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
         ].join(""),
         attachPdf: true,
       };
     case "invoice":
       return {
-        subject: `Invoice {{documentNumber}} from {{storeName}}`,
+        subject: `Invoice {{documentNumber}} · {{storeName}}`,
         body: [
           `<p>Hello {{customerName}},</p>`,
-          `<p><strong>Your invoice is ready.</strong> Please find the details below for payment.</p>`,
-          `<p><strong>Invoice:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Amount due:</strong> {{currency}} {{total}}</p>`,
-          `<p>The invoice PDF is attached for your records. If you have already paid, you can disregard this notice.</p>`,
-          `<p>Questions about this invoice? Just reply to this email.</p>`,
-          `<p>Thank you,<br><strong>{{storeName}}</strong></p>`,
+          `<p><strong>Your invoice is ready for review.</strong> Please check the details below.</p>`,
+          `<p><strong>Invoice:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Total:</strong> {{currency}} {{total}}</p>`,
+          `<p>The invoice PDF is attached. If you have already paid, you can disregard this notice. Reply if you have any questions.</p>`,
+          `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
+        ].join(""),
+        attachPdf: true,
+      };
+    case "draft":
+      return {
+        subject: `Draft {{documentNumber}} · {{storeName}}`,
+        body: [
+          `<p>Hello {{customerName}},</p>`,
+          `<p><strong>Your draft document is ready for review.</strong> Please check the details below.</p>`,
+          `<p><strong>Draft:</strong> {{documentNumber}}<br><strong>Reference:</strong> {{orderName}}<br><strong>Total:</strong> {{currency}} {{total}}</p>`,
+          `<p>The draft PDF is attached. This is not a final invoice — reply if you need any changes before we proceed.</p>`,
+          `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
         ].join(""),
         attachPdf: true,
       };
@@ -101,8 +116,8 @@ function defaultTemplate(kind: EmailDocumentKind): EmailTemplate {
         subject: `Credit note {{documentNumber}} · {{storeName}}`,
         body: [
           `<p>Hello {{customerName}},</p>`,
-          `<p><strong>A credit note has been issued</strong> for your account.</p>`,
-          `<p><strong>Credit note:</strong> {{documentNumber}}<br><strong>Related order:</strong> {{orderName}}<br><strong>Credit amount:</strong> {{currency}} {{total}}<br><strong>Reference:</strong> {{referenceNumber}}</p>`,
+          `<p><strong>Your credit note is ready for review.</strong> Please check the details below.</p>`,
+          `<p><strong>Credit note:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Credit amount:</strong> {{currency}} {{total}}<br><strong>Reference:</strong> {{referenceNumber}}</p>`,
           `<p>The credit note PDF is attached. This amount will be applied per our store policy — reply if you have any questions.</p>`,
           `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
         ].join(""),
@@ -110,13 +125,25 @@ function defaultTemplate(kind: EmailDocumentKind): EmailTemplate {
       };
     case "packing-slip":
       return {
-        subject: `Packing slip for order {{orderName}} · {{storeName}}`,
+        subject: `Packing slip {{documentNumber}} · {{storeName}}`,
         body: [
           `<p>Hello {{customerName}},</p>`,
-          `<p><strong>Your order is being prepared for shipment.</strong> Here’s your packing slip for reference.</p>`,
+          `<p><strong>Your packing slip is ready for review.</strong> Please check the details below.</p>`,
           `<p><strong>Packing slip:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Reference:</strong> {{referenceNumber}}</p>`,
-          `<p>The packing slip PDF is attached so you can check what should be in your package. You’ll receive tracking details separately when available.</p>`,
-          `<p>Thank you for shopping with us,<br><strong>{{storeName}}</strong></p>`,
+          `<p>The packing slip PDF is attached so you can check what should be in your package. Reply if you have any questions.</p>`,
+          `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
+        ].join(""),
+        attachPdf: true,
+      };
+    case "return":
+      return {
+        subject: `Return {{documentNumber}} · {{storeName}}`,
+        body: [
+          `<p>Hello {{customerName}},</p>`,
+          `<p><strong>Your return document is ready for review.</strong> Please check the details below.</p>`,
+          `<p><strong>Return:</strong> {{documentNumber}}<br><strong>Order:</strong> {{orderName}}<br><strong>Reference:</strong> {{referenceNumber}}</p>`,
+          `<p>The return PDF is attached. Reply to this email if you have any questions about this return.</p>`,
+          `<p>Best regards,<br><strong>{{storeName}}</strong></p>`,
         ].join(""),
         attachPdf: true,
       };
@@ -138,10 +165,14 @@ function isLegacyStarterBody(body: string, kind: EmailDocumentKind): boolean {
       return plain.includes("your sales order is ready");
     case "invoice":
       return plain.includes("your invoice is ready.") && !plain.includes("amount due");
+    case "draft":
+      return plain.includes("your draft is ready");
     case "credit-note":
       return plain.includes("your credit note is ready");
     case "packing-slip":
       return plain.includes("your packing slip is ready");
+    case "return":
+      return plain.includes("your return is ready");
   }
 }
 
@@ -150,13 +181,15 @@ export const emptyEmailTemplatesSettings: EmailTemplatesSettings = {
   templates: {
     "sales-order": defaultTemplate("sales-order"),
     invoice: defaultTemplate("invoice"),
+    draft: defaultTemplate("draft"),
     "credit-note": defaultTemplate("credit-note"),
     "packing-slip": defaultTemplate("packing-slip"),
+    return: defaultTemplate("return"),
   },
   readySetVersion: EMAIL_TEMPLATES_READY_SET_VERSION,
 };
 
-/** All four document send templates (fresh ready copies). */
+/** All document send templates (fresh ready copies). */
 export function getReadyEmailTemplates(): Record<
   EmailDocumentKind,
   EmailTemplate
@@ -164,8 +197,10 @@ export function getReadyEmailTemplates(): Record<
   return {
     "sales-order": getDefaultEmailTemplate("sales-order"),
     invoice: getDefaultEmailTemplate("invoice"),
+    draft: getDefaultEmailTemplate("draft"),
     "credit-note": getDefaultEmailTemplate("credit-note"),
     "packing-slip": getDefaultEmailTemplate("packing-slip"),
+    return: getDefaultEmailTemplate("return"),
   };
 }
 
@@ -238,7 +273,7 @@ export function normalizeEmailTemplatesSettings(
   const storedVersion =
     typeof input.readySetVersion === "number" ? input.readySetVersion : 0;
 
-  // Seed distinct ready templates for all 4 document types (used on Send).
+  // Seed ready templates when the built-in set changes (matched body copy).
   if (storedVersion < EMAIL_TEMPLATES_READY_SET_VERSION) {
     return {
       design,
@@ -255,6 +290,7 @@ export function normalizeEmailTemplatesSettings(
         "sales-order",
       ),
       invoice: normalizeTemplate(input.templates?.invoice, "invoice"),
+      draft: normalizeTemplate(input.templates?.draft, "draft"),
       "credit-note": normalizeTemplate(
         input.templates?.["credit-note"],
         "credit-note",
@@ -263,6 +299,7 @@ export function normalizeEmailTemplatesSettings(
         input.templates?.["packing-slip"],
         "packing-slip",
       ),
+      return: normalizeTemplate(input.templates?.return, "return"),
     },
     readySetVersion: EMAIL_TEMPLATES_READY_SET_VERSION,
   };
@@ -354,10 +391,14 @@ export function documentKindLabel(kind: EmailDocumentKind): string {
   switch (kind) {
     case "invoice":
       return "Invoice";
+    case "draft":
+      return "Draft";
     case "credit-note":
       return "Credit Note";
     case "packing-slip":
       return "Packing Slip";
+    case "return":
+      return "Return";
     default:
       return "Sales Order";
   }

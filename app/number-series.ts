@@ -1,6 +1,8 @@
 export type NumberSeriesModuleId =
   | "sales-order"
   | "invoice"
+  | "draft"
+  | "return"
   | "credit-note"
   | "packing-slip";
 
@@ -41,6 +43,26 @@ export const NUMBER_SERIES_MODULES: Array<{
     label: "Invoice",
     defaults: {
       prefix: "INV-",
+      startingNumber: "0001",
+      suffix: "",
+      entryMode: "auto",
+    },
+  },
+  {
+    id: "draft",
+    label: "Draft",
+    defaults: {
+      prefix: "DFT-",
+      startingNumber: "0001",
+      suffix: "",
+      entryMode: "auto",
+    },
+  },
+  {
+    id: "return",
+    label: "Return",
+    defaults: {
+      prefix: "RET-",
       startingNumber: "0001",
       suffix: "",
       entryMode: "auto",

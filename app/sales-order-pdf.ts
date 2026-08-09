@@ -534,18 +534,24 @@ export function salesOrderPdfFileName(
   documentKind:
     | "sales-order"
     | "invoice"
+    | "draft"
     | "credit-note"
-    | "packing-slip" = "sales-order",
+    | "packing-slip"
+    | "return" = "sales-order",
 ) {
   const safeName = orderName.replace(/[^\w.-]+/g, "_");
   const suffix =
     documentKind === "invoice"
       ? "invoice"
-      : documentKind === "credit-note"
-        ? "credit-note"
-        : documentKind === "packing-slip"
-          ? "packing-slip"
-          : "sales-order";
+      : documentKind === "draft"
+        ? "draft"
+        : documentKind === "credit-note"
+          ? "credit-note"
+          : documentKind === "packing-slip"
+            ? "packing-slip"
+            : documentKind === "return"
+              ? "return"
+              : "sales-order";
   return `${safeName}-${suffix}.pdf`;
 }
 
@@ -3863,8 +3869,10 @@ export async function buildSalesOrderDomVectorPdfBlob(
   documentKind:
     | "sales-order"
     | "invoice"
+    | "draft"
     | "credit-note"
-    | "packing-slip" = "sales-order",
+    | "packing-slip"
+    | "return" = "sales-order",
 ): Promise<{ blob: Blob; fileName: string }> {
   const pdf = await buildSalesOrderDomVectorPdfFromElement(paper, settings);
   const fileName = salesOrderPdfFileName(orderName, documentKind);
@@ -3878,8 +3886,10 @@ export async function downloadSalesOrderDomVectorPdf(
   documentKind:
     | "sales-order"
     | "invoice"
+    | "draft"
     | "credit-note"
-    | "packing-slip" = "sales-order",
+    | "packing-slip"
+    | "return" = "sales-order",
 ) {
   const { blob, fileName } = await buildSalesOrderDomVectorPdfBlob(
     paper,

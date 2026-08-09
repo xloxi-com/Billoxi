@@ -11,9 +11,25 @@ import {
 } from "./number-series";
 import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
 
+async function hasReturnNumbersSyncedFlag(shop: string): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ returnOrderNumbersSyncedAt: Date | null }>
+    >`
+      SELECT "returnOrderNumbersSyncedAt"
+      FROM "ShopSettings"
+      WHERE shop = ${shop}
+      LIMIT 1
+    `;
+    return Boolean(rows[0]?.returnOrderNumbersSyncedAt);
+  } catch {
+    return false;
+  }
+}
+
 type OrderGidRow = { orderGid: string };
 
-export type PackingSlipOrderMeta = {
+export type ReturnOrderMeta = {
   orderGid: string;
   convertedAt: Date;
   createdAt: Date;
@@ -21,41 +37,48 @@ export type PackingSlipOrderMeta = {
   sequence: number | null;
 };
 
-function hasPackingSlipDelegate() {
+function hasReturnDelegate() {
   return (
-    typeof (prisma as { orderPackingSlipStatus?: unknown })
-      .orderPackingSlipStatus === "object"
+    typeof (prisma as { orderReturnStatus?: unknown })
+      .orderReturnStatus === "object"
   );
 }
 
-function packingSlipSeriesEntry(entry: NumberSeriesEntry): NumberSeriesEntry {
+function returnSeriesEntry(entry: NumberSeriesEntry): NumberSeriesEntry {
   return normalizeNumberSeriesEntry(entry, {
-    prefix: "PS-",
+    prefix: "RET-",
     startingNumber: "0001",
     suffix: "",
   });
 }
 
-async function getLastPackingSlipSequence(
+/** Public: last allocated return sequence for Settings Transaction numbers. */
+export async function getLastReturnAllocatedSequence(
+  shop: string,
+): Promise<number | null> {
+  return getLastReturnSequence(shop);
+}
+
+async function getLastReturnSequence(
   shop: string,
 ): Promise<number | null> {
   const maxRows = await prisma.$queryRaw<Array<{ maxSeq: number | null }>>`
     SELECT MAX(sequence) AS "maxSeq"
-    FROM "OrderPackingSlipStatus"
+    FROM "OrderReturnStatus"
     WHERE shop = ${shop}
   `;
   const max = maxRows[0]?.maxSeq;
   return typeof max === "number" && Number.isFinite(max) ? max : null;
 }
 
-async function getMaxPackingSlipDigitWidth(
+async function getMaxReturnDigitWidth(
   shop: string,
   entry: NumberSeriesEntry,
   lastSequence: number | null,
 ): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ documentNumber: string | null }>>`
     SELECT "documentNumber"
-    FROM "OrderPackingSlipStatus"
+    FROM "OrderReturnStatus"
     WHERE shop = ${shop}
       AND "documentNumber" IS NOT NULL
   `;
@@ -72,14 +95,14 @@ async function getMaxPackingSlipDigitWidth(
   return width;
 }
 
-async function allocateNextPackingSlipNumber(
+async function allocateNextReturnNumber(
   shop: string,
   series: NumberSeriesEntry,
 ): Promise<{ sequence: number; documentNumber: string }> {
-  const entry = packingSlipSeriesEntry(series);
-  const last = await getLastPackingSlipSequence(shop);
+  const entry = returnSeriesEntry(series);
+  const last = await getLastReturnSequence(shop);
   const sequence = resolveNumberSeriesNextSequence(entry, last);
-  const digitWidth = await getMaxPackingSlipDigitWidth(shop, entry, last);
+  const digitWidth = await getMaxReturnDigitWidth(shop, entry, last);
   const paddedEntry = {
     ...entry,
     startingNumber: widenStartingNumberPad(entry.startingNumber, digitWidth),
@@ -105,13 +128,13 @@ function isUniqueConflict(error: unknown): boolean {
   );
 }
 
-/** All packing-slip order GIDs for this shop (newest first). */
-export async function getAllPackingSlipOrderGids(
+/** All return order GIDs for this shop (newest first). */
+export async function getAllReturnOrderGids(
   shop: string,
 ): Promise<string[]> {
   try {
-    if (hasPackingSlipDelegate()) {
-      const rows = await prisma.orderPackingSlipStatus.findMany({
+    if (hasReturnDelegate()) {
+      const rows = await prisma.orderReturnStatus.findMany({
         where: { shop },
         select: { orderGid: true },
         orderBy: { convertedAt: "desc" },
@@ -125,7 +148,7 @@ export async function getAllPackingSlipOrderGids(
   try {
     const rows = await prisma.$queryRaw<OrderGidRow[]>`
       SELECT "orderGid"
-      FROM "OrderPackingSlipStatus"
+      FROM "OrderReturnStatus"
       WHERE shop = ${shop}
       ORDER BY "convertedAt" DESC
     `;
@@ -135,17 +158,17 @@ export async function getAllPackingSlipOrderGids(
   }
 }
 
-/** Batch meta for packing slips (sort / list / numbers). */
-export async function getPackingSlipMetaByOrderGids(
+/** Batch meta for returns (sort / list / numbers). */
+export async function getReturnMetaByOrderGids(
   shop: string,
   orderGids: string[],
-): Promise<Map<string, PackingSlipOrderMeta>> {
-  const map = new Map<string, PackingSlipOrderMeta>();
+): Promise<Map<string, ReturnOrderMeta>> {
+  const map = new Map<string, ReturnOrderMeta>();
   if (orderGids.length === 0) return map;
 
   try {
-    if (hasPackingSlipDelegate()) {
-      const rows = await prisma.orderPackingSlipStatus.findMany({
+    if (hasReturnDelegate()) {
+      const rows = await prisma.orderReturnStatus.findMany({
         where: { shop, orderGid: { in: orderGids } },
         select: {
           orderGid: true,
@@ -181,7 +204,7 @@ export async function getPackingSlipMetaByOrderGids(
       }>
     >`
       SELECT "orderGid", "convertedAt", "createdAt", "documentNumber", sequence
-      FROM "OrderPackingSlipStatus"
+      FROM "OrderReturnStatus"
       WHERE shop = ${shop}
         AND "orderGid" IN (${Prisma.join(orderGids)})
     `;
@@ -204,7 +227,7 @@ export async function getPackingSlipMetaByOrderGids(
       Array<{ orderGid: string; convertedAt: Date; createdAt: Date }>
     >`
       SELECT "orderGid", "convertedAt", "createdAt"
-      FROM "OrderPackingSlipStatus"
+      FROM "OrderReturnStatus"
       WHERE shop = ${shop}
         AND "orderGid" IN (${Prisma.join(orderGids)})
     `;
@@ -223,16 +246,16 @@ export async function getPackingSlipMetaByOrderGids(
   return map;
 }
 
-/** Batch lookup: which order GIDs have a packing slip for this shop. */
-export async function getPackingSlipOrderGids(
+/** Batch lookup: which order GIDs have a return for this shop. */
+export async function getReturnOrderGids(
   shop: string,
   orderGids: string[],
 ): Promise<Set<string>> {
   const marked = new Set<string>();
   if (orderGids.length === 0) return marked;
 
-  if (hasPackingSlipDelegate()) {
-    const rows = await prisma.orderPackingSlipStatus.findMany({
+  if (hasReturnDelegate()) {
+    const rows = await prisma.orderReturnStatus.findMany({
       where: {
         shop,
         orderGid: { in: orderGids },
@@ -245,7 +268,7 @@ export async function getPackingSlipOrderGids(
 
   const rows = await prisma.$queryRaw<OrderGidRow[]>`
     SELECT "orderGid"
-    FROM "OrderPackingSlipStatus"
+    FROM "OrderReturnStatus"
     WHERE shop = ${shop}
       AND "orderGid" IN (${Prisma.join(orderGids)})
   `;
@@ -254,26 +277,31 @@ export async function getPackingSlipOrderGids(
 }
 
 /**
- * Ensure every packing-slip order has a PS- document number.
+ * Ensure every return order has a RET- document number.
  * Allocates missing numbers in convertedAt order (stable backfill).
+ * No-op until Settings → Return order sync has run.
  */
-export async function ensurePackingSlipDocumentNumbers(
+export async function ensureReturnDocumentNumbers(
   shop: string,
   orderGids: string[],
 ): Promise<Map<string, string>> {
   const numbers = new Map<string, string>();
   if (orderGids.length === 0) return numbers;
 
-  const meta = await getPackingSlipMetaByOrderGids(shop, orderGids);
-  const series = await loadNumberSeriesEntryForShop(shop, "packing-slip");
+  const meta = await getReturnMetaByOrderGids(shop, orderGids);
+  for (const [gid, row] of meta) {
+    if (row.documentNumber) numbers.set(gid, row.documentNumber);
+  }
+
+  if (!(await hasReturnNumbersSyncedFlag(shop))) {
+    return numbers;
+  }
+
+  const series = await loadNumberSeriesEntryForShop(shop, "return");
   const missing = orderGids.filter((gid) => {
     const row = meta.get(gid);
     return row && !row.documentNumber;
   });
-
-  for (const [gid, row] of meta) {
-    if (row.documentNumber) numbers.set(gid, row.documentNumber);
-  }
 
   missing.sort((a, b) => {
     const aAt = meta.get(a)?.convertedAt?.getTime() ?? 0;
@@ -282,9 +310,9 @@ export async function ensurePackingSlipDocumentNumbers(
   });
 
   if (missing.length > 0) {
-    const entry = packingSlipSeriesEntry(series);
-    const last = await getLastPackingSlipSequence(shop);
-    const digitWidth = await getMaxPackingSlipDigitWidth(shop, entry, last);
+    const entry = returnSeriesEntry(series);
+    const last = await getLastReturnSequence(shop);
+    const digitWidth = await getMaxReturnDigitWidth(shop, entry, last);
     let nextSequence = resolveNumberSeriesNextSequence(entry, last);
     const paddedEntry = {
       ...entry,
@@ -297,7 +325,7 @@ export async function ensurePackingSlipDocumentNumbers(
         const documentNumber = formatNumberSeriesValue(paddedEntry, sequence);
         try {
           const updated = await prisma.$executeRaw`
-            UPDATE "OrderPackingSlipStatus"
+            UPDATE "OrderReturnStatus"
             SET
               sequence = ${sequence},
               "documentNumber" = ${documentNumber},
@@ -316,7 +344,7 @@ export async function ensurePackingSlipDocumentNumbers(
             Array<{ documentNumber: string | null }>
           >`
             SELECT "documentNumber"
-            FROM "OrderPackingSlipStatus"
+            FROM "OrderReturnStatus"
             WHERE shop = ${shop}
               AND "orderGid" = ${orderGid}
             LIMIT 1
@@ -339,15 +367,13 @@ export async function ensurePackingSlipDocumentNumbers(
   return numbers;
 }
 
-/** Mark a Shopify order as packing-slip converted and assign PS- number. */
-export async function markOrderPackingSlip(shop: string, orderGid: string) {
-  const series = await loadNumberSeriesEntryForShop(shop, "packing-slip");
-
+/** Mark a Shopify order as return; assign RET- only after merchant Sync. */
+export async function markOrderReturn(shop: string, orderGid: string) {
   const existing = await prisma.$queryRaw<
     Array<{ documentNumber: string | null }>
   >`
     SELECT "documentNumber"
-    FROM "OrderPackingSlipStatus"
+    FROM "OrderReturnStatus"
     WHERE shop = ${shop}
       AND "orderGid" = ${orderGid}
     LIMIT 1
@@ -355,22 +381,57 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
 
   if (existing[0]?.documentNumber) {
     await prisma.$executeRaw`
-      UPDATE "OrderPackingSlipStatus"
+      UPDATE "OrderReturnStatus"
       SET "convertedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
       WHERE shop = ${shop} AND "orderGid" = ${orderGid}
     `;
     return existing[0].documentNumber;
   }
 
+  // Before Settings → Return order sync: keep the order on the Return list
+  // without inventing RET- numbers (same pattern as Draft before Draft sync).
+  if (!(await hasReturnNumbersSyncedFlag(shop))) {
+    if (existing[0]) {
+      await prisma.$executeRaw`
+        UPDATE "OrderReturnStatus"
+        SET "convertedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
+        WHERE shop = ${shop} AND "orderGid" = ${orderGid}
+      `;
+      return "";
+    }
+    await prisma.$executeRaw`
+      INSERT INTO "OrderReturnStatus" (
+        id, shop, "orderGid", "convertedAt", sequence, "documentNumber",
+        "createdAt", "updatedAt"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${shop},
+        ${orderGid},
+        CURRENT_TIMESTAMP,
+        NULL,
+        NULL,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (shop, "orderGid") DO UPDATE SET
+        "convertedAt" = CURRENT_TIMESTAMP,
+        "updatedAt" = CURRENT_TIMESTAMP
+    `;
+    return "";
+  }
+
+  const series = await loadNumberSeriesEntryForShop(shop, "return");
+
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const { sequence, documentNumber } = await allocateNextPackingSlipNumber(
+    const { sequence, documentNumber } = await allocateNextReturnNumber(
       shop,
       series,
     );
     try {
       if (existing[0]) {
         const updated = await prisma.$executeRaw`
-          UPDATE "OrderPackingSlipStatus"
+          UPDATE "OrderReturnStatus"
           SET
             sequence = ${sequence},
             "documentNumber" = COALESCE("documentNumber", ${documentNumber}),
@@ -386,7 +447,7 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
           Array<{ documentNumber: string | null }>
         >`
           SELECT "documentNumber"
-          FROM "OrderPackingSlipStatus"
+          FROM "OrderReturnStatus"
           WHERE shop = ${shop}
             AND "orderGid" = ${orderGid}
           LIMIT 1
@@ -396,7 +457,7 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
       }
 
       await prisma.$executeRaw`
-        INSERT INTO "OrderPackingSlipStatus" (
+        INSERT INTO "OrderReturnStatus" (
           id, shop, "orderGid", "convertedAt", sequence, "documentNumber",
           "createdAt", "updatedAt"
         )
@@ -419,8 +480,8 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
   }
 
   // Fallback if number columns are missing on older DBs.
-  if (hasPackingSlipDelegate()) {
-    await prisma.orderPackingSlipStatus.upsert({
+  if (hasReturnDelegate()) {
+    await prisma.orderReturnStatus.upsert({
       where: {
         shop_orderGid: { shop, orderGid },
       },
@@ -437,7 +498,7 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
   }
 
   await prisma.$executeRaw`
-    INSERT INTO "OrderPackingSlipStatus" (id, shop, "orderGid", "convertedAt", "createdAt", "updatedAt")
+    INSERT INTO "OrderReturnStatus" (id, shop, "orderGid", "convertedAt", "createdAt", "updatedAt")
     VALUES (
       ${randomUUID()},
       ${shop},
@@ -454,22 +515,22 @@ export async function markOrderPackingSlip(shop: string, orderGid: string) {
   return "";
 }
 
-/** Remove packing-slip marks for the given orders. */
-export async function unmarkOrdersPackingSlip(
+/** Remove return marks for the given orders. */
+export async function unmarkOrdersReturn(
   shop: string,
   orderGids: string[],
 ): Promise<number> {
   if (orderGids.length === 0) return 0;
 
-  if (hasPackingSlipDelegate()) {
-    const result = await prisma.orderPackingSlipStatus.deleteMany({
+  if (hasReturnDelegate()) {
+    const result = await prisma.orderReturnStatus.deleteMany({
       where: { shop, orderGid: { in: orderGids } },
     });
     return result.count;
   }
 
   const result = await prisma.$executeRaw`
-    DELETE FROM "OrderPackingSlipStatus"
+    DELETE FROM "OrderReturnStatus"
     WHERE shop = ${shop}
       AND "orderGid" IN (${Prisma.join(orderGids)})
   `;

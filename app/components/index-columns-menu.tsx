@@ -57,6 +57,19 @@ export const INVOICE_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "actions", label: "Actions", locked: true },
 ];
 
+export const DRAFT_INDEX_COLUMNS: IndexColumnDef[] = [
+  { id: "document", label: "Draft", locked: true },
+  { id: "reference", label: "Reference" },
+  { id: "shopifyOrderNumber", label: "Order", defaultHidden: true },
+  { id: "date", label: "Date" },
+  { id: "company", label: "Company" },
+  { id: "customer", label: "Customer" },
+  { id: "total", label: "Amount" },
+  { id: "balanceDue", label: "Balance Due" },
+  { id: "paymentStatus", label: "Status" },
+  { id: "actions", label: "Actions", locked: true },
+];
+
 export const CREDIT_NOTE_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "document", label: "Credit Note", locked: true },
   { id: "reference", label: "Reference" },
@@ -71,6 +84,18 @@ export const CREDIT_NOTE_INDEX_COLUMNS: IndexColumnDef[] = [
 
 export const PACKING_SLIP_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "document", label: "Packing Slip", locked: true },
+  { id: "reference", label: "Order" },
+  { id: "salesOrderNumber", label: "Sales Order", defaultHidden: true },
+  { id: "invoiceNumber", label: "Invoice", defaultHidden: true },
+  { id: "date", label: "Date" },
+  { id: "company", label: "Company" },
+  { id: "customer", label: "Customer" },
+  { id: "fulfillmentStatus", label: "Fulfillment" },
+  { id: "actions", label: "Actions", locked: true },
+];
+
+export const RETURN_INDEX_COLUMNS: IndexColumnDef[] = [
+  { id: "document", label: "Return", locked: true },
   { id: "reference", label: "Order" },
   { id: "salesOrderNumber", label: "Sales Order", defaultHidden: true },
   { id: "invoiceNumber", label: "Invoice", defaultHidden: true },

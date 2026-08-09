@@ -1698,6 +1698,49 @@ export const INVOICE_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] = [
 
 export const DEFAULT_INVOICE_TEMPLATE_ID = "invoice-professional";
 
+/**
+ * 15 draft-order designs — same layouts as invoice, independent Active selection.
+ * Ids use `draft-` prefix so Templates → Draft is a first-class document type.
+ * No Paid Amount / Balance Due (drafts are not payment documents).
+ */
+export const DRAFT_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] =
+  INVOICE_TEMPLATE_PRESETS.map((preset) => ({
+    ...preset,
+    id: preset.id.replace(/^invoice-/, "draft-"),
+    description: preset.description
+      .replace(/\binvoice\b/gi, "draft")
+      .replace(/\bInvoice\b/g, "Draft"),
+    showPaidAmount: false,
+    showBalanceDue: false,
+    admin: adminCaps({
+      ...preset.admin,
+      paymentAmounts: false,
+    }),
+  }));
+
+export const DEFAULT_DRAFT_TEMPLATE_ID = "draft-professional";
+
+/**
+ * 15 return designs — same layouts as invoice, independent Active selection.
+ * Ids use `return-` prefix. No Paid Amount / Balance Due.
+ */
+export const RETURN_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] =
+  INVOICE_TEMPLATE_PRESETS.map((preset) => ({
+    ...preset,
+    id: preset.id.replace(/^invoice-/, "return-"),
+    description: preset.description
+      .replace(/\binvoice\b/gi, "return")
+      .replace(/\bInvoice\b/g, "Return"),
+    showPaidAmount: false,
+    showBalanceDue: false,
+    admin: adminCaps({
+      ...preset.admin,
+      paymentAmounts: false,
+    }),
+  }));
+
+export const DEFAULT_RETURN_TEMPLATE_ID = "return-professional";
+
 /** Credit-note admin: logo/meta/images/tax only — no Paid/Balance Due controls. */
 function creditAdminCaps(
   partial: Omit<TemplateAdminCapabilities, "paymentAmounts">,
@@ -2711,6 +2754,8 @@ export const DEFAULT_PACKING_SLIP_TEMPLATE_ID = "packing-standard";
 const ALL_DOCUMENT_TEMPLATE_PRESETS: readonly SalesOrderTemplatePreset[] = [
   ...SALES_ORDER_TEMPLATE_PRESETS,
   ...INVOICE_TEMPLATE_PRESETS,
+  ...DRAFT_TEMPLATE_PRESETS,
+  ...RETURN_TEMPLATE_PRESETS,
   ...CREDIT_NOTE_TEMPLATE_PRESETS,
   ...PACKING_SLIP_TEMPLATE_PRESETS,
 ];
@@ -3717,9 +3762,18 @@ export function salesOrderTemplateName(templateId: string) {
 
 export function resolveDocumentTypeForTemplateId(
   templateId: string,
-): "sales-order" | "invoice" | "credit-note" | "packing-slip" | null {
+):
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "return"
+  | "credit-note"
+  | "packing-slip"
+  | null {
   if (templateId.startsWith("sales-")) return "sales-order";
   if (templateId.startsWith("invoice-")) return "invoice";
+  if (templateId.startsWith("draft-")) return "draft";
+  if (templateId.startsWith("return-")) return "return";
   if (templateId.startsWith("credit-")) return "credit-note";
   if (templateId.startsWith("packing-")) return "packing-slip";
   return null;
@@ -3782,8 +3836,11 @@ export function defaultTemplateSettings(
   const preset = getSalesOrderTemplatePreset(templateId);
   const isPremium = isPremiumTemplatePreset(templateId);
   const isInvoice = templateId.startsWith("invoice-");
+  const isDraft = templateId.startsWith("draft-");
+  const isReturn = templateId.startsWith("return-");
   const isCreditNote = templateId.startsWith("credit-");
   const isPackingSlip = templateId.startsWith("packing-");
+  const isNonPaymentDoc = isDraft || isReturn || isCreditNote || isPackingSlip;
   return {
     name,
     language: "en",
@@ -3800,7 +3857,7 @@ export function defaultTemplateSettings(
     },
     taxSummary: {
       ...defaultTaxSummarySettings(),
-      enabled: preset.showTaxSummary === true && !isPackingSlip,
+      enabled: preset.showTaxSummary === true && !isPackingSlip && !isReturn,
     },
     fontFamily: preset.fontFamily,
     backgroundColor: preset.backgroundColor,
@@ -3822,7 +3879,7 @@ export function defaultTemplateSettings(
       showOrderNumber: true,
       showDate: true,
       showExpectedShipmentDate: isPackingSlip,
-      showPaymentMethod: !isCreditNote && !isPackingSlip,
+      showPaymentMethod: !isNonPaymentDoc,
     },
     billingDetails: [
       { key: "company", enabled: true, label: "Company" },
@@ -3849,28 +3906,42 @@ export function defaultTemplateSettings(
         ? "PACKING SLIP"
         : isCreditNote
           ? "CREDIT NOTE"
-          : isInvoice
-            ? "INVOICE"
-            : "SALES ORDER",
+          : isReturn
+            ? "RETURN"
+            : isDraft
+              ? "DRAFT"
+              : isInvoice
+                ? "INVOICE"
+                : "SALES ORDER",
       orderNumber: isPackingSlip
         ? "Packing Slip#"
         : isCreditNote
           ? "Credit Note#"
-          : isInvoice
-            ? "Invoice#"
-            : "Sales Order#",
+          : isReturn
+            ? "Return#"
+            : isDraft
+              ? "Draft#"
+              : isInvoice
+                ? "Invoice#"
+                : "Sales Order#",
       date: isPackingSlip
         ? "Packing Date"
         : isCreditNote
           ? "Credit Note Date"
-          : isInvoice
-            ? "Invoice Date"
-            : "Order Date",
+          : isReturn
+            ? "Return Date"
+            : isDraft
+              ? "Draft Date"
+              : isInvoice
+                ? "Invoice Date"
+                : "Order Date",
       reference: isPackingSlip
         ? "Order Ref#"
         : isCreditNote
           ? "Invoice Ref#"
-          : "Ref#",
+          : isReturn
+            ? "Order Ref#"
+            : "Ref#",
       expectedShipmentDate: "Expected Shipment Date",
       paymentMethod: "Payment Method",
     },
@@ -3879,9 +3950,13 @@ export function defaultTemplateSettings(
         ? "PS-"
         : isCreditNote
           ? "CN-"
-          : isInvoice
-            ? "INV-"
-            : "SO-",
+          : isReturn
+            ? "RET-"
+            : isDraft
+              ? "DFT-"
+              : isInvoice
+                ? "INV-"
+                : "SO-",
       startingNumber: "0001",
       suffix: "",
     },
@@ -3899,23 +3974,29 @@ export function defaultTemplateSettings(
     totals: {
       showSubtotal: !isPackingSlip,
       subtotalLabel: "Sub Total",
-      showQuantity: isPackingSlip,
-      itemsInTotalLabel: isPackingSlip ? "Items packed" : "Items in Total",
+      showQuantity: isPackingSlip || isReturn,
+      itemsInTotalLabel: isPackingSlip
+        ? "Items packed"
+        : isReturn
+          ? "Items returned"
+          : "Items in Total",
       // Invoice / credit note / packing: tax line details off by default.
-      showTaxLines: isPremium && !isInvoice && !isCreditNote && !isPackingSlip,
-      showDiscountAmount: !isPackingSlip,
+      showTaxLines:
+        isPremium &&
+        !isInvoice &&
+        !isDraft &&
+        !isReturn &&
+        !isCreditNote &&
+        !isPackingSlip,
+      showDiscountAmount: !isPackingSlip && !isReturn,
       discountAmountLabel: "Discount",
-      showShippingPrice: !isCreditNote && !isPackingSlip,
+      showShippingPrice: !isCreditNote && !isPackingSlip && !isReturn,
       shippingPriceLabel: "Shipping Charge",
-      showVatAmount: !isPackingSlip,
+      showVatAmount: !isPackingSlip && !isReturn,
       vatAmountLabel: "Total Tax",
-      showPaidAmount: isCreditNote || isPackingSlip
-        ? false
-        : isInvoice
-          ? true
-          : preset.showPaidAmount === true,
+      showPaidAmount: isNonPaymentDoc ? false : isInvoice ? true : preset.showPaidAmount === true,
       paidAmountLabel: "Paid Amount",
-      showBalanceDue: isCreditNote || isPackingSlip
+      showBalanceDue: isNonPaymentDoc
         ? false
         : isInvoice || templateId === "sales-standard"
           ? true

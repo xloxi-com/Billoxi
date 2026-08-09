@@ -10,6 +10,21 @@ import {
 } from "./order-invoice-status.server";
 import { getPackingSlipOrderGids, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, ensurePackingSlipDocumentNumbers, type PackingSlipOrderMeta } from "./order-packing-slip-status.server";
 import {
+  ensureReturnDocumentNumbers,
+  getAllReturnOrderGids,
+  getReturnMetaByOrderGids,
+  getReturnOrderGids,
+  type ReturnOrderMeta,
+} from "./order-return-status.server";
+import { hasReturnOrderNumbersSynced } from "./return-order-number-sync.server";
+import {
+  ensureDraftDocumentNumbers,
+  getAllDraftOrderGids,
+  getDraftMetaByOrderGids,
+  getDraftOrderGids,
+  type DraftOrderMeta,
+} from "./order-invoice-draft-status.server";
+import {
   ensureCreditNoteDocumentNumbers,
   getAllCreditNoteOrderGids,
   getCreditNoteMetaByOrderGids,
@@ -106,6 +121,12 @@ export type SalesOrderRow = {
   invoiced: boolean;
   packingSlip: boolean;
   packingSlipNumber: string;
+  returnSlip: boolean;
+  returnNumber: string;
+  returnedAt: string | null;
+  draft: boolean;
+  draftNumber: string;
+  draftedAt: string | null;
   creditNote: boolean;
   creditNoteNumber: string;
   creditNoteAt: string | null;
@@ -748,6 +769,12 @@ function toRow(
   packingSlipAt: Date | null = null,
   /** Credit note index: Amount column = Credit Total (refunded), not order total. */
   useCreditNoteAmount = false,
+  draft = false,
+  draftNumber = "",
+  draftedAt: Date | null = null,
+  returnSlip = false,
+  returnNumber = "",
+  returnedAt: Date | null = null,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
@@ -756,9 +783,13 @@ function toRow(
       ? creditNoteAt
       : useDocumentDate && packingSlip && packingSlipAt
         ? packingSlipAt
-        : useDocumentDate && invoicedAt
-          ? invoicedAt
-          : null;
+        : useDocumentDate && returnSlip && returnedAt
+          ? returnedAt
+          : useDocumentDate && draft && draftedAt
+            ? draftedAt
+            : useDocumentDate && invoicedAt
+              ? invoicedAt
+              : null;
   const displayDateIso = documentDate
     ? documentDate.toISOString()
     : order.createdAt;
@@ -784,6 +815,12 @@ function toRow(
     invoiced,
     packingSlip,
     packingSlipNumber: packingSlipNumber.trim(),
+    returnSlip,
+    returnNumber: returnNumber.trim(),
+    returnedAt: returnedAt ? returnedAt.toISOString() : null,
+    draft,
+    draftNumber: draftNumber.trim(),
+    draftedAt: draftedAt ? draftedAt.toISOString() : null,
     creditNote,
     creditNoteNumber: creditNoteNumber.trim(),
     creditNoteAt: creditNoteAt ? creditNoteAt.toISOString() : null,
@@ -847,7 +884,9 @@ export async function loadSalesOrdersPage(
   shop: string,
   params: ReturnType<typeof parseSalesOrdersSearchParams>,
   templateId: string = DEFAULT_SALES_ORDER_TEMPLATE_ID,
-  options?: { listFilter?: "invoiced" | "credit-note" | "packing-slip" },
+  options?: {
+    listFilter?: "invoiced" | "credit-note" | "packing-slip" | "return" | "draft";
+  },
 ): Promise<SalesOrdersPage> {
   const sortConfig = SORT_OPTIONS[params.sortSelected];
   const availableViews = SALES_ORDER_VIEWS.map((_, index) => index);
@@ -860,6 +899,8 @@ export async function loadSalesOrdersPage(
     options?.listFilter === "invoiced" || viewQuery === INVOICED_VIEW_QUERY;
   const isCreditNoteView = options?.listFilter === "credit-note";
   const isPackingSlipView = options?.listFilter === "packing-slip";
+  const isReturnView = options?.listFilter === "return";
+  const isDraftView = options?.listFilter === "draft";
 
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
@@ -882,13 +923,17 @@ export async function loadSalesOrdersPage(
     templateId,
     params.after ?? "",
     params.before ?? "",
-    isPackingSlipView
-      ? "packing-slip"
-      : isCreditNoteView
-        ? "credit-note"
-        : isInvoicedView
-          ? INVOICED_VIEW_QUERY
-          : viewQuery,
+    isDraftView
+      ? "draft"
+      : isReturnView
+        ? "return"
+        : isPackingSlipView
+          ? "packing-slip"
+          : isCreditNoteView
+            ? "credit-note"
+            : isInvoicedView
+              ? INVOICED_VIEW_QUERY
+              : viewQuery,
     params.query,
     params.paymentStatus,
     params.fulfillmentStatus,
@@ -904,6 +949,8 @@ export async function loadSalesOrdersPage(
         !isInvoicedView &&
         !isCreditNoteView &&
         !isPackingSlipView &&
+        !isReturnView &&
+        !isDraftView &&
         cached.data.orders.some(
           (order) => !String(order.salesOrderNumber || "").trim(),
         )
@@ -956,6 +1003,8 @@ export async function loadSalesOrdersPage(
     forceInvoiced: boolean,
     forceCreditNote = false,
     forcePackingSlip = false,
+    forceDraft = false,
+    forceReturn = false,
   ): Promise<SalesOrdersPage> => {
     const orderGids = nodes.map((order) => order.id);
 
@@ -974,8 +1023,12 @@ export async function loadSalesOrdersPage(
     >();
     let packingSlipGids = new Set<string>();
     let packingSlipMeta = new Map<string, PackingSlipOrderMeta>();
+    let returnGids = new Set<string>();
+    let returnMeta = new Map<string, ReturnOrderMeta>();
     let creditNoteGids = new Set<string>();
     let creditNoteMeta = new Map<string, CreditNoteOrderMeta>();
+    let draftGids = new Set<string>();
+    let draftMeta = new Map<string, DraftOrderMeta>();
 
     if (orderGids.length > 0) {
       if (forceInvoiced) {
@@ -1009,23 +1062,48 @@ export async function loadSalesOrdersPage(
         invoicedMeta = invMeta;
         packingSlipMeta = packingMeta;
         packingSlipGids = new Set(packingMeta.keys());
+      } else if (forceReturn) {
+        const [soNumbers, invMeta, retMeta] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedMetaByOrderGids(shop, orderGids),
+          getReturnMetaByOrderGids(shop, orderGids),
+        ]);
+        documentNumbers = soNumbers;
+        invoicedMeta = invMeta;
+        returnMeta = retMeta;
+        returnGids = new Set(retMeta.keys());
+      } else if (forceDraft) {
+        const [soNumbers, invMeta, drafts] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedMetaByOrderGids(shop, orderGids),
+          getDraftMetaByOrderGids(shop, orderGids),
+        ]);
+        documentNumbers = soNumbers;
+        invoicedMeta = invMeta;
+        draftMeta = drafts;
+        draftGids = new Set(drafts.keys());
       } else {
         // Sales Orders list: flags only — skip heavy meta / number writes.
-        const [soNumbers, invoicedGids, packingGids, cnGids] = await Promise.all(
-          [
-            getSalesOrderDocumentNumbersByOrderGids(
-              shop,
-              templateId,
-              orderGids,
-            ),
-            getInvoicedOrderGids(shop, orderGids),
-            getPackingSlipOrderGids(shop, orderGids),
-            getCreditNoteOrderGids(shop, orderGids),
-          ],
-        );
+        const [
+          soNumbers,
+          invoicedGids,
+          packingGids,
+          returnOrderGids,
+          cnGids,
+          draftOrderGids,
+        ] = await Promise.all([
+          getSalesOrderDocumentNumbersByOrderGids(shop, templateId, orderGids),
+          getInvoicedOrderGids(shop, orderGids),
+          getPackingSlipOrderGids(shop, orderGids),
+          getReturnOrderGids(shop, orderGids),
+          getCreditNoteOrderGids(shop, orderGids),
+          getDraftOrderGids(shop, orderGids),
+        ]);
         documentNumbers = soNumbers;
         packingSlipGids = packingGids;
+        returnGids = returnOrderGids;
         creditNoteGids = cnGids;
+        draftGids = draftOrderGids;
         for (const gid of invoicedGids) {
           invoicedMeta.set(gid, {
             invoicedAt: new Date(0),
@@ -1047,6 +1125,8 @@ export async function loadSalesOrdersPage(
       !forceInvoiced &&
       !forceCreditNote &&
       !forcePackingSlip &&
+      !forceReturn &&
+      !forceDraft &&
       orderGids.length > 0
     ) {
       const missing = orderGids.filter(
@@ -1077,7 +1157,7 @@ export async function loadSalesOrdersPage(
 
     const ensuredInvoiceNumbers = new Map<string, string>();
 
-    // Credit note / packing slip lists: never block navigation on allocate.
+    // Credit note / packing slip / return / draft lists: never block navigation on allocate.
     // Missing numbers backfill in background; next load / detail shows them.
     let ensuredCreditNoteNumbers = new Map<string, string>();
     if (forceCreditNote && orderGids.length > 0) {
@@ -1105,11 +1185,44 @@ export async function loadSalesOrdersPage(
       }
     }
 
+    let ensuredReturnNumbers = new Map<string, string>();
+    // After Return sync: fill gaps. Before sync: leave "—" until merchant Syncs.
+    if (
+      forceReturn &&
+      orderGids.length > 0 &&
+      (await hasReturnOrderNumbersSynced(shop))
+    ) {
+      const missing = orderGids.filter((gid) => {
+        const num = returnMeta.get(gid)?.documentNumber?.trim();
+        return !num;
+      });
+      if (missing.length > 0) {
+        void ensureReturnDocumentNumbers(shop, missing).catch((error) => {
+          console.error("Background return number ensure failed:", error);
+        });
+      }
+    }
+
+    let ensuredDraftNumbers = new Map<string, string>();
+    if (forceDraft && orderGids.length > 0) {
+      const missing = orderGids.filter((gid) => {
+        const num = draftMeta.get(gid)?.documentNumber?.trim();
+        return !num;
+      });
+      if (missing.length > 0) {
+        void ensureDraftDocumentNumbers(shop, missing).catch((error) => {
+          console.error("Background draft number ensure failed:", error);
+        });
+      }
+    }
+
     return {
       orders: nodes.map((order) => {
         const meta = invoicedMeta.get(order.id) ?? null;
         const cnMeta = creditNoteMeta.get(order.id) ?? null;
         const psMeta = packingSlipMeta.get(order.id) ?? null;
+        const retMeta = returnMeta.get(order.id) ?? null;
+        const dMeta = draftMeta.get(order.id) ?? null;
         const invoiceNumber =
           meta?.documentNumber ||
           ensuredInvoiceNumbers.get(order.id) ||
@@ -1128,6 +1241,18 @@ export async function loadSalesOrdersPage(
           psMeta?.documentNumber ||
           ensuredPackingSlipNumbers.get(order.id) ||
           "";
+        const hasReturn =
+          forceReturn || returnGids.has(order.id) || Boolean(retMeta);
+        const returnNumber =
+          retMeta?.documentNumber ||
+          ensuredReturnNumbers.get(order.id) ||
+          "";
+        const hasDraft =
+          forceDraft || draftGids.has(order.id) || Boolean(dMeta);
+        const draftNumber =
+          dMeta?.documentNumber ||
+          ensuredDraftNumbers.get(order.id) ||
+          "";
         return toRow(
           order,
           documentNumbers.get(order.id) ?? null,
@@ -1137,7 +1262,11 @@ export async function loadSalesOrdersPage(
             ? meta.invoicedAt
             : null,
           invoiceNumber,
-          forceInvoiced || forceCreditNote || forcePackingSlip,
+          forceInvoiced ||
+            forceCreditNote ||
+            forcePackingSlip ||
+            forceReturn ||
+            forceDraft,
           meta?.createdAt && meta.createdAt.getTime() > 0
             ? meta.createdAt
             : meta?.invoicedAt && meta.invoicedAt.getTime() > 0
@@ -1151,6 +1280,12 @@ export async function loadSalesOrdersPage(
           packingSlipNumber,
           psMeta?.convertedAt ?? null,
           forceCreditNote,
+          hasDraft,
+          draftNumber,
+          dMeta?.draftedAt ?? null,
+          hasReturn,
+          returnNumber,
+          retMeta?.convertedAt ?? null,
         );
       }),
       pageInfo,
@@ -1169,6 +1304,8 @@ export async function loadSalesOrdersPage(
     forceInvoiced: boolean,
     forceCreditNote: boolean,
     forcePackingSlip = false,
+    forceDraft = false,
+    forceReturn = false,
   ) => {
     if (sourceGids.length === 0) return emptyPage();
 
@@ -1246,6 +1383,8 @@ export async function loadSalesOrdersPage(
       forceInvoiced,
       forceCreditNote,
       forcePackingSlip,
+      forceDraft,
+      forceReturn,
     );
     listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
     pruneCache(now);
@@ -1291,6 +1430,55 @@ export async function loadSalesOrdersPage(
     return filterAndPaginateDocumentOrders(
       packingGids,
       metaForSort,
+      false,
+      false,
+      true,
+    );
+  }
+
+  // Return list: fetch by GID via nodes().
+  if (isReturnView) {
+    const returnOrderGids = await getAllReturnOrderGids(shop);
+    const meta = await getReturnMetaByOrderGids(shop, returnOrderGids);
+    const metaForSort = new Map<
+      string,
+      { sortAt: number; searchNumber?: string }
+    >();
+    for (const [gid, row] of meta) {
+      metaForSort.set(gid, {
+        sortAt: row.convertedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
+        searchNumber: row.documentNumber || undefined,
+      });
+    }
+    return filterAndPaginateDocumentOrders(
+      returnOrderGids,
+      metaForSort,
+      false,
+      false,
+      false,
+      false,
+      true,
+    );
+  }
+
+  // Draft invoice list: fetch by GID via nodes().
+  if (isDraftView) {
+    const draftGids = await getAllDraftOrderGids(shop);
+    const meta = await getDraftMetaByOrderGids(shop, draftGids);
+    const metaForSort = new Map<
+      string,
+      { sortAt: number; searchNumber?: string }
+    >();
+    for (const [gid, row] of meta) {
+      metaForSort.set(gid, {
+        sortAt: row.draftedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
+        searchNumber: row.documentNumber || undefined,
+      });
+    }
+    return filterAndPaginateDocumentOrders(
+      draftGids,
+      metaForSort,
+      false,
       false,
       false,
       true,

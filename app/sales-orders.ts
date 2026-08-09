@@ -29,6 +29,14 @@ export const INVOICE_LIST_VIEWS = [
   { id: "refunded", label: "Refunded", payment: "refunded" },
 ] as const;
 
+/** Draft list tabs — Shopify DraftOrder status filters. */
+export const DRAFT_LIST_VIEWS = [
+  { id: "all", label: "All", payment: "" },
+  { id: "open", label: "Open", payment: "open" },
+  { id: "invoice_sent", label: "Invoice sent", payment: "invoice_sent" },
+  { id: "completed", label: "Completed", payment: "completed" },
+] as const;
+
 /** Credit note list tabs — same payment filters as invoice list. */
 export const CREDIT_NOTE_LIST_VIEWS = INVOICE_LIST_VIEWS;
 
@@ -38,4 +46,9 @@ export const PACKING_SLIP_LIST_VIEWS = [
   { id: "unfulfilled", label: "Unfulfilled", fulfillment: "unfulfilled" },
   { id: "partial", label: "Partial", fulfillment: "partially_fulfilled" },
   { id: "fulfilled", label: "Fulfilled", fulfillment: "fulfilled" },
+] as const;
+
+/** Return list tabs — simple all view. */
+export const RETURN_LIST_VIEWS = [
+  { id: "all", label: "All", fulfillment: "" },
 ] as const;

@@ -30,6 +30,8 @@ export default function App() {
         </s-link>
         <s-link href="/app/sales-order">Sales Orders</s-link>
         <s-link href="/app/invoice">Invoice</s-link>
+        <s-link href="/app/draft">Draft</s-link>
+        <s-link href="/app/return">Return</s-link>
         <s-link href="/app/credit-note">Credit Note</s-link>
         <s-link href="/app/packing-slip">Packing Slip</s-link>
         <s-link href="/app/templates">Templates</s-link>

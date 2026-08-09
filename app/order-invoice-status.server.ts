@@ -16,6 +16,7 @@ import {
   loadNumberSeriesForShop,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
+import { unmarkOrdersDraft } from "./order-invoice-draft-status.server";
 
 type OrderGidRow = { orderGid: string };
 type OrderInvoiceAtRow = { orderGid: string; invoicedAt: Date };
@@ -421,17 +422,19 @@ export async function markOrderInvoiced(shop: string, orderGid: string) {
       SET "invoicedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
       WHERE shop = ${shop} AND "orderGid" = ${orderGid}
     `;
+    void unmarkOrdersDraft(shop, [orderGid]).catch(() => {});
     return existing[0].documentNumber;
   }
 
   if (existing[0]) {
-    return (await assignInvoiceNumberToOrder(shop, orderGid, series)) ?? "";
+    const assigned =
+      (await assignInvoiceNumberToOrder(shop, orderGid, series)) ?? "";
+    void unmarkOrdersDraft(shop, [orderGid]).catch(() => {});
+    return assigned;
   }
 
-  const { sequence, documentNumber } = await allocateNextInvoiceNumber(
-    shop,
-    series,
-  );
+  const { sequence, documentNumber: allocatedNumber } =
+    await allocateNextInvoiceNumber(shop, series);
   await prisma.$executeRaw`
     INSERT INTO "OrderInvoiceStatus" (
       id, shop, "orderGid", "invoicedAt", sequence, "documentNumber", "createdAt", "updatedAt"
@@ -442,7 +445,7 @@ export async function markOrderInvoiced(shop: string, orderGid: string) {
       ${orderGid},
       CURRENT_TIMESTAMP,
       ${sequence},
-      ${documentNumber},
+      ${allocatedNumber},
       CURRENT_TIMESTAMP,
       CURRENT_TIMESTAMP
     )
@@ -453,10 +456,14 @@ export async function markOrderInvoiced(shop: string, orderGid: string) {
   `;
 
   // If conflict row already existed without a number, assign now.
-  return (
+  const documentNumber =
     (await assignInvoiceNumberToOrder(shop, orderGid, series)) ||
-    documentNumber
-  );
+    allocatedNumber;
+
+  // Issued invoice replaces any draft for this order.
+  void unmarkOrdersDraft(shop, [orderGid]).catch(() => {});
+
+  return documentNumber;
 }
 
 /** Clear invoiced flags (e.g. after fixing false positives from sales-order print). */

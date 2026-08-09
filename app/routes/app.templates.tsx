@@ -29,8 +29,10 @@ import {
   paperPaddingCss,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  DRAFT_TEMPLATE_PRESETS,
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
+  RETURN_TEMPLATE_PRESETS,
   salesOrderTemplateName,
   type TemplateEditorSettings,
 } from "../sales-order-document";
@@ -65,7 +67,13 @@ const SalesOrderLiveDocument = lazy(() =>
   })),
 );
 
-type DocumentType = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentType =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 type Template = {
   id: string;
@@ -96,6 +104,11 @@ const documentTypes: Array<{
     description: "Choose the layout used for invoices.",
   },
   {
+    id: "draft",
+    label: "Draft",
+    description: "Choose the layout used for draft orders.",
+  },
+  {
     id: "credit-note",
     label: "Credit Note",
     description: "Choose the layout used for credit notes.",
@@ -104,6 +117,11 @@ const documentTypes: Array<{
     id: "packing-slip",
     label: "Packing Slip",
     description: "Choose the layout used for packing slips.",
+  },
+  {
+    id: "return",
+    label: "Return",
+    description: "Choose the layout used for returns.",
   },
 ];
 
@@ -116,6 +134,13 @@ const templates: Record<DocumentType, Template[]> = {
     alignment: preset.alignment,
   })),
   invoice: INVOICE_TEMPLATE_PRESETS.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    accent: preset.accent,
+    alignment: preset.alignment,
+  })),
+  draft: DRAFT_TEMPLATE_PRESETS.map((preset) => ({
     id: preset.id,
     name: preset.name,
     description: preset.description,
@@ -136,6 +161,13 @@ const templates: Record<DocumentType, Template[]> = {
     accent: preset.accent,
     alignment: preset.alignment,
   })),
+  return: RETURN_TEMPLATE_PRESETS.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    accent: preset.accent,
+    alignment: preset.alignment,
+  })),
 };
 
 const isDocumentType = (value: string | null): value is DocumentType => {
@@ -146,7 +178,13 @@ const selectionKey = (documentType: DocumentType) =>
   `invoice-app:selected-template:${documentType}`;
 
 function buildPreviewBundle(args: {
-  documentType: "sales-order" | "invoice" | "credit-note" | "packing-slip";
+  documentType:
+    | "sales-order"
+    | "invoice"
+    | "draft"
+    | "credit-note"
+    | "packing-slip"
+    | "return";
   templateId: string;
   customizationSettings: unknown;
   storeDetails: StoreDetails;
@@ -174,17 +212,23 @@ function buildPreviewBundle(args: {
   const knownTitles = new Set([
     "SALES ORDER",
     "INVOICE",
+    "DRAFT",
     "CREDIT NOTE",
     "PACKING SLIP",
+    "RETURN",
   ]);
   const expected =
-    args.documentType === "invoice"
-      ? "INVOICE"
-      : args.documentType === "credit-note"
-        ? "CREDIT NOTE"
-        : args.documentType === "packing-slip"
-          ? "PACKING SLIP"
-          : "SALES ORDER";
+    args.documentType === "draft"
+      ? "DRAFT"
+      : args.documentType === "invoice"
+        ? "INVOICE"
+        : args.documentType === "credit-note"
+          ? "CREDIT NOTE"
+          : args.documentType === "packing-slip"
+            ? "PACKING SLIP"
+            : args.documentType === "return"
+              ? "RETURN"
+              : "SALES ORDER";
   if (knownTitles.has(title) && title !== expected) {
     settings.transactionLabels = {
       ...settings.transactionLabels,
@@ -237,7 +281,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
               where: {
                 shop: session.shop,
                 documentType: {
-                  in: ["sales-order", "invoice", "credit-note", "packing-slip"],
+                  in: [
+                    "sales-order",
+                    "invoice",
+                    "draft",
+                    "credit-note",
+                    "packing-slip",
+                    "return",
+                  ],
                 },
               },
               select: { documentType: true, templateId: true, settings: true },
@@ -403,8 +454,20 @@ function buildPreviewSettings(
     }
     previewSettings.totals = {
       ...previewSettings.totals,
-      showPaidAmount: true,
-      showBalanceDue: true,
+      showPaidAmount:
+        templateId.startsWith("draft-") ||
+        templateId.startsWith("credit-") ||
+        templateId.startsWith("packing-") ||
+        templateId.startsWith("return-")
+          ? false
+          : true,
+      showBalanceDue:
+        templateId.startsWith("draft-") ||
+        templateId.startsWith("credit-") ||
+        templateId.startsWith("packing-") ||
+        templateId.startsWith("return-")
+          ? false
+          : true,
       paymentStatusStyle: preset.paymentStatusStyle,
     };
     previewSettings.fontFamily = preset.fontFamily || previewSettings.fontFamily;

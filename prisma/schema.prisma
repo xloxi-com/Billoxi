@@ -62,10 +62,16 @@ model ShopSettings {
   creditNoteSettings Json     @default("{}")
   /// Auto invoice when order is paid.
   invoiceSettings    Json     @default("{}")
-  /// Off | Shopify Markets | Coin — document currency source.
+  /// Off | Shopify Markets — document currency source.
   multiCurrencySettings Json  @default("{}")
   /// Set when existing Shopify orders were numbered on install / first sync.
   salesOrderNumbersSyncedAt DateTime?
+  /// Set when existing Shopify draft orders were numbered via Draft sync.
+  draftOrderNumbersSyncedAt DateTime?
+  /// Set when existing Shopify returns were numbered via Return sync.
+  returnOrderNumbersSyncedAt DateTime?
+  /// Set when existing paid Shopify orders were invoiced via Invoice sync.
+  invoiceOrderNumbersSyncedAt DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -120,7 +126,42 @@ model OrderInvoiceStatus {
   @@index([shop])
 }
 
+/** Draft invoices — separate from issued OrderInvoiceStatus. */
+model OrderInvoiceDraftStatus {
+  id             String   @id @default(cuid())
+  shop           String
+  orderGid       String
+  draftedAt      DateTime @default(now())
+  sequence       Int?
+  documentNumber String?
+  customerNote   String?
+  terms          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([shop, orderGid])
+  @@unique([shop, sequence])
+  @@unique([shop, documentNumber])
+  @@index([shop])
+}
+
 model OrderPackingSlipStatus {
+  id             String   @id @default(cuid())
+  shop           String
+  orderGid       String
+  convertedAt    DateTime @default(now())
+  sequence       Int?
+  documentNumber String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([shop, orderGid])
+  @@unique([shop, sequence])
+  @@unique([shop, documentNumber])
+  @@index([shop])
+}
+
+model OrderReturnStatus {
   id             String   @id @default(cuid())
   shop           String
   orderGid       String

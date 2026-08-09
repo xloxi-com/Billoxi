@@ -5,7 +5,9 @@
 
 import {
   getCreditNoteLabels,
+  getDraftLabels,
   getPackingSlipLabels,
+  getReturnLabels,
   isBuiltInCreditOrPackingBody,
 } from "./template-document-type-labels";
 
@@ -3360,8 +3362,10 @@ export type ApplyTemplateLabelsInput = {
 export type TemplateDocumentType =
   | "sales-order"
   | "invoice"
+  | "draft"
   | "credit-note"
-  | "packing-slip";
+  | "packing-slip"
+  | "return";
 
 type DocumentTypeTxnLabels = Pick<
   TemplateLabelPack["transaction"],
@@ -3372,6 +3376,12 @@ const INVOICE_TXN_EN: DocumentTypeTxnLabels = {
   documentTitle: "INVOICE",
   orderNumber: "Invoice#",
   date: "Invoice Date",
+};
+
+const DRAFT_TXN_EN: DocumentTypeTxnLabels = {
+  documentTitle: "DRAFT",
+  orderNumber: "Draft#",
+  date: "Draft Date",
 };
 
 /** Document-type title/number/date overrides (sales-order uses the pack as-is). */
@@ -3663,6 +3673,17 @@ function resolveDocumentTypeTransaction(
     };
   }
 
+  if (documentType === "draft") {
+    const labels = getDraftLabels(language);
+    return {
+      ...pack.transaction,
+      documentTitle: labels.documentTitle,
+      orderNumber: labels.orderNumber,
+      date: labels.date,
+      reference: labels.reference,
+    };
+  }
+
   if (documentType === "credit-note") {
     const labels = getCreditNoteLabels(language);
     return {
@@ -3676,6 +3697,17 @@ function resolveDocumentTypeTransaction(
 
   if (documentType === "packing-slip") {
     const labels = getPackingSlipLabels(language);
+    return {
+      ...pack.transaction,
+      documentTitle: labels.documentTitle,
+      orderNumber: labels.orderNumber,
+      date: labels.date,
+      reference: labels.reference,
+    };
+  }
+
+  if (documentType === "return") {
+    const labels = getReturnLabels(language);
     return {
       ...pack.transaction,
       documentTitle: labels.documentTitle,
@@ -3770,6 +3802,24 @@ export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
     if (translateTerms) terms = labels.terms;
   } else if (options?.documentType === "packing-slip") {
     const labels = getPackingSlipLabels(language);
+    totals = {
+      ...totals,
+      totalLabel: labels.totalLabel,
+      itemsInTotalLabel: labels.itemsInTotalLabel,
+    };
+    if (translateNotes) notes = labels.notes;
+    if (translateTerms) terms = labels.terms;
+  } else if (options?.documentType === "draft") {
+    const labels = getDraftLabels(language);
+    totals = {
+      ...totals,
+      totalLabel: labels.totalLabel,
+      itemsInTotalLabel: labels.itemsInTotalLabel,
+    };
+    if (translateNotes) notes = labels.notes;
+    if (translateTerms) terms = labels.terms;
+  } else if (options?.documentType === "return") {
+    const labels = getReturnLabels(language);
     totals = {
       ...totals,
       totalLabel: labels.totalLabel,

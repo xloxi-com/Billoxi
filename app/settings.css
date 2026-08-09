@@ -313,6 +313,22 @@
   gap: 12px;
 }
 
+.appearance-color-field__swatch {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--p-color-border, #c9cccf);
+  border-radius: var(--p-border-radius-100, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.appearance-color-field__swatch:focus-visible {
+  outline: 2px solid var(--p-color-border-focus, #005bd3);
+  outline-offset: 2px;
+}
+
 /* Email body editor */
 .email-body-editor {
   display: flex;

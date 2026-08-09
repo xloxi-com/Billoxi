@@ -43,6 +43,10 @@ import {
   loadSalesOrderTemplateSettings,
 } from "../sales-order-document.server";
 import {
+  fetchDraftOrderDocument,
+  fetchDraftOrderSidebarList,
+} from "../shopify-draft-orders.server";
+import {
   allocateSalesOrderDocumentNumber,
   hasCompletedSalesOrderNumberSync,
   getSalesOrderDocumentDetails,
@@ -58,9 +62,12 @@ import {
 } from "../sales-order-document";
 import {
   resolveCreditNoteTemplateId,
+  resolveDraftTemplateId,
   resolveInvoiceTemplateId,
   resolvePackingSlipTemplateId,
+  resolveReturnTemplateId,
   resolveSalesOrderTemplateId,
+  toDraftOrderGid,
   toOrderGid,
 } from "../sales-order-ids";
 import {
@@ -79,7 +86,22 @@ import {
   unmarkOrdersInvoiced,
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
+import {
+  getDraftMetaByOrderGids,
+  getDraftOrderGids,
+  markOrderDraft,
+  unmarkOrdersDraft,
+  updateDraftDocumentDetails,
+} from "../order-invoice-draft-status.server";
 import { markOrderPackingSlip, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, getPackingSlipOrderGids, unmarkOrdersPackingSlip, ensurePackingSlipDocumentNumbers } from "../order-packing-slip-status.server";
+import {
+  markOrderReturn,
+  getAllReturnOrderGids,
+  getReturnMetaByOrderGids,
+  getReturnOrderGids,
+  unmarkOrdersReturn,
+  ensureReturnDocumentNumbers,
+} from "../order-return-status.server";
 import {
   getCreditNoteMetaByOrderGids,
   getAllCreditNoteOrderGids,
@@ -94,7 +116,13 @@ import { recordDocumentActivity } from "../record-document-activity.client";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
-type DocumentMode = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentMode =
+  | "sales-order"
+  | "invoice"
+  | "credit-note"
+  | "packing-slip"
+  | "return"
+  | "draft";
 
 function resolveDocumentMode(requestUrl: string): DocumentMode {
   try {
@@ -102,6 +130,8 @@ function resolveDocumentMode(requestUrl: string): DocumentMode {
     if (pathname.includes("/app/credit-note/")) return "credit-note";
     if (pathname.includes("/app/invoice/")) return "invoice";
     if (pathname.includes("/app/packing-slip/")) return "packing-slip";
+    if (pathname.includes("/app/return/")) return "return";
+    if (pathname.includes("/app/draft/")) return "draft";
     return "sales-order";
   } catch {
     return "sales-order";
@@ -183,7 +213,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const isInvoice = documentMode === "invoice";
   const isCreditNote = documentMode === "credit-note";
   const isPackingSlip = documentMode === "packing-slip";
-  const isIssuedDocument = isInvoice || isCreditNote || isPackingSlip;
+  const isReturn = documentMode === "return";
+  const isDraft = documentMode === "draft";
+  const isIssuedDocument =
+    isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft;
   const url = new URL(request.url);
 
   const selectedMap = await loadSelectedTemplatesForShop(session.shop);
@@ -192,11 +225,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     selectedMap[
       isCreditNote
         ? "credit-note"
-        : isInvoice
-          ? "invoice"
-          : isPackingSlip
-            ? "packing-slip"
-            : "sales-order"
+        : isDraft
+          ? "draft"
+          : isInvoice
+            ? "invoice"
+            : isPackingSlip
+              ? "packing-slip"
+              : isReturn
+                ? "return"
+                : "sales-order"
     ] || null;
   const shopSelectedSalesOrderTemplateId = selectedMap["sales-order"] || null;
 
@@ -206,18 +243,28 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     ? resolveCreditNoteTemplateId(
         shopSelectedTemplateId || url.searchParams.get("template"),
       )
-    : isInvoice
-      ? resolveInvoiceTemplateId(
+    : isDraft
+      ? resolveDraftTemplateId(
           shopSelectedTemplateId || url.searchParams.get("template"),
         )
-      : isPackingSlip
-        ? resolvePackingSlipTemplateId(
+      : isInvoice
+        ? resolveInvoiceTemplateId(
             shopSelectedTemplateId || url.searchParams.get("template"),
           )
-        : resolveSalesOrderTemplateId(
-            shopSelectedTemplateId || url.searchParams.get("template"),
-          );
-  const orderGid = toOrderGid(decodeURIComponent(orderId));
+        : isPackingSlip
+          ? resolvePackingSlipTemplateId(
+              shopSelectedTemplateId || url.searchParams.get("template"),
+            )
+          : isReturn
+            ? resolveReturnTemplateId(
+                shopSelectedTemplateId || url.searchParams.get("template"),
+              )
+            : resolveSalesOrderTemplateId(
+                shopSelectedTemplateId || url.searchParams.get("template"),
+              );
+  const orderGid = isDraft
+    ? toDraftOrderGid(decodeURIComponent(orderId))
+    : toOrderGid(decodeURIComponent(orderId));
 
   // Sidebar list still uses sales-order template ids for SO document numbers.
   const salesOrderTemplateId = isIssuedDocument
@@ -225,18 +272,24 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     : templateId;
 
   const [order, template] = await Promise.all([
-    fetchSalesOrderDocument(admin, orderGid, {
-      asCreditNote: isCreditNote,
-      shop: session.shop,
-    }),
+    isDraft
+      ? fetchDraftOrderDocument(admin, orderGid, { shop: session.shop })
+      : fetchSalesOrderDocument(admin, orderGid, {
+          asCreditNote: isCreditNote,
+          shop: session.shop,
+        }),
     isIssuedDocument
       ? loadDocumentTemplateSettings(
           session.shop,
           isCreditNote
             ? "credit-note"
-            : isInvoice
-              ? "invoice"
-              : "packing-slip",
+            : isDraft
+              ? "draft"
+              : isInvoice
+                ? "invoice"
+                : isReturn
+                  ? "return"
+                  : "packing-slip",
           templateId,
           admin,
         )
@@ -257,6 +310,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let hasCreditNote = false;
   let orderInvoiced = false;
   let orderPackingSlip = false;
+  let orderReturn = false;
+  let orderDraft = false;
 
   if (isCreditNote) {
     const [creditMeta, invoiceMeta] = await Promise.all([
@@ -319,6 +374,22 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     invoiceCustomerNote = currentMeta?.customerNote ?? null;
     invoiceTerms = currentMeta?.terms ?? null;
     referenceNumber = soNumbers.get(order.id) || undefined;
+  } else if (isDraft) {
+    // Shopify DraftOrder — Billoxi DFT- from Settings series; keep #D… as reference.
+    orderDraft = true;
+    let draftNumber = "";
+    const draftMeta = await getDraftMetaByOrderGids(session.shop, [order.id]);
+    const currentMeta = draftMeta.get(order.id);
+    draftNumber = currentMeta?.documentNumber?.trim() || "";
+    if (!draftNumber) {
+      draftNumber = (await markOrderDraft(session.shop, order.id))?.trim() || "";
+    }
+    documentNumber = draftNumber || order.name;
+    documentDate =
+      currentMeta?.draftedAt?.toISOString() || order.createdAt;
+    referenceNumber = order.name;
+    invoiceCustomerNote = currentMeta?.customerNote ?? null;
+    invoiceTerms = currentMeta?.terms ?? null;
   } else if (isPackingSlip) {
     const [packingMeta, soNumbers] = await Promise.all([
       getPackingSlipMetaByOrderGids(session.shop, [order.id]),
@@ -342,18 +413,46 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     documentDate =
       currentMeta?.convertedAt?.toISOString() || order.createdAt;
     referenceNumber = existingSalesOrderNumber || order.name;
-  } else {
-    const [soDetailsInitial, invoicedGids, packingGids] = await Promise.all([
-      getSalesOrderDocumentDetails(
+  } else if (isReturn) {
+    const [returnMeta, soNumbers] = await Promise.all([
+      getReturnMetaByOrderGids(session.shop, [order.id]),
+      getSalesOrderDocumentNumbersByOrderGids(
         session.shop,
-        template.templateId,
-        order.id,
+        salesOrderTemplateId,
+        [order.id],
       ),
-      getInvoicedOrderGids(session.shop, [order.id]),
-      getPackingSlipOrderGids(session.shop, [order.id]),
     ]);
+    const currentMeta = returnMeta.get(order.id);
+    const ensured =
+      currentMeta && !currentMeta.documentNumber
+        ? await ensureReturnDocumentNumbers(session.shop, [order.id])
+        : new Map<string, string>();
+    const existingSalesOrderNumber = soNumbers.get(order.id);
+    documentNumber =
+      currentMeta?.documentNumber ||
+      ensured.get(order.id) ||
+      existingSalesOrderNumber ||
+      order.name;
+    documentDate =
+      currentMeta?.convertedAt?.toISOString() || order.createdAt;
+    referenceNumber = existingSalesOrderNumber || order.name;
+  } else {
+    const [soDetailsInitial, invoicedGids, packingGids, returnGids, draftGids] =
+      await Promise.all([
+        getSalesOrderDocumentDetails(
+          session.shop,
+          template.templateId,
+          order.id,
+        ),
+        getInvoicedOrderGids(session.shop, [order.id]),
+        getPackingSlipOrderGids(session.shop, [order.id]),
+        getReturnOrderGids(session.shop, [order.id]),
+        getDraftOrderGids(session.shop, [order.id]),
+      ]);
     orderInvoiced = invoicedGids.has(order.id);
     orderPackingSlip = packingGids.has(order.id);
+    orderReturn = returnGids.has(order.id);
+    orderDraft = draftGids.has(order.id);
 
     // Paid in Shopify → self-heal invoice mark without blocking first paint.
     // Primary path is the orders/paid webhook (respects Advanced → On paid).
@@ -402,6 +501,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   // Sidebar is non-blocking — document paints first, list streams in.
   const salesOrdersPromise = (async () => {
+    if (isDraft) {
+      const draftOrders = await fetchDraftOrderSidebarList(admin, session.shop);
+      return draftOrders.map((item) => ({
+        ...item,
+        documentNumber:
+          item.id === order.id ? documentNumber : item.documentNumber || item.name,
+        createdAt: item.id === order.id && documentDate ? documentDate : item.createdAt,
+      }));
+    }
+
     const salesOrders = await fetchSalesOrderList(admin, {
       shop: session.shop,
       templateId: salesOrderTemplateId,
@@ -478,6 +587,26 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       });
     }
 
+    if (isReturn) {
+      const returnGids = await getAllReturnOrderGids(session.shop);
+      const returnGidSet = new Set(returnGids);
+      const filtered = salesOrders.filter((item) => returnGidSet.has(item.id));
+      const returnMeta = await getReturnMetaByOrderGids(
+        session.shop,
+        filtered.map((item) => item.id),
+      );
+      return filtered.map((item) => {
+        const meta = returnMeta.get(item.id);
+        return {
+          ...item,
+          documentNumber:
+            meta?.documentNumber ||
+            (item.id === order.id ? documentNumber : item.documentNumber),
+          createdAt: meta?.convertedAt?.toISOString() || item.createdAt,
+        };
+      });
+    }
+
     return salesOrders;
   })();
 
@@ -493,6 +622,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     paymentStatus: order.financialStatus ?? null,
     orderInvoiced,
     orderPackingSlip,
+    orderReturn,
+    orderDraft,
     templateId: template.templateId,
     templateName: template.templateName,
     settings: template.settings,
@@ -518,7 +649,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
-  const orderGid = toOrderGid(decodeURIComponent(orderId));
+  const documentMode = resolveDocumentMode(request.url);
+  const isDraftAction = documentMode === "draft";
+  const orderGid = isDraftAction
+    ? toDraftOrderGid(decodeURIComponent(orderId))
+    : toOrderGid(decodeURIComponent(orderId));
 
   if (intent === "convert-to-invoice") {
     await markOrderInvoiced(session.shop, orderGid);
@@ -529,12 +664,47 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   }
 
+  if (intent === "finalize-draft") {
+    await markOrderInvoiced(session.shop, orderGid);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "finalize-draft" as const,
+    });
+  }
+
+  if (intent === "save-as-draft") {
+    const invoicedGids = await getInvoicedOrderGids(session.shop, [orderGid]);
+    if (invoicedGids.has(orderGid)) {
+      return Response.json(
+        { ok: false, error: "Already invoiced orders cannot be saved as draft" },
+        { status: 400 },
+      );
+    }
+    const draftNumber = await markOrderDraft(session.shop, orderGid);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "draft" as const,
+      draftNumber,
+    });
+  }
+
   if (intent === "convert-to-packing-slip") {
     await markOrderPackingSlip(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
       document: "packing-slip" as const,
+    });
+  }
+
+  if (intent === "convert-to-return") {
+    await markOrderReturn(session.shop, orderGid);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "return" as const,
     });
   }
 
@@ -578,6 +748,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ok: true,
       deleted,
       document: "delete-packing-slip" as const,
+    });
+  }
+
+  if (intent === "delete-return") {
+    const deleted = await unmarkOrdersReturn(session.shop, [orderGid]);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-return" as const,
+    });
+  }
+
+  if (intent === "delete-draft") {
+    const deleted = await unmarkOrdersDraft(session.shop, [orderGid]);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      deleted,
+      document: "delete-draft" as const,
     });
   }
 
@@ -676,6 +866,46 @@ export async function action({ request, params }: ActionFunctionArgs) {
       document: "update-invoice" as const,
       documentNumber,
       invoiceDate: invoiceDateRaw,
+    });
+  }
+
+  if (intent === "update-draft-details") {
+    const documentNumber = String(formData.get("documentNumber") || "").trim();
+    const draftDateRaw = String(formData.get("draftDate") || "").trim();
+    const customerNote = String(formData.get("customerNote") || "");
+    const terms = String(formData.get("terms") || "");
+    if (!documentNumber) {
+      return Response.json(
+        { ok: false, error: "Draft number is required" },
+        { status: 400 },
+      );
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draftDateRaw)) {
+      return Response.json(
+        { ok: false, error: "Draft date is required" },
+        { status: 400 },
+      );
+    }
+    const draftedAt = new Date(`${draftDateRaw}T12:00:00.000Z`);
+    if (Number.isNaN(draftedAt.getTime())) {
+      return Response.json(
+        { ok: false, error: "Invalid draft date" },
+        { status: 400 },
+      );
+    }
+
+    await updateDraftDocumentDetails(session.shop, orderGid, {
+      documentNumber,
+      draftedAt,
+      customerNote,
+      terms,
+    });
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "update-draft" as const,
+      documentNumber,
+      draftDate: draftDateRaw,
     });
   }
 
@@ -785,14 +1015,21 @@ export default function SalesOrderDocumentPage() {
   const isInvoice = data.documentMode === "invoice";
   const isCreditNote = data.documentMode === "credit-note";
   const isPackingSlip = data.documentMode === "packing-slip";
-  const isIssuedDocument = isInvoice || isCreditNote || isPackingSlip;
+  const isReturn = data.documentMode === "return";
+  const isDraft = data.documentMode === "draft";
+  const isIssuedDocument =
+    isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft;
   const listPath = isCreditNote
     ? "/app/credit-note"
     : isInvoice
       ? "/app/invoice"
       : isPackingSlip
         ? "/app/packing-slip"
-        : "/app/sales-order";
+        : isReturn
+          ? "/app/return"
+          : isDraft
+            ? "/app/draft"
+            : "/app/sales-order";
   const documentBasePath = listPath;
   const templateQuery = useMemo(
     () => `?template=${encodeURIComponent(data.templateId)}`,
@@ -1067,6 +1304,12 @@ export default function SalesOrderDocumentPage() {
       formData.set("invoiceDate", editInvoiceDate);
       formData.set("customerNote", editCustomerNote);
       formData.set("terms", editTerms);
+    } else if (isDraft) {
+      formData.set("intent", "update-draft-details");
+      formData.set("documentNumber", editInvoiceNumber.trim());
+      formData.set("draftDate", editInvoiceDate);
+      formData.set("customerNote", editCustomerNote);
+      formData.set("terms", editTerms);
     } else {
       formData.set("intent", "update-sales-order-details");
       formData.set("templateId", data.templateId);
@@ -1090,13 +1333,14 @@ export default function SalesOrderDocumentPage() {
     invoiceEditOpen,
     isConverting,
     isCreditNote,
+    isDraft,
     isInvoice,
     numberChanged,
     numberMode,
   ]);
 
   useEffect(() => {
-    if (isInvoice) {
+    if (isInvoice || isDraft) {
       if (searchParams.get("template") !== data.templateId) {
         setSearchParams(
           (prev) => {
@@ -1157,6 +1401,7 @@ export default function SalesOrderDocumentPage() {
   }, [
     data.hasSelectedTemplate,
     data.templateId,
+    isDraft,
     isInvoice,
     searchParams,
     setSearchParams,
@@ -1194,11 +1439,15 @@ export default function SalesOrderDocumentPage() {
       recordDocumentActivity("printed", {
         documentKind: isCreditNote
           ? "credit-note"
-          : isInvoice
-            ? "invoice"
-            : isPackingSlip
-              ? "packing-slip"
-              : "sales-order",
+          : isDraft
+            ? "draft"
+            : isInvoice
+              ? "invoice"
+              : isPackingSlip
+                ? "packing-slip"
+                : isReturn
+                  ? "return"
+                  : "sales-order",
         documentNumber: previewOrder.documentNumber || null,
         orderGid: data.order.id,
         orderId: data.order.id,
@@ -1219,8 +1468,10 @@ export default function SalesOrderDocumentPage() {
     data.settings,
     isDownloading,
     isCreditNote,
+    isDraft,
     isInvoice,
     isPackingSlip,
+    isReturn,
     isPrinting,
     previewOrder.documentNumber,
   ]);
@@ -1247,11 +1498,15 @@ export default function SalesOrderDocumentPage() {
         previewOrder.documentNumber || data.order.name,
         isCreditNote
           ? "credit-note"
-          : isInvoice
-            ? "invoice"
-            : isPackingSlip
-              ? "packing-slip"
-              : "sales-order",
+          : isDraft
+            ? "draft"
+            : isInvoice
+              ? "invoice"
+              : isPackingSlip
+                ? "packing-slip"
+                : isReturn
+                  ? "return"
+                  : "sales-order",
       );
 
       if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1260,11 +1515,15 @@ export default function SalesOrderDocumentPage() {
       recordDocumentActivity("downloaded", {
         documentKind: isCreditNote
           ? "credit-note"
-          : isInvoice
-            ? "invoice"
-            : isPackingSlip
-              ? "packing-slip"
-              : "sales-order",
+          : isDraft
+            ? "draft"
+            : isInvoice
+              ? "invoice"
+              : isPackingSlip
+                ? "packing-slip"
+                : isReturn
+                  ? "return"
+                  : "sales-order",
         documentNumber: previewOrder.documentNumber || null,
         orderGid: data.order.id,
         orderId: data.order.id,
@@ -1285,8 +1544,10 @@ export default function SalesOrderDocumentPage() {
     data.settings,
     isDownloading,
     isCreditNote,
+    isDraft,
     isInvoice,
     isPackingSlip,
+    isReturn,
     isPrinting,
     previewOrder.documentNumber,
   ]);
@@ -1309,14 +1570,19 @@ export default function SalesOrderDocumentPage() {
 
     const documentKind = isCreditNote
       ? "credit-note"
-      : isInvoice
-        ? "invoice"
-        : isPackingSlip
-          ? "packing-slip"
-          : "sales-order";
+      : isDraft
+        ? "draft"
+        : isInvoice
+          ? "invoice"
+          : isPackingSlip
+            ? "packing-slip"
+            : isReturn
+              ? "return"
+              : "sales-order";
 
     const formData = new FormData();
     formData.set("orderId", data.order.id);
+    // Email templates do not have a dedicated draft kind — use invoice copy.
     formData.set("documentKind", documentKind);
     formData.set("toEmail", email);
     formData.set(
@@ -1391,8 +1657,10 @@ export default function SalesOrderDocumentPage() {
     data.smtpReady,
     data.templateId,
     isCreditNote,
+    isDraft,
     isInvoice,
     isPackingSlip,
+    isReturn,
     isSendingEmail,
     previewOrder.documentNumber,
     sendFetcher,
@@ -1503,19 +1771,35 @@ export default function SalesOrderDocumentPage() {
 
   const creditNoteVoided = Boolean(data.creditNoteVoided);
   const paymentStatus = data.paymentStatus ?? null;
-  // Credit-note lifecycle status wins over Shopify order payment status.
+  // Drafts / packing / return are not payment documents — hide Pending/Paid payment badges.
   const headerStatus =
-    isCreditNote && creditNoteVoided ? "VOIDED" : paymentStatus;
+    isDraft || isPackingSlip || isReturn
+      ? null
+      : isCreditNote && creditNoteVoided
+        ? "VOIDED"
+        : paymentStatus;
   const paymentLabel = formatStatus(headerStatus);
   const paymentStatusKey = (paymentStatus || "").toUpperCase();
   const isCancelledOrder =
     paymentStatusKey === "VOIDED" ||
     paymentStatusKey.includes("CANCEL");
   const alreadyInvoiced = Boolean(data.orderInvoiced);
+  const alreadyDraft = Boolean(data.orderDraft);
   const isPaidOrder = paymentStatusKey === "PAID";
 
   const documentStatusRibbon = (() => {
     if (!data.isAdmin) return null;
+
+    if (isDraft) {
+      return { label: "Draft", variant: "pending" as const };
+    }
+
+    if (isPackingSlip || isReturn) {
+      if (isCancelledOrder) {
+        return { label: "Voided", variant: "voided" as const };
+      }
+      return null;
+    }
 
     if (isIssuedDocument) {
       if (isCreditNote && creditNoteVoided) {
@@ -1554,6 +1838,9 @@ export default function SalesOrderDocumentPage() {
     if (alreadyInvoiced) {
       return { label: "Invoiced", variant: "invoiced" as const };
     }
+    if (alreadyDraft) {
+      return { label: "Draft", variant: "pending" as const };
+    }
     if (isPaidOrder) {
       return { label: "Not Invoiced", variant: "not-invoiced" as const };
     }
@@ -1563,10 +1850,10 @@ export default function SalesOrderDocumentPage() {
   const handleConvertToInvoice = useCallback(() => {
     if (isConverting || isCancelledOrder) return;
     convertFetcher.submit(
-      { intent: "convert-to-invoice" },
+      { intent: isDraft ? "finalize-draft" : "convert-to-invoice" },
       { method: "post" },
     );
-  }, [convertFetcher, isCancelledOrder, isConverting]);
+  }, [convertFetcher, isCancelledOrder, isConverting, isDraft]);
 
   const handleConvertToPackingSlip = useCallback(() => {
     if (isConverting || isCancelledOrder) return;
@@ -1575,6 +1862,19 @@ export default function SalesOrderDocumentPage() {
       { method: "post" },
     );
   }, [convertFetcher, isCancelledOrder, isConverting]);
+
+  const handleSaveAsDraft = useCallback(() => {
+    if (isConverting || isCancelledOrder || alreadyInvoiced || alreadyDraft) {
+      return;
+    }
+    convertFetcher.submit({ intent: "save-as-draft" }, { method: "post" });
+  }, [
+    alreadyDraft,
+    alreadyInvoiced,
+    convertFetcher,
+    isCancelledOrder,
+    isConverting,
+  ]);
 
   const handleDeleteInvoice = useCallback(() => {
     if (isConverting) return;
@@ -1592,6 +1892,19 @@ export default function SalesOrderDocumentPage() {
         { intent: "delete-packing-slip" },
         { method: "post" },
       );
+      return;
+    }
+    if (isReturn) {
+      setDeleteInvoiceOpen(false);
+      convertFetcher.submit(
+        { intent: "delete-return" },
+        { method: "post" },
+      );
+      return;
+    }
+    if (isDraft) {
+      setDeleteInvoiceOpen(false);
+      convertFetcher.submit({ intent: "delete-draft" }, { method: "post" });
       return;
     }
     if (!isInvoice) return;
@@ -1612,8 +1925,10 @@ export default function SalesOrderDocumentPage() {
     data.hasCreditNote,
     isConverting,
     isCreditNote,
+    isDraft,
     isInvoice,
     isPackingSlip,
+    isReturn,
   ]);
 
   useEffect(() => {
@@ -1641,6 +1956,9 @@ export default function SalesOrderDocumentPage() {
       } else if (result.document === "update-invoice") {
         shopify.toast.show("Invoice details saved");
         setInvoiceEditOpen(false);
+      } else if (result.document === "update-draft") {
+        shopify.toast.show("Draft details saved");
+        setInvoiceEditOpen(false);
       } else if (result.document === "update-sales-order") {
         shopify.toast.show("Sales order details saved");
         setInvoiceEditOpen(false);
@@ -1656,8 +1974,37 @@ export default function SalesOrderDocumentPage() {
         shopify.toast.show("Packing slip deleted");
         navigate(listPath);
         return;
+      } else if (result.document === "delete-return") {
+        shopify.toast.show("Return deleted");
+        navigate(listPath);
+        return;
+      } else if (result.document === "delete-draft") {
+        shopify.toast.show("Draft deleted");
+        navigate("/app/draft");
+        return;
       } else if (result.document === "packing-slip") {
         shopify.toast.show("Converted to packing slip");
+      } else if (result.document === "return") {
+        shopify.toast.show("Converted to return");
+      } else if (result.document === "draft") {
+        shopify.toast.show("Saved as draft");
+        const numericId = data.order.id.includes("/")
+          ? data.order.id.split("/").pop() || data.order.id
+          : data.order.id;
+        navigate(`/app/draft/${encodeURIComponent(numericId)}`);
+        return;
+      } else if (
+        result.document === "finalize-draft" ||
+        (result.document === "invoice" && isDraft)
+      ) {
+        shopify.toast.show("Converted to invoice");
+        const numericId = data.order.id.includes("/")
+          ? data.order.id.split("/").pop() || data.order.id
+          : data.order.id;
+        navigate(
+          `/app/invoice/${encodeURIComponent(numericId)}${templateQuery}`,
+        );
+        return;
       } else if (result.document === "invoice") {
         shopify.toast.show("Converted to invoice");
       }
@@ -1666,9 +2013,12 @@ export default function SalesOrderDocumentPage() {
   }, [
     convertFetcher.data,
     convertFetcher.state,
+    data.order.id,
+    isDraft,
     listPath,
     navigate,
     revalidator,
+    templateQuery,
   ]);
 
   const handleReload = useCallback(() => {
@@ -1702,7 +2052,11 @@ export default function SalesOrderDocumentPage() {
             ? "Invoice"
             : isPackingSlip
               ? "Packing Slip"
-              : "Sales Orders"}
+              : isReturn
+                ? "Return"
+                : isDraft
+                  ? "Draft"
+                  : "Sales Orders"}
       </s-link>
       {headerStatus ? (
         <s-badge slot="accessory" tone={paymentBadgeTone(headerStatus)}>
@@ -1737,7 +2091,7 @@ export default function SalesOrderDocumentPage() {
       >
         Reload
       </s-button>
-      {!isPackingSlip ? (
+      {!isPackingSlip && !isReturn ? (
         <s-button
           slot="secondary-actions"
           icon="edit"
@@ -1801,7 +2155,7 @@ export default function SalesOrderDocumentPage() {
       >
         {isPrinting ? "Preparing…" : "Print"}
       </s-button>
-      {isInvoice || isCreditNote || isPackingSlip ? (
+      {isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft ? (
         <s-button
           slot="secondary-actions"
           icon="delete"
@@ -1812,7 +2166,9 @@ export default function SalesOrderDocumentPage() {
                 convertFetcher.formData?.get("intent") ===
                   "delete-credit-note" ||
                 convertFetcher.formData?.get("intent") ===
-                  "delete-packing-slip")) ||
+                  "delete-packing-slip" ||
+                convertFetcher.formData?.get("intent") === "delete-return" ||
+                convertFetcher.formData?.get("intent") === "delete-draft")) ||
             undefined
           }
           disabled={
@@ -1844,7 +2200,11 @@ export default function SalesOrderDocumentPage() {
                               ? "Invoices"
                               : isPackingSlip
                                 ? "Packing slips"
-                                : "Sales orders"}
+                                : isReturn
+                                  ? "Returns"
+                                  : isDraft
+                                    ? "Drafts"
+                                    : "Sales orders"}
                         </Text>
                         <Button
                           onClick={() => navigate(listPath)}
@@ -1866,7 +2226,11 @@ export default function SalesOrderDocumentPage() {
                               ? "Search invoices"
                               : isPackingSlip
                                 ? "Search packing slips"
-                                : "Search orders"
+                                : isReturn
+                                  ? "Search returns"
+                                  : isDraft
+                                    ? "Search drafts"
+                                    : "Search orders"
                         }
                         prefix={<Icon source={SearchIcon} tone="subdued" />}
                         clearButton
@@ -1920,10 +2284,14 @@ export default function SalesOrderDocumentPage() {
                                   singular: "packing slip",
                                   plural: "packing slips",
                                 }
-                              : {
-                                  singular: "sales order",
-                                  plural: "sales orders",
-                                }
+                              : isReturn
+                                ? { singular: "return", plural: "returns" }
+                                : isDraft
+                                  ? { singular: "draft", plural: "drafts" }
+                                  : {
+                                      singular: "sales order",
+                                      plural: "sales orders",
+                                    }
                       }
                       items={filteredOrders}
                       idForItem={(item) => item.id}
@@ -2092,7 +2460,11 @@ export default function SalesOrderDocumentPage() {
               ? "Delete credit note?"
               : isPackingSlip
                 ? "Delete packing slip?"
-                : "Delete invoice?"
+                : isReturn
+                  ? "Delete return?"
+                  : isDraft
+                    ? "Delete draft?"
+                    : "Delete invoice?"
           }
           primaryAction={{
             content: "Delete",
@@ -2104,7 +2476,9 @@ export default function SalesOrderDocumentPage() {
                 convertFetcher.formData?.get("intent") ===
                   "delete-credit-note" ||
                 convertFetcher.formData?.get("intent") ===
-                  "delete-packing-slip"),
+                  "delete-packing-slip" ||
+                convertFetcher.formData?.get("intent") === "delete-return" ||
+                convertFetcher.formData?.get("intent") === "delete-draft"),
             disabled: isInvoice && Boolean(data.hasCreditNote),
           }}
           secondaryActions={[
@@ -2120,9 +2494,13 @@ export default function SalesOrderDocumentPage() {
                 ? "Are you sure you want to delete this credit note? The invoice and sales order stay; only the credit note record is removed."
                 : isPackingSlip
                   ? "Are you sure you want to delete this packing slip? The sales order will stay; only the packing slip record is removed."
-                  : data.hasCreditNote
-                    ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
-                    : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
+                  : isReturn
+                    ? "Are you sure you want to delete this return? The sales order will stay; only the return record is removed."
+                    : isDraft
+                      ? "Are you sure you want to delete this draft? The sales order will stay; only the draft record is removed."
+                      : data.hasCreditNote
+                        ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
+                        : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
             </Text>
           </Modal.Section>
         </Modal>
@@ -2134,7 +2512,9 @@ export default function SalesOrderDocumentPage() {
               ? "Edit credit note"
               : isInvoice
                 ? "Edit invoice"
-                : "Edit sales order"
+                : isDraft
+                  ? "Edit draft"
+                  : "Edit sales order"
           }
           primaryAction={{
             content: "Save",
@@ -2146,7 +2526,9 @@ export default function SalesOrderDocumentPage() {
                 convertFetcher.formData?.get("intent") ===
                   "update-sales-order-details" ||
                 convertFetcher.formData?.get("intent") ===
-                  "update-credit-note-details"),
+                  "update-credit-note-details" ||
+                convertFetcher.formData?.get("intent") ===
+                  "update-draft-details"),
             disabled: !invoiceDetailsDirty || isConverting,
           }}
           secondaryActions={[
@@ -2169,7 +2551,9 @@ export default function SalesOrderDocumentPage() {
                       ? "Credit note number"
                       : isInvoice
                         ? "Invoice number"
-                        : "Sales order number"
+                        : isDraft
+                          ? "Draft number"
+                          : "Sales order number"
                   }
                   value={editInvoiceNumber}
                   onInput={handleInvoiceNumberInput}
@@ -2181,7 +2565,9 @@ export default function SalesOrderDocumentPage() {
                       ? "Credit note date"
                       : isInvoice
                         ? "Invoice date"
-                        : "Order date"
+                        : isDraft
+                          ? "Draft date"
+                          : "Order date"
                   }
                   value={editInvoiceDate}
                   onInput={(event: Event) =>
@@ -2203,7 +2589,7 @@ export default function SalesOrderDocumentPage() {
                   placeholder="Return, overcharge, goodwill…"
                 />
               ) : null}
-              {!isInvoice && !isCreditNote && numberChanged ? (
+              {!isInvoice && !isCreditNote && !isDraft && numberChanged ? (
                 <BlockStack gap="200">
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
                     After saving this number
@@ -2249,7 +2635,9 @@ export default function SalesOrderDocumentPage() {
                   ? "credit note"
                   : isInvoice
                     ? "invoice"
-                    : "sales order"}{" "}
+                    : isDraft
+                      ? "draft"
+                      : "sales order"}{" "}
                 automatically.
               </s-banner>
             </s-stack>

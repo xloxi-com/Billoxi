@@ -9,8 +9,10 @@ export type DocumentEventProcessType = "manual" | "bulk" | "extension";
 export type DocumentEventKind =
   | "sales-order"
   | "invoice"
+  | "draft"
   | "credit-note"
-  | "packing-slip";
+  | "packing-slip"
+  | "return";
 
 export type DocumentEventLogItem = {
   id: string;
@@ -35,8 +37,10 @@ const ACTION_PHRASE: Record<DocumentEventAction, string> = {
 const KIND_LABEL: Record<string, string> = {
   "sales-order": "sales order",
   invoice: "invoice",
+  draft: "draft",
   "credit-note": "credit note",
   "packing-slip": "packing slip",
+  return: "return",
 };
 
 const PROCESS_LABEL: Record<DocumentEventProcessType, string> = {
@@ -48,8 +52,10 @@ const PROCESS_LABEL: Record<DocumentEventProcessType, string> = {
 const GRID_LABEL: Record<string, string> = {
   "sales-order": "Sales Orders grid",
   invoice: "Invoices grid",
+  draft: "Drafts grid",
   "credit-note": "Credit Notes grid",
   "packing-slip": "Packing Slips grid",
+  return: "Returns grid",
 };
 
 export function isDocumentEventAction(
@@ -138,11 +144,15 @@ export function orderIdHref(
   const base =
     documentKind === "invoice"
       ? "/app/invoice"
-      : documentKind === "credit-note"
-        ? "/app/credit-note"
-        : documentKind === "packing-slip"
-          ? "/app/packing-slip"
-          : "/app/sales-order";
+      : documentKind === "draft"
+        ? "/app/draft"
+        : documentKind === "credit-note"
+          ? "/app/credit-note"
+          : documentKind === "packing-slip"
+            ? "/app/packing-slip"
+            : documentKind === "return"
+              ? "/app/return"
+              : "/app/sales-order";
   return `${base}/${encodeURIComponent(numeric)}`;
 }
 

@@ -21,11 +21,13 @@ export async function action({ request }: ActionFunctionArgs) {
     session.shop,
     documentKind === "invoice"
       ? "invoice"
-      : documentKind === "credit-note"
-        ? "credit-note"
-        : documentKind === "packing-slip"
-          ? "packing-slip"
-          : "sales-order",
+      : documentKind === "draft"
+        ? "draft"
+        : documentKind === "credit-note"
+          ? "credit-note"
+          : documentKind === "packing-slip"
+            ? "packing-slip"
+            : "sales-order",
   );
   const templateId =
     String(formData.get("template") || "") || shopSelectedTemplateId || "";

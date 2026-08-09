@@ -8,15 +8,19 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
-  resolvePackingSlipTemplateId,
+  resolveReturnTemplateId,
   resolveSalesOrderTemplateId,
 } from "../sales-order-ids";
 import {
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
 } from "../sales-orders.server";
-import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
+import {
+  loadSelectedTemplateForShop,
+  loadSmtpSettingsForShop,
+} from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { syncShopifyReturnsForShop } from "../shopify-returns.server";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -26,8 +30,17 @@ import SalesOrdersListPage, {
 export { action };
 export const links: LinksFunction = salesOrdersLinks;
 
+function sessionHasReturnsScope(scope: string | undefined | null): boolean {
+  if (!scope) return false;
+  return scope
+    .split(/[,\s]+/)
+    .map((part) => part.trim())
+    .includes("read_returns");
+}
+
 /**
- * Packing slip list — Polaris IndexTable of orders marked as packing slip.
+ * Return list — Shopify returns synced into Billoxi RET- documents.
+ * Requires `read_returns` scope.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
   const { admin, session } = await requireAdminAuth(request);
@@ -37,22 +50,41 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const params = parseSalesOrdersSearchParams(url);
+  const hasScope = sessionHasReturnsScope(session.scope);
 
-  const [shopSelectedTemplateId, shopSelectedPackingTemplateId, smtpSettings] =
+  const [shopSelectedTemplateId, shopSelectedReturnTemplateId, smtpSettings] =
     await Promise.all([
       loadSelectedTemplateForShop(session.shop, "sales-order"),
-      loadSelectedTemplateForShop(session.shop, "packing-slip"),
+      loadSelectedTemplateForShop(session.shop, "return"),
       loadSmtpSettingsForShop(session.shop),
     ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
   );
+
+  let scopeError: string | null = null;
+  if (!hasScope) {
+    scopeError =
+      "Missing read_returns permission. Update app scopes, then reopen Return.";
+  } else {
+    try {
+      const sync = await syncShopifyReturnsForShop(admin, session.shop);
+      if (sync.scopeError) scopeError = sync.scopeError;
+    } catch (error) {
+      console.error("Return list Shopify sync failed:", error);
+      scopeError =
+        error instanceof Error
+          ? error.message
+          : "Could not sync Shopify returns.";
+    }
+  }
+
   const page = await loadSalesOrdersPage(
     admin,
     session.shop,
     params,
     selectedTemplateId,
-    { listFilter: "packing-slip" },
+    { listFilter: "return" },
   );
 
   return {
@@ -60,14 +92,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
     smtpReady: isSmtpReadyForSend(smtpSettings),
-    listMode: "packing-slip" as const,
-    pageHeading: "Packing Slip",
+    listMode: "return" as const,
+    pageHeading: "Return",
     invoiceTemplateId: null as string | null,
     creditNoteTemplateId: null as string | null,
-    packingSlipTemplateId: resolvePackingSlipTemplateId(
-      shopSelectedPackingTemplateId,
-    ),
-    returnTemplateId: null as string | null,
+    packingSlipTemplateId: null as string | null,
+    returnTemplateId: resolveReturnTemplateId(shopSelectedReturnTemplateId),
+    shopDomain: session.shop,
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    scopeError,
   };
 }
 

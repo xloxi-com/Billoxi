@@ -83,8 +83,10 @@ import {
   PREMIUM_DESIGN_VERSION,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
+  DRAFT_TEMPLATE_PRESETS,
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
+  RETURN_TEMPLATE_PRESETS,
   salesOrderLogoPosition,
   salesOrderMetaStyle,
   TEMPLATE_DATE_FORMATS,
@@ -622,6 +624,12 @@ const templateDefinitions: Record<
     ]),
   ),
   ...Object.fromEntries(
+    DRAFT_TEMPLATE_PRESETS.map((preset) => [
+      preset.id,
+      { documentType: "draft", name: preset.name },
+    ]),
+  ),
+  ...Object.fromEntries(
     CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => [
       preset.id,
       { documentType: "credit-note", name: preset.name },
@@ -631,6 +639,12 @@ const templateDefinitions: Record<
     PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => [
       preset.id,
       { documentType: "packing-slip", name: preset.name },
+    ]),
+  ),
+  ...Object.fromEntries(
+    RETURN_TEMPLATE_PRESETS.map((preset) => [
+      preset.id,
+      { documentType: "return", name: preset.name },
     ]),
   ),
 };
@@ -875,10 +889,14 @@ function expectedDocumentTitle(documentType: string): string {
   switch (documentType) {
     case "invoice":
       return "INVOICE";
+    case "draft":
+      return "DRAFT";
     case "credit-note":
       return "CREDIT NOTE";
     case "packing-slip":
       return "PACKING SLIP";
+    case "return":
+      return "RETURN";
     default:
       return "SALES ORDER";
   }
@@ -914,16 +932,20 @@ function reconcileSettingsForDocumentType(
   const knownTitles = new Set([
     "SALES ORDER",
     "INVOICE",
+    "DRAFT",
     "CREDIT NOTE",
     "PACKING SLIP",
+    "RETURN",
   ]);
   const titleMismatch =
     knownTitles.has(title) && title !== expectedEn;
   const orderMismatch =
     (orderLabel === "Sales Order#" && documentType !== "sales-order") ||
     (orderLabel === "Invoice#" && documentType !== "invoice") ||
+    (orderLabel === "Draft#" && documentType !== "draft") ||
     (orderLabel === "Credit Note#" && documentType !== "credit-note") ||
-    (orderLabel === "Packing Slip#" && documentType !== "packing-slip");
+    (orderLabel === "Packing Slip#" && documentType !== "packing-slip") ||
+    (orderLabel === "Return#" && documentType !== "return");
 
   if (titleMismatch || orderMismatch) {
     next = {
@@ -946,6 +968,23 @@ function reconcileSettingsForDocumentType(
     next = {
       ...next,
       header: { ...next.header, ...defaults.header },
+    };
+  }
+
+  // Draft / packing / return are not payment documents — keep Paid / Balance Due off.
+  if (
+    documentType === "draft" ||
+    documentType === "packing-slip" ||
+    documentType === "return"
+  ) {
+    next = {
+      ...next,
+      header: { ...next.header, showPaymentMethod: false },
+      totals: {
+        ...next.totals,
+        showPaidAmount: false,
+        showBalanceDue: false,
+      },
     };
   }
 
@@ -1608,11 +1647,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         session.shop,
         params.documentType === "invoice"
           ? "invoice"
-          : params.documentType === "credit-note"
-            ? "credit-note"
-            : params.documentType === "packing-slip"
-              ? "packing-slip"
-              : "sales-order",
+          : params.documentType === "draft"
+            ? "draft"
+            : params.documentType === "credit-note"
+              ? "credit-note"
+              : params.documentType === "packing-slip"
+                ? "packing-slip"
+                : params.documentType === "return"
+                  ? "return"
+                  : "sales-order",
       ),
     ]);
 
@@ -1677,11 +1720,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
   const seriesModule =
     params.documentType === "invoice"
       ? "invoice"
-      : params.documentType === "credit-note"
-        ? "credit-note"
-        : params.documentType === "packing-slip"
-          ? "packing-slip"
-          : "sales-order";
+      : params.documentType === "draft"
+        ? "draft"
+        : params.documentType === "credit-note"
+          ? "credit-note"
+          : params.documentType === "packing-slip"
+            ? "packing-slip"
+            : params.documentType === "return"
+              ? "return"
+              : "sales-order";
   const series = await loadNumberSeriesEntryForShop(session.shop, seriesModule);
   settings.numbering = numberingFromSeries(series);
   // Logo lives in Settings → Store details (shared). Never persist per-template.
@@ -1794,15 +1841,20 @@ export default function TemplateEditorPage() {
             metaStyle: false,
             taxSummary:
               data.documentType !== "credit-note" &&
-              data.documentType !== "packing-slip",
+              data.documentType !== "packing-slip" &&
+              data.documentType !== "return" &&
+              data.documentType !== "draft",
             paymentAmounts:
               data.documentType !== "credit-note" &&
-              data.documentType !== "packing-slip",
+              data.documentType !== "packing-slip" &&
+              data.documentType !== "return" &&
+              data.documentType !== "draft",
           },
     [data.documentType, data.templateId],
   );
   const isCreditNoteEditor = data.documentType === "credit-note";
-  const isPackingSlipEditor = data.documentType === "packing-slip";
+  const isPackingSlipEditor =
+    data.documentType === "packing-slip" || data.documentType === "return";
   const packingMoneyColumnKeys = new Set([
     "rate",
     "discount",
@@ -1816,8 +1868,10 @@ export default function TemplateEditorPage() {
       {
         "sales-order": "SALES ORDER",
         invoice: "INVOICE",
+        draft: "DRAFT",
         "credit-note": "CREDIT NOTE",
         "packing-slip": "PACKING SLIP",
+        return: "RETURN",
       } as Record<string, string>
     )[data.documentType] || data.documentType.toUpperCase();
   const paymentStyleOptions = useMemo(() => {

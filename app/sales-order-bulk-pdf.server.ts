@@ -3,8 +3,10 @@ import { join } from "node:path";
 
 import {
   DEFAULT_CREDIT_NOTE_TEMPLATE_ID,
+  DEFAULT_DRAFT_TEMPLATE_ID,
   DEFAULT_INVOICE_TEMPLATE_ID,
   DEFAULT_PACKING_SLIP_TEMPLATE_ID,
+  DEFAULT_RETURN_TEMPLATE_ID,
   findTemplatePreset,
   resolveDocumentNotes,
   resolveSalesOrderTemplateId,
@@ -16,6 +18,8 @@ import {
   fetchSalesOrderDocument,
   loadDocumentTemplateSettings,
 } from "./sales-order-document.server";
+import { fetchDraftOrderDocument } from "./shopify-draft-orders.server";
+import { toDraftOrderGid } from "./sales-order-ids";
 import { getSalesOrderDocumentNumbersByOrderGids } from "./sales-order-number.server";
 import {
   ensureInvoiceDocumentNumbers,
@@ -26,6 +30,11 @@ import {
   getCreditNoteMetaByOrderGids,
 } from "./order-credit-note-status.server";
 import { ensurePackingSlipDocumentNumbers, getPackingSlipMetaByOrderGids } from "./order-packing-slip-status.server";
+import {
+  ensureReturnDocumentNumbers,
+  getReturnMetaByOrderGids,
+} from "./order-return-status.server";
+import { getDraftMetaByOrderGids, markOrderDraft } from "./order-invoice-draft-status.server";
 import { loadSelectedTemplateForShop } from "./shop-settings.server";
 import {
   buildSalesOrderPdfBytes,
@@ -36,8 +45,10 @@ import {
 export type BulkDocumentKind =
   | "sales-order"
   | "invoice"
+  | "draft"
   | "credit-note"
-  | "packing-slip";
+  | "packing-slip"
+  | "return";
 
 const MAX_BULK_PDFS = 50;
 const BULK_PDF_CONCURRENCY = 4;
@@ -120,13 +131,29 @@ function resolvePackingSlipTemplateId(value: string | null | undefined) {
   return DEFAULT_PACKING_SLIP_TEMPLATE_ID;
 }
 
+function resolveReturnTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("return-")) {
+    return value;
+  }
+  return DEFAULT_RETURN_TEMPLATE_ID;
+}
+
+function resolveDraftTemplateId(value: string | null | undefined) {
+  if (value && findTemplatePreset(value)?.id.startsWith("draft-")) {
+    return value;
+  }
+  return DEFAULT_DRAFT_TEMPLATE_ID;
+}
+
 function resolveDocumentKind(
   value: string | null | undefined,
 ): BulkDocumentKind {
   if (
     value === "invoice" ||
+    value === "draft" ||
     value === "credit-note" ||
-    value === "packing-slip"
+    value === "packing-slip" ||
+    value === "return"
   ) {
     return value;
   }
@@ -164,7 +191,89 @@ async function prepareOrdersForPdf(args: {
   }
 
   await ensureServerPdfFonts();
-  const orderGids = orderIds.map((orderId) => toOrderGid(orderId));
+  const orderGids = orderIds.map((orderId) =>
+    documentKind === "draft" ? toDraftOrderGid(orderId) : toOrderGid(orderId),
+  );
+
+  if (documentKind === "draft") {
+    const shopSelectedDraft = await loadSelectedTemplateForShop(
+      args.shop,
+      "draft",
+    );
+    const templateId = resolveDraftTemplateId(
+      args.templateId || shopSelectedDraft,
+    );
+    const [template, draftMetaInitial] = await Promise.all([
+      loadDocumentTemplateSettings(args.shop, "draft", templateId, args.admin),
+      getDraftMetaByOrderGids(args.shop, orderGids),
+    ]);
+
+    await Promise.all(
+      orderGids.map(async (gid) => {
+        if (draftMetaInitial.get(gid)?.documentNumber?.trim()) return;
+        try {
+          await markOrderDraft(args.shop, gid);
+        } catch (error) {
+          console.error("Bulk draft number allocate failed:", gid, error);
+        }
+      }),
+    );
+    const draftMeta = await getDraftMetaByOrderGids(args.shop, orderGids);
+
+    const built = await mapPool(
+      orderIds,
+      BULK_PDF_CONCURRENCY,
+      async (orderId) => {
+        const draftGid = toDraftOrderGid(orderId);
+        const order = await fetchDraftOrderDocument(args.admin, draftGid, {
+          shop: args.shop,
+        });
+        if (!order) return null;
+
+        const meta = draftMeta.get(order.id);
+        const documentNumber =
+          meta?.documentNumber?.trim() || order.name;
+        const enrichedOrder: SalesOrderDocumentData = {
+          ...order,
+          documentNumber,
+          documentDate:
+            meta?.draftedAt?.toISOString() || order.createdAt,
+          referenceNumber: order.name,
+        };
+
+        const settings: TemplateEditorSettings = {
+          ...template.settings,
+          notes: resolveDocumentNotes({
+            savedNote: meta?.customerNote ?? null,
+            orderNote: order.orderNote,
+            defaultNotes: template.settings.notes ?? "",
+            preferShopifyOrderNote: template.settings.preferShopifyOrderNote,
+          }),
+          terms: meta?.terms ?? template.settings.terms,
+        };
+
+        const pdf = await buildSalesOrderPdfBytes({
+          order: enrichedOrder,
+          settings,
+          storeDetails: template.storeDetails,
+          templateId: template.templateId,
+        });
+
+        return {
+          pdf,
+          orderName: order.name,
+          documentNumber,
+          fileName: salesOrderPdfFileName(documentNumber || order.name, "draft"),
+        };
+      },
+    );
+
+    const out: BuiltPdfEntry[] = [];
+    for (const entry of built) {
+      if (entry) out.push(entry);
+    }
+    return out;
+  }
 
   if (documentKind === "credit-note") {
     const shopSelected = await loadSelectedTemplateForShop(
@@ -455,6 +564,86 @@ async function prepareOrdersForPdf(args: {
     return out;
   }
 
+  if (documentKind === "return") {
+    const [shopSelectedReturn, shopSelectedSo] = await Promise.all([
+      loadSelectedTemplateForShop(args.shop, "return"),
+      loadSelectedTemplateForShop(args.shop, "sales-order"),
+    ]);
+    const templateId = resolveReturnTemplateId(
+      args.templateId || shopSelectedReturn,
+    );
+    const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
+    const [template, returnMeta, soNumbers] = await Promise.all([
+      loadDocumentTemplateSettings(args.shop, "return", templateId, args.admin),
+      getReturnMetaByOrderGids(args.shop, orderGids),
+      getSalesOrderDocumentNumbersByOrderGids(
+        args.shop,
+        salesOrderTemplateId,
+        orderGids,
+      ),
+    ]);
+
+    const missingNumbers = orderGids.filter((gid) => {
+      const meta = returnMeta.get(gid);
+      return meta && !meta.documentNumber?.trim();
+    });
+    const ensured =
+      missingNumbers.length > 0
+        ? await ensureReturnDocumentNumbers(args.shop, missingNumbers)
+        : new Map<string, string>();
+
+    const built = await mapPool(
+      orderIds,
+      BULK_PDF_CONCURRENCY,
+      async (orderId) => {
+        const orderGid = toOrderGid(orderId);
+        const meta = returnMeta.get(orderGid);
+        if (!meta) return null;
+
+        const order = await fetchSalesOrderDocument(args.admin, orderGid, {
+          shop: args.shop,
+        });
+        if (!order) return null;
+
+        const documentNumber =
+          meta.documentNumber?.trim() ||
+          ensured.get(order.id)?.trim() ||
+          soNumbers.get(order.id) ||
+          order.name;
+
+        const enrichedOrder: SalesOrderDocumentData = {
+          ...order,
+          documentNumber,
+          referenceNumber: soNumbers.get(order.id) ?? order.name,
+          documentDate: meta.convertedAt?.toISOString() || order.createdAt,
+        };
+
+        const pdf = await buildSalesOrderPdfBytes({
+          order: enrichedOrder,
+          settings: template.settings,
+          storeDetails: template.storeDetails,
+          templateId: template.templateId,
+        });
+
+        return {
+          pdf,
+          orderName: order.name,
+          documentNumber,
+          fileName: salesOrderPdfFileName(
+            documentNumber || order.name,
+            "return",
+          ),
+        };
+      },
+    );
+
+    const out: BuiltPdfEntry[] = [];
+    for (const entry of built) {
+      if (entry) out.push(entry);
+    }
+    return out;
+  }
+
   const shopSelected = await loadSelectedTemplateForShop(
     args.shop,
     "sales-order",
@@ -584,9 +773,13 @@ export async function buildSalesOrdersPdfZip(args: {
       ? "credit-notes"
       : documentKind === "invoice"
         ? "invoices"
-        : documentKind === "packing-slip"
-          ? "packing-slips"
-          : "sales-orders";
+        : documentKind === "draft"
+          ? "drafts"
+          : documentKind === "packing-slip"
+            ? "packing-slips"
+            : documentKind === "return"
+              ? "returns"
+              : "sales-orders";
 
   return {
     zip: zipBytes,

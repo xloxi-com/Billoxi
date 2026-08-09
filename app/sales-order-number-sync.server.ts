@@ -38,7 +38,7 @@ async function listAssignedSalesOrderGids(shop: string): Promise<{
 }
 
 export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
-  if (syncedShops.has(shop)) return true;
+  // Always read DB — process cache alone is wrong after a DB wipe/reset.
   try {
     const rows = await prisma.$queryRaw<
       Array<{ salesOrderNumbersSyncedAt: Date | null }>
@@ -50,8 +50,10 @@ export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean>
     `;
     const synced = Boolean(rows[0]?.salesOrderNumbersSyncedAt);
     if (synced) syncedShops.add(shop);
+    else syncedShops.delete(shop);
     return synced;
   } catch {
+    syncedShops.delete(shop);
     return false;
   }
 }
@@ -69,10 +71,21 @@ export type SalesOrderSyncStatus = {
 export async function getSalesOrderNumbersSyncStatus(
   shop: string,
 ): Promise<SalesOrderSyncStatus> {
-  const [synced, assigned] = await Promise.all([
+  const [flagSynced, assigned] = await Promise.all([
     hasSalesOrderNumbersSynced(shop),
     listAssignedSalesOrderGids(shop),
   ]);
+
+  const orderGids = assigned.orderGids;
+  const assignedCount = orderGids.length;
+
+  // Numbers exist but flag missing (DB wipe of flag only, or mark failed) —
+  // heal so badge shows Synced and Sync stays locked until Reset.
+  let synced = flagSynced;
+  if (!synced && assignedCount > 0) {
+    await markSalesOrderNumbersSynced(shop);
+    synced = true;
+  }
 
   let syncedAt: string | null = null;
   if (synced) {
@@ -92,8 +105,6 @@ export async function getSalesOrderNumbersSyncStatus(
     }
   }
 
-  const orderGids = assigned.orderGids;
-  const assignedCount = orderGids.length;
   if (assignedCount === 0) {
     return {
       synced,
@@ -242,6 +253,13 @@ export async function syncSalesOrderNumbersForShop(
     if (soSeries.entryMode === "manual") {
       throw new Error(
         "Sales Order numbering is set to manual. Switch to auto before syncing existing orders.",
+      );
+    }
+
+    const alreadySynced = await getSalesOrderNumbersSyncStatus(shop);
+    if (alreadySynced.synced || alreadySynced.assignedCount > 0) {
+      throw new Error(
+        "Sales Order sync already completed. Reset sync first to sync again.",
       );
     }
 

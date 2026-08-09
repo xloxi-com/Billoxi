@@ -20,7 +20,13 @@ export type ExportPayload = {
 };
 
 type ExportMode = "download" | "print";
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 function resolveDocumentFontFamily(value: string | undefined): string {
   if (!value) return "Inter, system-ui, sans-serif";
@@ -93,7 +99,7 @@ async function waitForPaperReady(
 
 async function withOffscreenPaperPayload<T>(
   payload: ExportPayload,
-  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  documentKind: DocumentKind,
   run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
   options?: {
     readyTimeoutMs?: number;
@@ -134,8 +140,10 @@ async function fetchExportPayload(
   documentKind:
     | "sales-order"
     | "invoice"
+    | "draft"
     | "credit-note"
-    | "packing-slip" = "sales-order",
+    | "packing-slip"
+    | "return" = "sales-order",
 ): Promise<ExportPayload> {
   const numericId = toNumericOrderId(orderId);
   const params = new URLSearchParams({
@@ -155,9 +163,13 @@ async function fetchExportPayload(
         ? "credit note"
         : documentKind === "invoice"
           ? "invoice"
-          : documentKind === "packing-slip"
-            ? "packing slip"
-            : "sales order";
+          : documentKind === "draft"
+            ? "draft"
+            : documentKind === "packing-slip"
+              ? "packing slip"
+              : documentKind === "return"
+                ? "return"
+                : "sales order";
     throw new Error(
       !payload || payload.ok === true
         ? `Failed to load ${label} for PDF`
@@ -238,7 +250,13 @@ function mountOffscreenPaper(
 async function withOffscreenPaper<T>(
   orderId: string,
   templateId: string,
-  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "draft"
+    | "credit-note"
+    | "packing-slip"
+    | "return",
   run: (paper: HTMLDivElement, payload: ExportPayload) => Promise<T>,
 ): Promise<T> {
   const payload = await fetchExportPayload(orderId, templateId, documentKind);
@@ -248,7 +266,13 @@ async function withOffscreenPaper<T>(
 async function buildDomPdfBlobFromPaper(
   paper: HTMLDivElement,
   payload: ExportPayload,
-  documentKind: "sales-order" | "invoice" | "credit-note" | "packing-slip",
+  documentKind:
+    | "sales-order"
+    | "invoice"
+    | "draft"
+    | "credit-note"
+    | "packing-slip"
+    | "return",
 ): Promise<{ blob: Blob; fileName: string }> {
   const { buildSalesOrderDomVectorPdfBlob } = await import("./sales-order-pdf");
   return buildSalesOrderDomVectorPdfBlob(
@@ -261,7 +285,17 @@ async function buildDomPdfBlobFromPaper(
       margins: payload.settings.margins,
     },
     payload.order.documentNumber || payload.order.name,
-    documentKind === "credit-note" ? "credit-note" : documentKind,
+    documentKind === "credit-note"
+      ? "credit-note"
+      : documentKind === "draft"
+        ? "draft"
+        : documentKind === "packing-slip"
+          ? "packing-slip"
+          : documentKind === "return"
+            ? "return"
+            : documentKind === "invoice"
+              ? "invoice"
+              : "sales-order",
   );
 }
 
@@ -279,11 +313,7 @@ function triggerBlobDownload(blob: Blob, fileName: string) {
 
 export async function buildSalesOrderDomPdfBlobFromPayload(
   payload: ExportPayload,
-  documentKind:
-    | "sales-order"
-    | "invoice"
-    | "credit-note"
-    | "packing-slip" = "sales-order",
+  documentKind: DocumentKind = "sales-order",
   options?: {
     readyTimeoutMs?: number;
     skipLongFontWait?: boolean;
@@ -301,11 +331,7 @@ export async function buildSalesOrderDomPdfBlobFromPayload(
 
 export async function downloadSalesOrderDomPdfFromPayload(
   payload: ExportPayload,
-  documentKind:
-    | "sales-order"
-    | "invoice"
-    | "credit-note"
-    | "packing-slip" = "sales-order",
+  documentKind: DocumentKind = "sales-order",
   options?: {
     readyTimeoutMs?: number;
     skipLongFontWait?: boolean;
@@ -324,7 +350,7 @@ export async function downloadSalesOrderDomPdfFromPayload(
 export async function buildSalesOrderDomPdfBlobFromList(args: {
   orderId: string;
   templateId: string;
-  documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
+  documentKind?: DocumentKind;
 }): Promise<{ blob: Blob; fileName: string }> {
   const documentKind = args.documentKind ?? "sales-order";
   return withOffscreenPaper(
@@ -338,7 +364,7 @@ export async function buildSalesOrderDomPdfBlobFromList(args: {
 export async function downloadSalesOrderDomPdfFromList(args: {
   orderId: string;
   templateId: string;
-  documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
+  documentKind?: DocumentKind;
 }) {
   const documentKind = args.documentKind ?? "sales-order";
   await withOffscreenPaper(
@@ -360,7 +386,7 @@ export async function downloadSalesOrderDomPdfFromList(args: {
 export async function printSalesOrderDomPdfFromList(args: {
   orderId: string;
   templateId: string;
-  documentKind?: "sales-order" | "invoice" | "credit-note" | "packing-slip";
+  documentKind?: DocumentKind;
 }) {
   const documentKind = args.documentKind ?? "sales-order";
   await withOffscreenPaper(

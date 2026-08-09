@@ -11,8 +11,10 @@ import { sendDocumentEmail } from "../send-email.server";
 function asDocumentKind(value: string): EmailDocumentKind {
   if (
     value === "invoice" ||
+    value === "draft" ||
     value === "credit-note" ||
     value === "packing-slip" ||
+    value === "return" ||
     value === "sales-order"
   ) {
     return value;

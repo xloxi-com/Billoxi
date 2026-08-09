@@ -1,7 +1,9 @@
 import type { TemplateLanguage } from "./template-labels";
 import {
   CREDIT_NOTE_LABELS,
+  DRAFT_LABELS,
   PACKING_SLIP_LABELS,
+  RETURN_LABELS,
   type DocumentTypeLabelOverrides,
 } from "./template-document-type-labels.data";
 
@@ -27,6 +29,18 @@ export function getPackingSlipLabels(
   return lookupDocumentTypeLabels(PACKING_SLIP_LABELS, language);
 }
 
+export function getDraftLabels(
+  language: TemplateLanguage,
+): DocumentTypeLabelOverrides {
+  return lookupDocumentTypeLabels(DRAFT_LABELS, language);
+}
+
+export function getReturnLabels(
+  language: TemplateLanguage,
+): DocumentTypeLabelOverrides {
+  return lookupDocumentTypeLabels(RETURN_LABELS, language);
+}
+
 export function isBuiltInCreditOrPackingBody(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return true;
@@ -34,6 +48,12 @@ export function isBuiltInCreditOrPackingBody(value: string): boolean {
     if (pack.notes === trimmed || pack.terms === trimmed) return true;
   }
   for (const pack of Object.values(PACKING_SLIP_LABELS)) {
+    if (pack.notes === trimmed || pack.terms === trimmed) return true;
+  }
+  for (const pack of Object.values(DRAFT_LABELS)) {
+    if (pack.notes === trimmed || pack.terms === trimmed) return true;
+  }
+  for (const pack of Object.values(RETURN_LABELS)) {
     if (pack.notes === trimmed || pack.terms === trimmed) return true;
   }
   return false;
