@@ -97,7 +97,7 @@
   white-space: nowrap;
 }
 
-/* Remove blue focus ring on Sales Order # click (mouse); keep keyboard focus-visible */
+/* Remove blue focus ring on row / link click (mouse); keep keyboard focus where useful */
 .sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus,
 .sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus-visible,
 .sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:active {
@@ -108,6 +108,22 @@
 .sales-orders-page .Polaris-IndexTable__TableRow--hovered,
 .sales-orders-page .Polaris-IndexTable__TableRow:focus,
 .sales-orders-page .Polaris-IndexTable__TableRow:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.sales-orders-page .Polaris-Scrollable:focus,
+.sales-orders-page .Polaris-Scrollable:focus-visible,
+.sales-orders-page .Polaris-IndexTable:focus,
+.sales-orders-page .Polaris-IndexTable:focus-visible,
+.sales-orders-page .Polaris-IndexTable-ScrollContainer:focus,
+.sales-orders-page .Polaris-IndexTable-ScrollContainer:focus-visible,
+.sales-orders-page .Polaris-ShadowBevel:focus,
+.sales-orders-page .Polaris-ShadowBevel:focus-visible,
+.sales-orders-page .Polaris-Box:focus,
+.sales-orders-page .Polaris-Box:focus-visible,
+.sales-orders-page .Polaris-Card:focus,
+.sales-orders-page .Polaris-Card:focus-visible {
   outline: none !important;
   box-shadow: none !important;
 }

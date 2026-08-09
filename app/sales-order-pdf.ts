@@ -3900,12 +3900,20 @@ export async function downloadSalesOrderDomVectorPdf(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  const dot = fileName.lastIndexOf(".");
+  anchor.download =
+    dot > 0
+      ? `${fileName.slice(0, dot)}-${Date.now()}${fileName.slice(dot)}`
+      : `${fileName}-${Date.now()}`;
   anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  const revokeMs = Math.min(
+    120_000,
+    Math.max(5_000, Math.ceil(blob.size / 25) + 3_000),
+  );
+  window.setTimeout(() => URL.revokeObjectURL(url), revokeMs);
 }
 
 export async function printSalesOrderDomVectorPdf(

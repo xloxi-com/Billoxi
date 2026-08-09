@@ -78,7 +78,9 @@ export default defineConfig({
       "react-dom",
       "react-router",
       "@shopify/app-bridge-react",
+      // CJS — must be prebundled or `import JSZip from "jszip"` has no default.
+      "jszip",
     ],
-    exclude: ["jspdf", "html2canvas", "jszip"],
+    exclude: ["jspdf", "html2canvas"],
   },
 }) satisfies UserConfig;

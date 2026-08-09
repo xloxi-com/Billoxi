@@ -27,7 +27,9 @@ export async function action({ request }: ActionFunctionArgs) {
           ? "credit-note"
           : documentKind === "packing-slip"
             ? "packing-slip"
-            : "sales-order",
+            : documentKind === "return"
+              ? "return"
+              : "sales-order",
   );
   const templateId =
     String(formData.get("template") || "") || shopSelectedTemplateId || "";

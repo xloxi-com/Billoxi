@@ -154,17 +154,6 @@ function ListEmptyState({
   );
 }
 
-function triggerBrowserDownload(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 function documentStatusDisplay(
   order: SalesOrderRow,
   listMode: "invoice" | "credit-note",
@@ -1468,53 +1457,36 @@ export default function SalesOrderPage() {
 
     setIsDownloadingZip(true);
     try {
-      const formData = new FormData();
-      formData.set("template", activeTemplateId());
-      formData.set("document", activeDocumentKind);
-      for (const orderId of selectedResources) {
-        formData.append("orderIds", orderId);
-      }
-
-      const response = await fetch("/app/sales-order/bulk-download", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        let message = "Failed to download PDF zip";
-        try {
-          const payload = (await response.json()) as { error?: string };
-          if (payload.error) message = payload.error;
-        } catch {
-          // keep default message
-        }
-        if (typeof shopify !== "undefined" && shopify.toast) {
-          shopify.toast.show(message, { isError: true });
-        }
-        return;
-      }
-
-      const blob = await response.blob();
-      const disposition = response.headers.get("Content-Disposition") || "";
-      const match = /filename="([^"]+)"/i.exec(disposition);
-      const zipName = isCreditNoteList
-        ? "credit-notes.zip"
-        : isDraftList
-          ? "drafts.zip"
-          : isInvoiceList
-            ? "invoices.zip"
-            : "sales-orders.zip";
-      triggerBrowserDownload(blob, match?.[1] || zipName);
-
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(
-          `Downloaded ${selectedResources.length} PDFs as zip`,
+          `Preparing ${selectedResources.length} PDFs…`,
         );
+      }
+      const { downloadSalesOrdersDomPdfZipFromList } = await import(
+        "../sales-order-dom-export.client"
+      );
+      const { count } = await downloadSalesOrdersDomPdfZipFromList({
+        orderIds: selectedResources,
+        templateId: activeTemplateId(),
+        documentKind: activeDocumentKind,
+        onProgress: (done, total) => {
+          if (done === 0 || done === total) return;
+          if (typeof shopify !== "undefined" && shopify.toast && done % 3 === 0) {
+            shopify.toast.show(`Building PDFs ${done}/${total}…`);
+          }
+        },
+      });
+
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(`Downloaded ${count} PDFs as zip`);
       }
     } catch (error) {
       console.error("Bulk PDF zip download failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("Failed to download PDF zip", { isError: true });
+        shopify.toast.show(
+          error instanceof Error ? error.message : "Failed to download PDF zip",
+          { isError: true },
+        );
       }
     } finally {
       setIsDownloadingZip(false);
@@ -1523,9 +1495,6 @@ export default function SalesOrderPage() {
     activeDocumentKind,
     activeTemplateId,
     isBusy,
-    isCreditNoteList,
-    isDraftList,
-    isInvoiceList,
     runQuickDownload,
     selectedResources,
   ]);

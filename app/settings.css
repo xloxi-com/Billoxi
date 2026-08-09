@@ -157,6 +157,12 @@
   background: var(--p-color-bg-surface-hover, #f6f6f7);
 }
 
+.settings-nav-item:focus,
+.settings-nav-item:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .settings-nav-item--active {
   background: var(--p-color-bg-surface-selected, #f1f1f1);
 }

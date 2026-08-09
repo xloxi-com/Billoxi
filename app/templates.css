@@ -73,6 +73,16 @@
     box-shadow 160ms ease;
 }
 
+.template-card:focus,
+.template-card:focus-visible,
+.template-card > .Polaris-ShadowBevel:focus,
+.template-card > .Polaris-ShadowBevel:focus-visible,
+.templates-page .Polaris-Scrollable:focus,
+.templates-page .Polaris-Scrollable:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .template-card:hover > .Polaris-ShadowBevel,
 .template-card:hover .Polaris-ShadowBevel {
   border-color: #8c9196 !important;

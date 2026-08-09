@@ -1,4 +1,5 @@
 import { createRoot, type Root } from "react-dom/client";
+import * as JSZipNS from "jszip";
 
 import { SalesOrderLiveDocument } from "./components/sales-order-live-document";
 import { recordDocumentActivity } from "./record-document-activity.client";
@@ -106,13 +107,16 @@ async function withOffscreenPaperPayload<T>(
     skipLongFontWait?: boolean;
     imageGraceMs?: number;
     fastMount?: boolean;
+    /** When true, caller already warmed jsPDF/fonts. */
+    skipWarm?: boolean;
   },
 ): Promise<T> {
-  // Warm PDF fonts/jsPDF in parallel with mounting the live document.
-  const warmPromise = import("./sales-order-pdf").then((mod) => {
-    mod.warmDomVectorPdfDeps();
-    return mod;
-  });
+  const warmPromise = options?.skipWarm
+    ? Promise.resolve(null)
+    : import("./sales-order-pdf").then((mod) => {
+        mod.warmDomVectorPdfDeps();
+        return mod;
+      });
 
   const { host, paper, root } = mountOffscreenPaper(payload, {
     fastMount: options?.fastMount,
@@ -300,15 +304,170 @@ async function buildDomPdfBlobFromPaper(
 }
 
 function triggerBlobDownload(blob: Blob, fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const uniqueName =
+    dot > 0
+      ? `${fileName.slice(0, dot)}-${Date.now()}${fileName.slice(dot)}`
+      : `${fileName}-${Date.now()}`;
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = fileName;
+  anchor.download = uniqueName;
   anchor.rel = "noopener";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  const revokeMs = Math.min(
+    120_000,
+    Math.max(5_000, Math.ceil(blob.size / 25) + 3_000),
+  );
+  window.setTimeout(() => URL.revokeObjectURL(url), revokeMs);
+}
+
+function createJSZip() {
+  const mod = JSZipNS as unknown as {
+    default?: new () => import("jszip");
+  } & (new () => import("jszip"));
+  const Ctor = typeof mod.default === "function" ? mod.default : mod;
+  if (typeof Ctor !== "function") {
+    throw new Error("JSZip failed to load");
+  }
+  return new Ctor();
+}
+
+async function mapPool<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const run = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index]!, index);
+    }
+  };
+  const pool = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: pool }, () => run()));
+  return results;
+}
+
+function uniqueZipEntryName(base: string, used: Set<string>) {
+  const safeBase = base.replace(/[\\/]+/g, "-").trim() || "document.pdf";
+  if (!used.has(safeBase)) {
+    used.add(safeBase);
+    return safeBase;
+  }
+  const dot = safeBase.lastIndexOf(".");
+  const stem = dot >= 0 ? safeBase.slice(0, dot) : safeBase;
+  const ext = dot >= 0 ? safeBase.slice(dot) : "";
+  let i = 2;
+  let candidate = `${stem}-${i}${ext}`;
+  while (used.has(candidate)) {
+    i += 1;
+    candidate = `${stem}-${i}${ext}`;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+function zipFileNameForKind(documentKind: DocumentKind) {
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .slice(0, 19);
+  const prefix =
+    documentKind === "credit-note"
+      ? "credit-notes"
+      : documentKind === "invoice"
+        ? "invoices"
+        : documentKind === "draft"
+          ? "drafts"
+          : documentKind === "packing-slip"
+            ? "packing-slips"
+            : documentKind === "return"
+              ? "returns"
+              : "sales-orders";
+  return `${prefix}-${stamp}.zip`;
+}
+
+/**
+ * Build a zip of DOM vector PDFs — same renderer as single "Download PDF".
+ * Prefetches payloads in parallel and renders a few PDFs at a time for speed.
+ */
+export async function downloadSalesOrdersDomPdfZipFromList(args: {
+  orderIds: string[];
+  templateId: string;
+  documentKind?: DocumentKind;
+  onProgress?: (done: number, total: number) => void;
+}): Promise<{ count: number; fileName: string }> {
+  const documentKind = args.documentKind ?? "sales-order";
+  const orderIds = [...new Set(args.orderIds.map(String).filter(Boolean))].slice(
+    0,
+    50,
+  );
+  if (orderIds.length === 0) {
+    throw new Error("No orders selected");
+  }
+
+  const total = orderIds.length;
+  args.onProgress?.(0, total);
+
+  // Warm jsPDF/fonts once (not once per order).
+  const pdfMod = await import("./sales-order-pdf");
+  pdfMod.warmDomVectorPdfDeps();
+
+  // Fetch all export payloads concurrently (network-bound).
+  const payloads = await mapPool(orderIds, 8, (orderId) =>
+    fetchExportPayload(orderId, args.templateId, documentKind),
+  );
+
+  const zip = createJSZip();
+  const usedNames = new Set<string>();
+  let done = 0;
+
+  // Render a few PDFs at a time — same DOM path, faster ready budget for bulk.
+  const bulkReady = {
+    readyTimeoutMs: 2200,
+    skipLongFontWait: true,
+    imageGraceMs: 500,
+    fastMount: true,
+    skipWarm: true,
+  } as const;
+
+  const entries = await mapPool(payloads, 3, async (payload) => {
+    const { blob, fileName } = await withOffscreenPaperPayload(
+      payload,
+      documentKind,
+      (paper, p) => buildDomPdfBlobFromPaper(paper, p, documentKind),
+      bulkReady,
+    );
+    done += 1;
+    args.onProgress?.(done, total);
+    return { blob, fileName, payload };
+  });
+
+  for (const entry of entries) {
+    zip.file(uniqueZipEntryName(entry.fileName, usedNames), entry.blob);
+  }
+
+  // One bulk activity event instead of N sequential posts.
+  recordDocumentActivity("downloaded", {
+    documentKind,
+    count: entries.length,
+    processType: "bulk",
+  });
+
+  // PDFs are already compressed — STORE is much faster than DEFLATE for zip packing.
+  const zipBlob = await zip.generateAsync({
+    type: "blob",
+    compression: "STORE",
+  });
+  const fileName = zipFileNameForKind(documentKind);
+  triggerBlobDownload(zipBlob, fileName);
+  return { count: entries.length, fileName };
 }
 
 export async function buildSalesOrderDomPdfBlobFromPayload(

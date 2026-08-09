@@ -2353,7 +2353,6 @@ export default function SalesOrderDocumentPage() {
                     className="sales-order-document-sidebar__list"
                     vertical
                     horizontal={false}
-                    focusable
                     scrollbarWidth="thin"
                   >
                     <Suspense
@@ -2534,7 +2533,6 @@ export default function SalesOrderDocumentPage() {
               className="sales-order-document-stage__scroll"
               vertical
               horizontal={false}
-              focusable
               scrollbarWidth="thin"
             >
               <PaperScaleFrame>

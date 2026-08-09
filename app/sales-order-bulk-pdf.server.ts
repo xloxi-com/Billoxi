@@ -767,7 +767,10 @@ export async function buildSalesOrdersPdfZip(args: {
     compressionOptions: { level: 6 },
   });
 
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .slice(0, 19); // e.g. 2026-08-09T19-44-12
   const prefix =
     documentKind === "credit-note"
       ? "credit-notes"

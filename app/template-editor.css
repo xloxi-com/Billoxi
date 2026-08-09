@@ -5,6 +5,25 @@
   container-type: inline-size;
 }
 
+/* Clicking preview / panels must not show a browser blue focus ring. */
+.template-editor-shell .Polaris-Scrollable:focus,
+.template-editor-shell .Polaris-Scrollable:focus-visible,
+.template-editor-shell .Polaris-ShadowBevel:focus,
+.template-editor-shell .Polaris-ShadowBevel:focus-visible,
+.template-editor-shell .Polaris-Box:focus,
+.template-editor-shell .Polaris-Box:focus-visible,
+.template-editor__preview:focus,
+.template-editor__preview:focus-visible,
+.template-editor__preview-stage:focus,
+.template-editor__preview-stage:focus-visible,
+.template-editor__paper:focus,
+.template-editor__paper:focus-visible,
+.template-editor-shell .paper-scale-frame:focus,
+.template-editor-shell .paper-scale-frame:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .template-editor {
   display: grid;
   grid-template-columns: minmax(400px, 520px) minmax(0, 1fr);

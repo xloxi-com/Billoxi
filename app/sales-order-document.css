@@ -89,6 +89,28 @@ s-page:has(.sales-order-document-page) > * {
   flex-direction: column !important;
 }
 
+/* Clicking chrome (list / preview / cards) must not show a blue focus ring.
+   Keep normal focus styles on text fields / buttons. */
+.sales-order-document-page .Polaris-Scrollable:focus,
+.sales-order-document-page .Polaris-Scrollable:focus-visible,
+.sales-order-document-page .Polaris-ResourceItem:focus,
+.sales-order-document-page .Polaris-ResourceItem:focus-visible,
+.sales-order-document-page .Polaris-ResourceItem__Button:focus,
+.sales-order-document-page .Polaris-ResourceItem__Button:focus-visible,
+.sales-order-document-page .Polaris-ShadowBevel:focus,
+.sales-order-document-page .Polaris-ShadowBevel:focus-visible,
+.sales-order-document-page .Polaris-Box:focus,
+.sales-order-document-page .Polaris-Box:focus-visible,
+.sales-order-document-page .Polaris-Card:focus,
+.sales-order-document-page .Polaris-Card:focus-visible,
+.sales-order-document-page .paper-scale-frame:focus,
+.sales-order-document-page .paper-scale-frame:focus-visible,
+.sales-order-document-page .template-editor__paper:focus,
+.sales-order-document-page .template-editor__paper:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .sales-order-document-sidebar__list.Polaris-Scrollable {
   flex: 1 1 auto;
   min-height: 0;
