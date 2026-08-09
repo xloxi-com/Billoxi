@@ -204,6 +204,10 @@ function hasCoreStoreValues(details: StoreDetails): boolean {
   );
 }
 
+export function isStoreDetailsConfigured(details: StoreDetails): boolean {
+  return hasCoreStoreValues(details);
+}
+
 export function mergeStoreDetails(
   saved: unknown,
   shopDefaults: StoreDetails,

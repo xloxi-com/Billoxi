@@ -76,6 +76,7 @@ import { getLastReturnAllocatedSequence } from "../order-return-status.server";
 import {
   GMAIL_SMTP_PRESET,
   WEBMAIL_SMTP_PRESET,
+  isSmtpReadyForSend,
   normalizeSmtpSettings,
   type SmtpSettings,
 } from "../smtp-settings";
@@ -116,6 +117,7 @@ import {
   saveSmtpSettingsForShop,
   saveStoreDetailsForShop,
 } from "../shop-settings.server";
+import { markSetupGuideStep } from "../setup-guide.server";
 import {
   normalizeCreditNoteSettings,
   type CreditNoteSettings,
@@ -500,6 +502,7 @@ export async function action({ request }: ActionFunctionArgs) {
       session.shop,
       admin,
     );
+    await markSetupGuideStep(session.shop, "store-details");
     return { saved: true, section: "store-details" as const, storeDetails };
   }
 
@@ -617,6 +620,9 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const saved = await saveSmtpSettingsForShop(session.shop, smtpSettings);
+    if (isSmtpReadyForSend(saved)) {
+      await markSetupGuideStep(session.shop, "smtp");
+    }
     return {
       saved: true,
       section: "smtp" as const,
@@ -1177,6 +1183,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const saved = await saveStoreDetailsForShop(session.shop, storeDetails);
+  await markSetupGuideStep(session.shop, "store-details");
   return { saved: true, section: "store-details" as const, storeDetails: saved };
 }
 
@@ -2668,52 +2675,6 @@ export default function SettingsPage() {
                             {activeItem.description}
                           </Text>
 
-                          <TextField
-                            label="Store / organization name"
-                            value={storeDetails.name}
-                            onChange={(value) => updateField("name", value)}
-                            autoComplete="organization"
-                          />
-
-                          <TextField
-                            label="Address"
-                            value={storeDetails.address}
-                            multiline={4}
-                            onChange={(value) => updateField("address", value)}
-                            autoComplete="street-address"
-                            helpText="Type the full address. Use a new line for each address line."
-                          />
-
-                          <InlineStack gap="300" wrap={false}>
-                            <div className="settings-flex-field">
-                              <TextField
-                                label="Phone"
-                                value={storeDetails.phone}
-                                onChange={(value) => updateField("phone", value)}
-                                autoComplete="off"
-                              />
-                            </div>
-                            <div className="settings-flex-field">
-                              <TextField
-                                label="Email"
-                                type="email"
-                                value={storeDetails.email}
-                                onChange={(value) => updateField("email", value)}
-                                autoComplete="email"
-                              />
-                            </div>
-                          </InlineStack>
-
-                          <TextField
-                            label="Website"
-                            value={storeDetails.website}
-                            onChange={(value) => updateField("website", value)}
-                            autoComplete="off"
-                            helpText="Shown on document headers as Website: www.your-site.com"
-                          />
-
-                          <Divider />
-
                           <BlockStack gap="300">
                             <Text as="h3" variant="headingSm">
                               Store logo
@@ -2798,6 +2759,52 @@ export default function SettingsPage() {
                               }}
                             />
                           </BlockStack>
+
+                          <Divider />
+
+                          <TextField
+                            label="Store / organization name"
+                            value={storeDetails.name}
+                            onChange={(value) => updateField("name", value)}
+                            autoComplete="organization"
+                          />
+
+                          <TextField
+                            label="Address"
+                            value={storeDetails.address}
+                            multiline={4}
+                            onChange={(value) => updateField("address", value)}
+                            autoComplete="street-address"
+                            helpText="Type the full address. Use a new line for each address line."
+                          />
+
+                          <InlineStack gap="300" wrap={false}>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Phone"
+                                value={storeDetails.phone}
+                                onChange={(value) => updateField("phone", value)}
+                                autoComplete="off"
+                              />
+                            </div>
+                            <div className="settings-flex-field">
+                              <TextField
+                                label="Email"
+                                type="email"
+                                value={storeDetails.email}
+                                onChange={(value) => updateField("email", value)}
+                                autoComplete="email"
+                              />
+                            </div>
+                          </InlineStack>
+
+                          <TextField
+                            label="Website"
+                            value={storeDetails.website}
+                            onChange={(value) => updateField("website", value)}
+                            autoComplete="off"
+                            helpText="Shown on document headers as Website: www.your-site.com"
+                          />
 
                           <Divider />
 

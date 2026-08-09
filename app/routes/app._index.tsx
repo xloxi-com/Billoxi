@@ -2,24 +2,39 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useLoaderData, useNavigate, useRouteError } from "react-router";
+import { useEffect, useState } from "react";
+import {
+  useLoaderData,
+  useNavigate,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   AppProvider,
   Badge,
   BlockStack,
   Box,
+  Button,
   Card,
+  Collapsible,
   Divider,
+  Icon,
   IndexTable,
   InlineGrid,
   InlineStack,
   Layout,
   Link,
   Page,
+  ProgressBar,
   Text,
   Thumbnail,
 } from "@shopify/polaris";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CircleChevronRightIcon,
+} from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { requireAdminAuth } from "../shopify-context.server";
@@ -38,9 +53,61 @@ import {
   formatOrderIdLabel,
   orderIdHref,
 } from "../document-event-log";
+import { hasSalesOrderNumbersSynced } from "../sales-order-number-sync.server";
+import { hasInvoiceOrderNumbersSynced } from "../invoice-order-number-sync.server";
+import { hasDraftOrderNumbersSynced } from "../draft-order-number-sync.server";
+import { hasReturnOrderNumbersSynced } from "../return-order-number-sync.server";
+import {
+  loadSmtpSettingsForShop,
+} from "../shop-settings.server";
+import { isSmtpReadyForSend } from "../smtp-settings";
+import { loadSetupGuideProgress } from "../setup-guide.server";
 import prisma from "../db.server";
 import offrefyLogo from "../assets/recommended/offrefy.png";
 import approvefyLogo from "../assets/recommended/approvefy.png";
+
+type SetupStepId =
+  | "store-details"
+  | "templates"
+  | "transaction-numbers"
+  | "smtp";
+
+const FULL_SETUP_STEPS: Array<{
+  id: SetupStepId;
+  label: string;
+  detail: string;
+  cta: string;
+  href: string;
+}> = [
+  {
+    id: "store-details",
+    label: "Store details",
+    detail: "Add your business name, address, and logo for documents.",
+    cta: "Open store details",
+    href: "/app/settings?section=store-details",
+  },
+  {
+    id: "templates",
+    label: "Document templates",
+    detail: "Pick active templates for sales orders and invoices.",
+    cta: "Open templates",
+    href: "/app/templates",
+  },
+  {
+    id: "transaction-numbers",
+    label: "Transaction numbers",
+    detail: "Sync SO, INV, DFT, and RET numbers for existing orders.",
+    cta: "Open Transaction numbers",
+    href: "/app/settings?section=number-series",
+  },
+  {
+    id: "smtp",
+    label: "Email (SMTP)",
+    detail: "Connect SMTP so you can send documents by email.",
+    cta: "Open SMTP settings",
+    href: "/app/settings?section=smtp",
+  },
+];
 
 const CHART_SERIES = [
   { key: "printed" as const, label: "Printed", color: "#2C6ECB" },
@@ -242,13 +309,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await requireAdminAuth(request);
   const shop = session.shop;
 
-  const [monthlyUsage, usageSeries, installedAt, rawEventLogs] =
-    await Promise.all([
-      loadShopMonthlyUsage(shop),
-      loadDailyUsageSeries(shop, 14),
-      loadShopInstalledAt(shop),
-      loadRecentDocumentEvents(shop, 15),
-    ]);
+  const [
+    monthlyUsage,
+    usageSeries,
+    installedAt,
+    rawEventLogs,
+    salesOrderSynced,
+    invoiceSynced,
+    draftSynced,
+    returnSynced,
+    smtpSettings,
+    setupProgress,
+  ] = await Promise.all([
+    loadShopMonthlyUsage(shop),
+    loadDailyUsageSeries(shop, 14),
+    loadShopInstalledAt(shop),
+    loadRecentDocumentEvents(shop, 15),
+    hasSalesOrderNumbersSynced(shop),
+    hasInvoiceOrderNumbersSynced(shop),
+    hasDraftOrderNumbersSynced(shop),
+    hasReturnOrderNumbersSynced(shop),
+    loadSmtpSettingsForShop(shop),
+    loadSetupGuideProgress(shop),
+  ]);
 
   const eventLogs = await enrichDocumentEventsWithOrderNames(
     admin,
@@ -257,6 +340,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const trialEndsAt = new Date(installedAt);
   trialEndsAt.setDate(trialEndsAt.getDate() + PLAN_SUMMARY.trialDays);
+
+  const transactionNumbersReady =
+    salesOrderSynced && invoiceSynced && draftSynced && returnSynced;
+
+  // Merchant must finish each step after install — do not treat Shopify
+  // auto-filled store details / default templates as Done.
+  const setupGuide = {
+    steps: {
+      "store-details": Boolean(setupProgress["store-details"]),
+      templates: Boolean(setupProgress.templates),
+      "transaction-numbers": transactionNumbersReady,
+      smtp:
+        Boolean(setupProgress.smtp) || isSmtpReadyForSend(smtpSettings),
+    } satisfies Record<SetupStepId, boolean>,
+  };
 
   return {
     analytics: {
@@ -272,12 +370,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       trialEndsAtLabel: formatTrialDate(trialEndsAt),
     },
     eventLogs,
+    setupGuide,
   };
 };
 
 export default function AppHomePage() {
-  const { analytics, plan, eventLogs } = useLoaderData<typeof loader>();
+  const { analytics, plan, eventLogs, setupGuide } =
+    useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const [setupOpen, setSetupOpen] = useState(true);
+  const [stepSynced, setStepSynced] = useState(setupGuide.steps);
+
+  useEffect(() => {
+    setStepSynced(setupGuide.steps);
+  }, [setupGuide.steps]);
 
   const planItems = [
     { label: "Your Current Plan", value: plan.name },
@@ -294,6 +400,17 @@ export default function AppHomePage() {
     { label: "Monthly Downloaded", value: analytics.downloaded },
     { label: "Monthly Sent", value: analytics.sent },
   ] as const;
+
+  const setupSteps = FULL_SETUP_STEPS.map((step) => ({
+    ...step,
+    synced: Boolean(stepSynced[step.id]),
+  }));
+  const setupDoneCount = setupSteps.filter((step) => step.synced).length;
+  const setupComplete = setupDoneCount === setupSteps.length;
+  const nextStep = setupSteps.find((step) => !step.synced) ?? null;
+  const setupProgress = Math.round(
+    (setupDoneCount / setupSteps.length) * 100,
+  );
 
   return (
     <AppProvider i18n={enTranslations}>
@@ -317,6 +434,133 @@ export default function AppHomePage() {
         <Layout>
           <Layout.Section>
             <BlockStack gap="400">
+              {!setupComplete ? (
+                <Card>
+                  <BlockStack gap="300">
+                    <InlineStack align="space-between" blockAlign="center" wrap>
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="h2" variant="headingMd">
+                            Setup guide
+                          </Text>
+                          <Badge tone="attention">
+                            {`${setupDoneCount}/${setupSteps.length}`}
+                          </Badge>
+                        </InlineStack>
+                        <Text as="p" tone="subdued" variant="bodySm">
+                          Finish these steps to get Billoxi ready.
+                        </Text>
+                      </BlockStack>
+                      <Button
+                        variant="plain"
+                        icon={setupOpen ? ChevronUpIcon : ChevronDownIcon}
+                        accessibilityLabel={
+                          setupOpen
+                            ? "Collapse setup guide"
+                            : "Expand setup guide"
+                        }
+                        onClick={() => setSetupOpen((open) => !open)}
+                      />
+                    </InlineStack>
+
+                    <ProgressBar progress={setupProgress} size="small" />
+
+                    <Collapsible
+                      open={setupOpen}
+                      id="home-full-setup-guide"
+                      transition={{
+                        duration: "150ms",
+                        timingFunction: "ease",
+                      }}
+                    >
+                      <BlockStack gap="0">
+                        {setupSteps.map((step, index) => {
+                          const isNext = nextStep?.id === step.id;
+
+                          return (
+                            <Box key={step.id}>
+                              {index > 0 ? <Divider /> : null}
+                              <Box
+                                padding="300"
+                                background={
+                                  isNext ? "bg-surface-secondary" : undefined
+                                }
+                                borderRadius={isNext ? "200" : undefined}
+                              >
+                                <InlineStack
+                                  align="space-between"
+                                  blockAlign={isNext ? "start" : "center"}
+                                  gap="300"
+                                  wrap
+                                >
+                                  <InlineStack
+                                    gap="200"
+                                    blockAlign={isNext ? "start" : "center"}
+                                    wrap={false}
+                                  >
+                                    <Box>
+                                      <Icon
+                                        source={
+                                          step.synced
+                                            ? CheckCircleIcon
+                                            : CircleChevronRightIcon
+                                        }
+                                        tone={
+                                          step.synced
+                                            ? "success"
+                                            : isNext
+                                              ? "base"
+                                              : "subdued"
+                                        }
+                                      />
+                                    </Box>
+                                    <BlockStack gap="100">
+                                      <Text
+                                        as="h3"
+                                        variant="bodyMd"
+                                        fontWeight={
+                                          isNext ? "semibold" : undefined
+                                        }
+                                        tone={
+                                          step.synced || isNext
+                                            ? undefined
+                                            : "subdued"
+                                        }
+                                      >
+                                        {step.label}
+                                      </Text>
+                                      {isNext ? (
+                                        <Text
+                                          as="p"
+                                          tone="subdued"
+                                          variant="bodySm"
+                                        >
+                                          {step.detail}
+                                        </Text>
+                                      ) : null}
+                                    </BlockStack>
+                                  </InlineStack>
+                                  {step.synced ? (
+                                    <Badge tone="success">Done</Badge>
+                                  ) : (
+                                    <Button
+                                      variant={isNext ? "primary" : "secondary"}
+                                      onClick={() => navigate(step.href)}
+                                    >
+                                      {step.cta}
+                                    </Button>
+                                  )}
+                                </InlineStack>
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                      </BlockStack>
+                    </Collapsible>
+                  </BlockStack>
+                </Card>
+              ) : null}
+
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">

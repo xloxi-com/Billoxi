@@ -44,7 +44,30 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  // Recover from React Router single-fetch / route-discovery mismatches
+  // (e.g. "No result found for routeId routes/app.templates").
+  if (
+    typeof window !== "undefined" &&
+    /No result found for routeId/i.test(message)
+  ) {
+    const key = "billoxi:routeId-reload";
+    const last = Number(sessionStorage.getItem(key) || "0");
+    if (Date.now() - last > 4000) {
+      sessionStorage.setItem(key, String(Date.now()));
+      window.location.reload();
+      return null;
+    }
+  }
+
+  return boundary.error(error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

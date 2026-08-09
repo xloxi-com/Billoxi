@@ -64,6 +64,8 @@ model ShopSettings {
   invoiceSettings    Json     @default("{}")
   /// Off | Shopify Markets — document currency source.
   multiCurrencySettings Json  @default("{}")
+  /// Home setup guide steps completed by the merchant (not auto-filled).
+  setupGuide           Json     @default("{}")
   /// Set when existing Shopify orders were numbered on install / first sync.
   salesOrderNumbersSyncedAt DateTime?
   /// Set when existing Shopify draft orders were numbered via Draft sync.

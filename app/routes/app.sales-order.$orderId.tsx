@@ -1863,6 +1863,25 @@ export default function SalesOrderDocumentPage() {
     );
   }, [convertFetcher, isCancelledOrder, isConverting]);
 
+  const canConvertToReturn =
+    !isIssuedDocument &&
+    !data.orderReturn &&
+    (paymentStatusKey === "REFUNDED" ||
+      paymentStatusKey === "PARTIALLY_REFUNDED");
+
+  const handleConvertToReturn = useCallback(() => {
+    if (isConverting || isCancelledOrder || !canConvertToReturn) return;
+    convertFetcher.submit(
+      { intent: "convert-to-return" },
+      { method: "post" },
+    );
+  }, [
+    canConvertToReturn,
+    convertFetcher,
+    isCancelledOrder,
+    isConverting,
+  ]);
+
   const handleSaveAsDraft = useCallback(() => {
     if (isConverting || isCancelledOrder || alreadyInvoiced || alreadyDraft) {
       return;
@@ -2131,6 +2150,21 @@ export default function SalesOrderDocumentPage() {
               onClick={handleConvertToPackingSlip}
             >
               Convert to packing slip
+            </s-button>
+          ) : null}
+          {canConvertToReturn ? (
+            <s-button
+              slot="secondary-actions"
+              loading={
+                (isConverting &&
+                  convertFetcher.formData?.get("intent") ===
+                    "convert-to-return") ||
+                undefined
+              }
+              disabled={isConverting || undefined}
+              onClick={handleConvertToReturn}
+            >
+              Convert to return
             </s-button>
           ) : null}
         </>

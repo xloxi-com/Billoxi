@@ -45,6 +45,7 @@ import {
   loadStoreDetailsForShop,
   saveSelectedTemplateForShop,
 } from "../shop-settings.server";
+import { markSetupGuideStep } from "../setup-guide.server";
 import {
   numberingFromSeries,
   NUMBER_SERIES_MODULES,
@@ -367,6 +368,7 @@ export async function action({ request }: ActionFunctionArgs) {
       documentType,
       templateId,
     );
+    await markSetupGuideStep(session.shop, "templates");
     return Response.json({ ok: true, selectedTemplates });
   }
 

@@ -28,7 +28,7 @@ import {
   type MultiCurrencySettings,
 } from "./multi-currency-settings";
 import {
-  mergeStoreDetails,
+  emptyStoreDetails,
   normalizeStoreDetails,
   type StoreDetails,
 } from "./store-details";
@@ -396,6 +396,10 @@ export async function loadStoreDetailsForShop(
   admin: { graphql: (query: string) => Promise<Response> },
   options?: { includeLogo?: boolean },
 ): Promise<StoreDetails> {
+  // `admin` kept for call-site compatibility; Shopify data is only loaded via
+  // explicit "Load from Shopify store" (resetStoreDetailsFromShopify).
+  void admin;
+
   const includeLogo = options?.includeLogo !== false;
   const cacheKey = `${shop}|logo:${includeLogo ? "1" : "0"}`;
   const cached = storeDetailsCache.get(cacheKey);
@@ -411,6 +415,20 @@ export async function loadStoreDetailsForShop(
   `;
 
   const raw = parseStoreDetailsJson(rows[0]?.storeDetails);
+
+  // First install: empty until merchant Save or Load from Shopify.
+  if (!isMerchantSavedStoreDetails(raw)) {
+    const empty = {
+      ...emptyStoreDetails,
+      customFields: [] as StoreDetails["customFields"],
+    };
+    storeDetailsCache.set(cacheKey, {
+      expires: Date.now() + STORE_DETAILS_TTL_MS,
+      value: empty,
+    });
+    return empty;
+  }
+
   const fromDb = normalizeStoreDetails(raw);
   const rawRecord =
     raw && typeof raw === "object" && !Array.isArray(raw)
@@ -424,26 +442,11 @@ export async function loadStoreDetailsForShop(
         asNonEmptyAddress(rawRecord?.country)),
   );
 
-  let result: StoreDetails;
+  let result: StoreDetails = fromDb;
 
-  // Fast path: shop already saved complete store details — skip Shopify GraphQL.
-  if (
-    rows[0] &&
-    rawHasAddress &&
-    fromDb.name &&
-    !rawHasLegacyAddress
-  ) {
+  if (rows[0] && rawHasLegacyAddress && fromDb.address) {
+    await saveStoreDetailsForShop(shop, fromDb);
     result = fromDb;
-  } else {
-    const shopDefaults = await fetchShopStoreDefaults(admin, shop);
-    const merged = mergeStoreDetails(raw, shopDefaults);
-    const filledFromShopify = !rawHasAddress && Boolean(merged.address);
-
-    // Persist migrated / backfilled address so documents keep showing it.
-    if (rows[0] && (rawHasLegacyAddress || filledFromShopify)) {
-      await saveStoreDetailsForShop(shop, merged);
-    }
-    result = merged;
   }
 
   if (!includeLogo) {
@@ -473,11 +476,18 @@ function asNonEmptyAddress(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+/** True only after merchant Save or Load from Shopify — not auto-fill. */
+function isMerchantSavedStoreDetails(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  return (raw as { merchantSaved?: unknown }).merchantSaved === true;
+}
+
 export async function saveStoreDetailsForShop(
   shop: string,
   storeDetails: StoreDetails,
 ): Promise<StoreDetails> {
   const normalized = normalizeStoreDetails(storeDetails);
+  const payload = { ...normalized, merchantSaved: true };
   const existing = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT id, shop, "storeDetails"
     FROM "ShopSettings"
@@ -488,7 +498,7 @@ export async function saveStoreDetailsForShop(
   if (existing[0]) {
     await prisma.$executeRaw`
       UPDATE "ShopSettings"
-      SET "storeDetails" = ${JSON.stringify(normalized)}::jsonb,
+      SET "storeDetails" = ${JSON.stringify(payload)}::jsonb,
           "updatedAt" = CURRENT_TIMESTAMP
       WHERE shop = ${shop}
     `;
@@ -498,7 +508,7 @@ export async function saveStoreDetailsForShop(
       VALUES (
         ${randomUUID()},
         ${shop},
-        ${JSON.stringify(normalized)}::jsonb,
+        ${JSON.stringify(payload)}::jsonb,
         ${JSON.stringify({})}::jsonb,
         CURRENT_TIMESTAMP,
         CURRENT_TIMESTAMP

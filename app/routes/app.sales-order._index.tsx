@@ -17,12 +17,13 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   AppProvider,
+  Avatar,
   Badge,
   Banner,
+  Box,
   Button,
   ChoiceList,
   EmptySearchResult,
-  EmptyState,
   Icon,
   IndexFilters,
   IndexFiltersMode,
@@ -117,6 +118,39 @@ function getSelectedTemplateId(fallback?: string | null) {
     fallback ||
       window.localStorage.getItem(SALES_ORDER_TEMPLATE_STORAGE_KEY) ||
       DEFAULT_SALES_ORDER_TEMPLATE_ID,
+  );
+}
+
+function ListEmptyState({
+  heading,
+  description,
+  initials,
+  action,
+}: {
+  heading: string;
+  description: string;
+  initials: string;
+  action?: { content: string; onAction: () => void };
+}) {
+  return (
+    <Box paddingBlock="800">
+      <BlockStack gap="400" inlineAlign="center">
+        <Avatar size="xl" initials={initials} name={heading} />
+        <BlockStack gap="200" inlineAlign="center">
+          <Text as="h2" variant="headingMd">
+            {heading}
+          </Text>
+          <Text as="p" tone="subdued" alignment="center">
+            {description}
+          </Text>
+        </BlockStack>
+        {action ? (
+          <Button variant="primary" onClick={action.onAction}>
+            {action.content}
+          </Button>
+        ) : null}
+      </BlockStack>
+    </Box>
   );
 }
 
@@ -1293,6 +1327,20 @@ export default function SalesOrderPage() {
     convertFetcher.submit(formData, { method: "post" });
   }, [convertFetcher, isConverting, orders, selectedResources]);
 
+  const handleConvertToReturn = useCallback(() => {
+    if (selectedResources.length !== 1 || isConverting) return;
+    const order = orders.find((row) => row.id === selectedResources[0]);
+    if (!order || order.returnSlip) return;
+    const key = (order.paymentStatusKey || "").toUpperCase();
+    if (key !== "REFUNDED" && key !== "PARTIALLY_REFUNDED") return;
+    const status = order.paymentStatus.toLowerCase();
+    if (status === "voided" || status.includes("cancel")) return;
+    const formData = new FormData();
+    formData.set("intent", "convert-to-return");
+    formData.append("orderIds", selectedResources[0]!);
+    convertFetcher.submit(formData, { method: "post" });
+  }, [convertFetcher, isConverting, orders, selectedResources]);
+
   const handleCreateCreditNote = useCallback(() => {
     if (selectedResources.length !== 1 || isConverting) return;
     const order = orders.find((row) => row.id === selectedResources[0]);
@@ -1572,6 +1620,7 @@ export default function SalesOrderPage() {
     if (!action) return;
     if (action === "invoice") handleConvertToInvoice();
     else if (action === "packing-slip") handleConvertToPackingSlip();
+    else if (action === "return") handleConvertToReturn();
     else if (action === "credit-note") handleCreateCreditNote();
     else if (action === "save-as-draft") handleSaveAsDraft();
     else if (action === "finalize-draft") handleFinalizeDraft();
@@ -1589,6 +1638,7 @@ export default function SalesOrderPage() {
     handleBulkSendEmail,
     handleConvertToInvoice,
     handleConvertToPackingSlip,
+    handleConvertToReturn,
     handleCreateCreditNote,
     handleDeleteCreditNotes,
     handleDeleteDrafts,
@@ -1630,6 +1680,21 @@ export default function SalesOrderPage() {
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
     !selectedOrder!.packingSlip;
+  const selectedPaymentKey = (
+    selectedOrder?.paymentStatusKey || ""
+  ).toUpperCase();
+  const canConvertToReturn =
+    !isInvoiceList &&
+    !isPackingSlipList &&
+    !isReturnList &&
+    !isCreditNoteList &&
+    !isDraftList &&
+    selectedResources.length === 1 &&
+    Boolean(selectedOrder) &&
+    !hasCancelledSelected &&
+    !selectedOrder!.returnSlip &&
+    (selectedPaymentKey === "REFUNDED" ||
+      selectedPaymentKey === "PARTIALLY_REFUNDED");
   const canSaveAsDraft =
     !isInvoiceList &&
     !isPackingSlipList &&
@@ -1764,6 +1829,13 @@ export default function SalesOrderPage() {
         onAction: () => setConfirmAction("packing-slip"),
         disabled: isBusy || !canConvertToPackingSlip,
       });
+      if (canConvertToReturn) {
+        actions.push({
+          content: "Convert to return",
+          onAction: () => setConfirmAction("return"),
+          disabled: isBusy,
+        });
+      }
       actions.push({
         content: "Send email",
         onAction: () => setConfirmAction("email"),
@@ -1804,6 +1876,7 @@ export default function SalesOrderPage() {
     canCreateCreditNote,
     canConvertToInvoice,
     canConvertToPackingSlip,
+    canConvertToReturn,
     canDeleteDraft,
     canDeleteInvoice,
     canFinalizeDraft,
@@ -2454,42 +2527,40 @@ export default function SalesOrderPage() {
       withIllustration
     />
   ) : isPackingSlipList ? (
-    <EmptyState
+    <ListEmptyState
       heading="No packing slips yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      description="Convert a sales order to a packing slip to see it listed here."
+      initials="PS"
       action={{
         content: "Go to Sales Orders",
         onAction: () => navigate("/app/sales-order"),
       }}
-    >
-      <p>Convert a sales order to a packing slip to see it listed here.</p>
-    </EmptyState>
+    />
   ) : isReturnList ? (
-    <EmptyState
+    <ListEmptyState
       heading="No returns yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      description="Convert a sales order to a return to see it listed here."
+      initials="RT"
       action={{
         content: "Go to Sales Orders",
         onAction: () => navigate("/app/sales-order"),
       }}
-    >
-      <p>Convert a sales order to a return to see it listed here.</p>
-    </EmptyState>
+    />
   ) : isCreditNoteList ? (
-    <EmptyState
+    <ListEmptyState
       heading="No credit notes yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      description="Create a credit note from an invoice to see it listed here."
+      initials="CN"
       action={{
         content: "Go to Invoice",
         onAction: () => navigate("/app/invoice"),
       }}
-    >
-      <p>Create a credit note from an invoice to see it listed here.</p>
-    </EmptyState>
+    />
   ) : isDraftList ? (
-    <EmptyState
+    <ListEmptyState
       heading="No draft orders yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      description="Draft orders created in Shopify Admin will appear here."
+      initials="DR"
       action={{
         content: "Create in Shopify",
         onAction: () => {
@@ -2506,27 +2577,23 @@ export default function SalesOrderPage() {
           }
         },
       }}
-    >
-      <p>Draft orders created in Shopify Admin will appear here.</p>
-    </EmptyState>
+    />
   ) : isInvoiceList ? (
-    <EmptyState
+    <ListEmptyState
       heading="No invoices yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
+      description="Convert a sales order to an invoice to see it listed here."
+      initials="IN"
       action={{
         content: "Go to Sales Orders",
         onAction: () => navigate("/app/sales-order"),
       }}
-    >
-      <p>Convert a sales order to an invoice to see it listed here.</p>
-    </EmptyState>
+    />
   ) : (
-    <EmptyState
+    <ListEmptyState
       heading="No sales orders yet"
-      image="https://cdn.shopify.com/s/files/1/0262/4071/2716/files/emptystate-files.png"
-    >
-      <p>Orders from your Shopify store will appear here.</p>
-    </EmptyState>
+      description="Orders from your Shopify store will appear here."
+      initials="SO"
+    />
   );
 
   const rowMarkup = orders.map((order, index) => {
