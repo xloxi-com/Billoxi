@@ -29,7 +29,6 @@ import {
   Link,
   RadioButton,
   Thumbnail,
-  Modal,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
@@ -39,7 +38,6 @@ import {
   DragHandleIcon,
   EditIcon,
   EmailIcon,
-  ExternalIcon,
   NoteIcon,
   OrderIcon,
   ReceiptIcon,
@@ -135,31 +133,10 @@ import {
   syncNumberCounter,
   validateStartingNumber,
 } from "../sales-order-number.server";
-import {
-  getSalesOrderNumbersSyncStatus,
-  resetSalesOrderNumbersSync,
-  syncSalesOrderNumbersForShop,
-} from "../sales-order-number-sync.server";
-import {
-  getDraftOrderNumbersSyncStatus,
-  resetDraftOrderNumbersSync,
-  syncDraftOrderNumbersForShop,
-} from "../draft-order-number-sync.server";
-import {
-  getReturnOrderNumbersSyncStatus,
-  resetReturnOrderNumbersSync,
-  syncReturnOrderNumbersForShop,
-} from "../return-order-number-sync.server";
-import {
-  getInvoiceOrderNumbersSyncStatus,
-  resetInvoiceOrderNumbersSync,
-  syncInvoiceOrderNumbersForShop,
-} from "../invoice-order-number-sync.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
 import { backfillAutoCreditNotesForShop } from "../auto-credit-note.server";
-import offrefyLogo from "../assets/recommended/offrefy.png";
-import approvefyLogo from "../assets/recommended/approvefy.png";
 import "../settings.css";
+import { RecommendedAppsSidebar } from "../components/recommended-apps";
 
 function getNumberSeriesAlreadyUsedError(
   current: NumberSeriesMap,
@@ -208,29 +185,6 @@ function getNumberSeriesAlreadyUsedError(
   }
   return null;
 }
-
-const RECOMMENDED_APPS = [
-  {
-    id: "offrefy",
-    name: "Offrefy",
-    tagline: "Ultra Quantity Breaks",
-    description:
-      "Raise order value with quantity breaks and volume discounts that apply at checkout.",
-    href: "https://apps.shopify.com/offrefy",
-    badge: "Free plan",
-    logo: offrefyLogo,
-  },
-  {
-    id: "approvefy",
-    name: "Approvefy",
-    tagline: "B2B legacy Signup",
-    description:
-      "B2B registration forms with manual approval, company accounts, and legacy customer support.",
-    href: "https://apps.shopify.com/approvefy",
-    badge: "From $4.99/mo",
-    logo: approvefyLogo,
-  },
-] as const;
 
 type SettingsSection =
   | "store-details"
@@ -441,20 +395,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     lastDraftSequence,
     lastReturnSequence,
     invoiceDigitWidth,
-    salesOrderSync,
-    draftOrderSync,
-    returnOrderSync,
-    invoiceOrderSync,
   ] = await Promise.all([
     getLastAllocatedSequence(session.shop),
     getLastInvoiceAllocatedSequence(session.shop),
     getLastDraftAllocatedSequence(session.shop),
     getLastReturnAllocatedSequence(session.shop),
     getInvoiceNumberDigitWidth(session.shop),
-    getSalesOrderNumbersSyncStatus(session.shop),
-    getDraftOrderNumbersSyncStatus(session.shop),
-    getReturnOrderNumbersSyncStatus(session.shop),
-    getInvoiceOrderNumbersSyncStatus(session.shop),
   ]);
   const lastAllocatedByModule: Record<NumberSeriesModuleId, number | null> = {
     "sales-order": lastAllocatedSequence,
@@ -473,10 +419,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     lastAllocatedByModule,
     invoiceDigitWidth,
     hasSmtpPassword: Boolean(smtpSettings.password),
-    salesOrderSync,
-    draftOrderSync,
-    returnOrderSync,
-    invoiceOrderSync,
     creditNoteSettings,
     invoiceSettings,
     multiCurrencySettings,
@@ -760,20 +702,12 @@ export async function action({ request }: ActionFunctionArgs) {
       lastDraftSequence,
       lastReturnSequence,
       invoiceDigitWidth,
-      salesOrderSync,
-      draftOrderSync,
-      returnOrderSync,
-      invoiceOrderSync,
     ] = await Promise.all([
       getLastAllocatedSequence(session.shop),
       getLastInvoiceAllocatedSequence(session.shop),
       getLastDraftAllocatedSequence(session.shop),
       getLastReturnAllocatedSequence(session.shop),
       getInvoiceNumberDigitWidth(session.shop),
-      getSalesOrderNumbersSyncStatus(session.shop),
-      getDraftOrderNumbersSyncStatus(session.shop),
-      getReturnOrderNumbersSyncStatus(session.shop),
-      getInvoiceOrderNumbersSyncStatus(session.shop),
     ]);
     return {
       saved: true,
@@ -789,349 +723,6 @@ export async function action({ request }: ActionFunctionArgs) {
         "packing-slip": null,
       } satisfies Record<NumberSeriesModuleId, number | null>,
       invoiceDigitWidth,
-      salesOrderSync,
-      draftOrderSync,
-      returnOrderSync,
-      invoiceOrderSync,
-    };
-  }
-
-  if (intent === "sync-sales-order-numbers") {
-    try {
-      const result = await syncSalesOrderNumbersForShop(session.shop, admin);
-      const [lastInvoiceSequence, lastDraftSequence, lastReturnSequence, invoiceDigitWidth, draftOrderSync] =
-        await Promise.all([
-          getLastInvoiceAllocatedSequence(session.shop),
-          getLastDraftAllocatedSequence(session.shop),
-          getLastReturnAllocatedSequence(session.shop),
-          getInvoiceNumberDigitWidth(session.shop),
-          getDraftOrderNumbersSyncStatus(session.shop),
-        ]);
-      const lastAllocatedSequence = result.lastAllocatedSequence;
-      return {
-        saved: true,
-        section: "number-series-sync" as const,
-        assigned: result.assigned,
-        skipped: result.skipped,
-        lastNumber: result.lastNumber,
-        lastAllocatedSequence,
-        lastAllocatedByModule: {
-          "sales-order": lastAllocatedSequence,
-          invoice: lastInvoiceSequence,
-          draft: lastDraftSequence,
-          return: lastReturnSequence,
-          "credit-note": null,
-          "packing-slip": null,
-        } satisfies Record<NumberSeriesModuleId, number | null>,
-        invoiceDigitWidth,
-        salesOrderSync: result.salesOrderSync,
-        draftOrderSync,
-        numberSeries: result.numberSeries,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          saved: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to sync sales order numbers.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (intent === "reset-sales-order-number-sync") {
-    const result = await resetSalesOrderNumbersSync(session.shop);
-    if (!result.ok) {
-      return Response.json(
-        { saved: false, error: result.error },
-        { status: 400 },
-      );
-    }
-    const [lastInvoiceSequence, lastDraftSequence, lastReturnSequence, invoiceDigitWidth, draftOrderSync] =
-      await Promise.all([
-        getLastInvoiceAllocatedSequence(session.shop),
-        getLastDraftAllocatedSequence(session.shop),
-        getLastReturnAllocatedSequence(session.shop),
-        getInvoiceNumberDigitWidth(session.shop),
-        getDraftOrderNumbersSyncStatus(session.shop),
-      ]);
-    return {
-      saved: true,
-      section: "number-series-reset" as const,
-      reverted: result.reverted,
-      lastAllocatedSequence: result.lastAllocatedSequence,
-      lastAllocatedByModule: {
-        "sales-order": result.lastAllocatedSequence,
-        invoice: lastInvoiceSequence,
-        draft: lastDraftSequence,
-        return: lastReturnSequence,
-        "credit-note": null,
-        "packing-slip": null,
-      } satisfies Record<NumberSeriesModuleId, number | null>,
-      invoiceDigitWidth,
-      salesOrderSync: result.salesOrderSync,
-      draftOrderSync,
-      numberSeries: result.numberSeries,
-    };
-  }
-
-  if (intent === "sync-draft-order-numbers") {
-    try {
-      const result = await syncDraftOrderNumbersForShop(session.shop, admin);
-      const [lastAllocatedSequence, lastInvoiceSequence, lastReturnSequence, invoiceDigitWidth] =
-        await Promise.all([
-          getLastAllocatedSequence(session.shop),
-          getLastInvoiceAllocatedSequence(session.shop),
-          getLastReturnAllocatedSequence(session.shop),
-          getInvoiceNumberDigitWidth(session.shop),
-        ]);
-      return {
-        saved: true,
-        section: "draft-number-series-sync" as const,
-        assigned: result.assigned,
-        skipped: result.skipped,
-        lastNumber: result.lastNumber,
-        lastAllocatedSequence,
-        lastAllocatedByModule: {
-          "sales-order": lastAllocatedSequence,
-          invoice: lastInvoiceSequence,
-          draft: result.lastAllocatedSequence,
-          return: lastReturnSequence,
-          "credit-note": null,
-          "packing-slip": null,
-        } satisfies Record<NumberSeriesModuleId, number | null>,
-        invoiceDigitWidth,
-        draftOrderSync: result.draftOrderSync,
-        numberSeries: result.numberSeries,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          saved: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to sync draft order numbers.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (intent === "reset-draft-order-number-sync") {
-    const result = await resetDraftOrderNumbersSync(session.shop);
-    const [lastAllocatedSequence, lastInvoiceSequence, lastReturnSequence, invoiceDigitWidth] =
-      await Promise.all([
-        getLastAllocatedSequence(session.shop),
-        getLastInvoiceAllocatedSequence(session.shop),
-        getLastReturnAllocatedSequence(session.shop),
-        getInvoiceNumberDigitWidth(session.shop),
-      ]);
-    return {
-      saved: true,
-      section: "draft-number-series-reset" as const,
-      reverted: result.reverted,
-      lastAllocatedSequence,
-      lastAllocatedByModule: {
-        "sales-order": lastAllocatedSequence,
-        invoice: lastInvoiceSequence,
-        draft: null,
-        return: lastReturnSequence,
-        "credit-note": null,
-        "packing-slip": null,
-      } satisfies Record<NumberSeriesModuleId, number | null>,
-      invoiceDigitWidth,
-      draftOrderSync: result.draftOrderSync,
-      numberSeries: result.numberSeries,
-    };
-  }
-
-  if (intent === "sync-return-order-numbers") {
-    try {
-      const result = await syncReturnOrderNumbersForShop(session.shop, admin);
-      const [
-        lastAllocatedSequence,
-        lastInvoiceSequence,
-        lastDraftSequence,
-        invoiceDigitWidth,
-        draftOrderSync,
-      ] = await Promise.all([
-        getLastAllocatedSequence(session.shop),
-        getLastInvoiceAllocatedSequence(session.shop),
-        getLastDraftAllocatedSequence(session.shop),
-        getInvoiceNumberDigitWidth(session.shop),
-        getDraftOrderNumbersSyncStatus(session.shop),
-      ]);
-      return {
-        saved: true,
-        section: "return-number-series-sync" as const,
-        assigned: result.assigned,
-        skipped: result.skipped,
-        lastNumber: result.lastNumber,
-        lastAllocatedSequence,
-        lastAllocatedByModule: {
-          "sales-order": lastAllocatedSequence,
-          invoice: lastInvoiceSequence,
-          draft: lastDraftSequence,
-          return: result.lastAllocatedSequence,
-          "credit-note": null,
-          "packing-slip": null,
-        } satisfies Record<NumberSeriesModuleId, number | null>,
-        invoiceDigitWidth,
-        draftOrderSync,
-        returnOrderSync: result.returnOrderSync,
-        numberSeries: result.numberSeries,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          saved: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to sync return order numbers.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (intent === "reset-return-order-number-sync") {
-    const result = await resetReturnOrderNumbersSync(session.shop);
-    const [
-      lastAllocatedSequence,
-      lastInvoiceSequence,
-      lastDraftSequence,
-      invoiceDigitWidth,
-      draftOrderSync,
-    ] = await Promise.all([
-      getLastAllocatedSequence(session.shop),
-      getLastInvoiceAllocatedSequence(session.shop),
-      getLastDraftAllocatedSequence(session.shop),
-      getInvoiceNumberDigitWidth(session.shop),
-      getDraftOrderNumbersSyncStatus(session.shop),
-    ]);
-    return {
-      saved: true,
-      section: "return-number-series-reset" as const,
-      reverted: result.reverted,
-      lastAllocatedSequence,
-      lastAllocatedByModule: {
-        "sales-order": lastAllocatedSequence,
-        invoice: lastInvoiceSequence,
-        draft: lastDraftSequence,
-        return: null,
-        "credit-note": null,
-        "packing-slip": null,
-      } satisfies Record<NumberSeriesModuleId, number | null>,
-      invoiceDigitWidth,
-      draftOrderSync,
-      returnOrderSync: result.returnOrderSync,
-      numberSeries: result.numberSeries,
-    };
-  }
-
-  if (intent === "sync-invoice-order-numbers") {
-    try {
-      const result = await syncInvoiceOrderNumbersForShop(session.shop, admin);
-      const [
-        lastAllocatedSequence,
-        lastDraftSequence,
-        lastReturnSequence,
-        invoiceDigitWidth,
-        draftOrderSync,
-        returnOrderSync,
-      ] = await Promise.all([
-        getLastAllocatedSequence(session.shop),
-        getLastDraftAllocatedSequence(session.shop),
-        getLastReturnAllocatedSequence(session.shop),
-        getInvoiceNumberDigitWidth(session.shop),
-        getDraftOrderNumbersSyncStatus(session.shop),
-        getReturnOrderNumbersSyncStatus(session.shop),
-      ]);
-      return {
-        saved: true,
-        section: "invoice-number-series-sync" as const,
-        assigned: result.assigned,
-        skipped: result.skipped,
-        lastNumber: result.lastNumber,
-        lastAllocatedSequence,
-        lastAllocatedByModule: {
-          "sales-order": lastAllocatedSequence,
-          invoice: result.lastAllocatedSequence,
-          draft: lastDraftSequence,
-          return: lastReturnSequence,
-          "credit-note": null,
-          "packing-slip": null,
-        } satisfies Record<NumberSeriesModuleId, number | null>,
-        invoiceDigitWidth,
-        draftOrderSync,
-        returnOrderSync,
-        invoiceOrderSync: result.invoiceOrderSync,
-        numberSeries: result.numberSeries,
-      };
-    } catch (error) {
-      return Response.json(
-        {
-          saved: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to sync invoice numbers.",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (intent === "reset-invoice-order-number-sync") {
-    const result = await resetInvoiceOrderNumbersSync(session.shop);
-    if (!result.ok) {
-      return Response.json(
-        {
-          saved: false,
-          error: result.error,
-          invoiceOrderSync: result.invoiceOrderSync,
-        },
-        { status: 400 },
-      );
-    }
-    const [
-      lastAllocatedSequence,
-      lastDraftSequence,
-      lastReturnSequence,
-      invoiceDigitWidth,
-      draftOrderSync,
-      returnOrderSync,
-    ] = await Promise.all([
-      getLastAllocatedSequence(session.shop),
-      getLastDraftAllocatedSequence(session.shop),
-      getLastReturnAllocatedSequence(session.shop),
-      getInvoiceNumberDigitWidth(session.shop),
-      getDraftOrderNumbersSyncStatus(session.shop),
-      getReturnOrderNumbersSyncStatus(session.shop),
-    ]);
-    return {
-      saved: true,
-      section: "invoice-number-series-reset" as const,
-      reverted: result.reverted,
-      lastAllocatedSequence,
-      lastAllocatedByModule: {
-        "sales-order": lastAllocatedSequence,
-        invoice: null,
-        draft: lastDraftSequence,
-        return: lastReturnSequence,
-        "credit-note": null,
-        "packing-slip": null,
-      } satisfies Record<NumberSeriesModuleId, number | null>,
-      invoiceDigitWidth,
-      draftOrderSync,
-      returnOrderSync,
-      invoiceOrderSync: result.invoiceOrderSync,
-      numberSeries: result.numberSeries,
     };
   }
 
@@ -1247,21 +838,6 @@ export default function SettingsPage() {
   const [invoiceDigitWidth, setInvoiceDigitWidth] = useState(
     data.invoiceDigitWidth,
   );
-  const [salesOrderSync, setSalesOrderSync] = useState(data.salesOrderSync);
-  const [draftOrderSync, setDraftOrderSync] = useState(data.draftOrderSync);
-  const [returnOrderSync, setReturnOrderSync] = useState(data.returnOrderSync);
-  const [invoiceOrderSync, setInvoiceOrderSync] = useState(data.invoiceOrderSync);
-  const [syncConfirmAction, setSyncConfirmAction] = useState<
-    | "sync"
-    | "reset"
-    | "draft-sync"
-    | "draft-reset"
-    | "return-sync"
-    | "return-reset"
-    | "invoice-sync"
-    | "invoice-reset"
-    | null
-  >(null);
   const [previewDrafts, setPreviewDrafts] = useState<
     Partial<Record<NumberSeriesModuleId, string>>
   >({});
@@ -1400,10 +976,6 @@ export default function SettingsPage() {
     setLastAllocatedSequence(data.lastAllocatedSequence);
     setLastAllocatedByModule(data.lastAllocatedByModule);
     setInvoiceDigitWidth(data.invoiceDigitWidth);
-    setSalesOrderSync(data.salesOrderSync);
-    setDraftOrderSync(data.draftOrderSync);
-    setReturnOrderSync(data.returnOrderSync);
-    setInvoiceOrderSync(data.invoiceOrderSync);
     setIsNumberSeriesDirty(false);
     setIsEditingSeries(false);
   }, [
@@ -1411,10 +983,6 @@ export default function SettingsPage() {
     data.lastAllocatedSequence,
     data.lastAllocatedByModule,
     data.invoiceDigitWidth,
-    data.salesOrderSync,
-    data.draftOrderSync,
-    data.returnOrderSync,
-    data.invoiceOrderSync,
   ]);
 
   useEffect(() => {
@@ -1423,14 +991,6 @@ export default function SettingsPage() {
     handledFetcherDataRef.current = fetcher.data;
 
     if ("error" in fetcher.data && fetcher.data.error) {
-      if (
-        "invoiceOrderSync" in fetcher.data &&
-        fetcher.data.invoiceOrderSync
-      ) {
-        setInvoiceOrderSync(
-          fetcher.data.invoiceOrderSync as typeof data.invoiceOrderSync,
-        );
-      }
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(String(fetcher.data.error), { isError: true });
       }
@@ -1516,82 +1076,6 @@ export default function SettingsPage() {
       ) {
         setInvoiceDigitWidth(fetcher.data.invoiceDigitWidth);
       }
-      if ("salesOrderSync" in fetcher.data && fetcher.data.salesOrderSync) {
-        setSalesOrderSync(
-          fetcher.data.salesOrderSync as typeof data.salesOrderSync,
-        );
-      }
-      if ("draftOrderSync" in fetcher.data && fetcher.data.draftOrderSync) {
-        setDraftOrderSync(
-          fetcher.data.draftOrderSync as typeof data.draftOrderSync,
-        );
-      }
-      if ("returnOrderSync" in fetcher.data && fetcher.data.returnOrderSync) {
-        setReturnOrderSync(
-          fetcher.data.returnOrderSync as typeof data.returnOrderSync,
-        );
-      }
-      if ("invoiceOrderSync" in fetcher.data && fetcher.data.invoiceOrderSync) {
-        setInvoiceOrderSync(
-          fetcher.data.invoiceOrderSync as typeof data.invoiceOrderSync,
-        );
-      }
-    }
-
-    if (
-      (fetcher.data.section === "number-series-sync" ||
-        fetcher.data.section === "number-series-reset" ||
-        fetcher.data.section === "draft-number-series-sync" ||
-        fetcher.data.section === "draft-number-series-reset" ||
-        fetcher.data.section === "return-number-series-sync" ||
-        fetcher.data.section === "return-number-series-reset" ||
-        fetcher.data.section === "invoice-number-series-sync" ||
-        fetcher.data.section === "invoice-number-series-reset") &&
-      "lastAllocatedByModule" in fetcher.data &&
-      fetcher.data.lastAllocatedByModule
-    ) {
-      setLastAllocatedByModule(
-        fetcher.data.lastAllocatedByModule as Record<
-          NumberSeriesModuleId,
-          number | null
-        >,
-      );
-      if (
-        "lastAllocatedSequence" in fetcher.data &&
-        (typeof fetcher.data.lastAllocatedSequence === "number" ||
-          fetcher.data.lastAllocatedSequence === null)
-      ) {
-        setLastAllocatedSequence(fetcher.data.lastAllocatedSequence);
-      }
-      if ("salesOrderSync" in fetcher.data && fetcher.data.salesOrderSync) {
-        setSalesOrderSync(
-          fetcher.data.salesOrderSync as typeof data.salesOrderSync,
-        );
-      }
-      if ("draftOrderSync" in fetcher.data && fetcher.data.draftOrderSync) {
-        setDraftOrderSync(
-          fetcher.data.draftOrderSync as typeof data.draftOrderSync,
-        );
-      }
-      if ("returnOrderSync" in fetcher.data && fetcher.data.returnOrderSync) {
-        setReturnOrderSync(
-          fetcher.data.returnOrderSync as typeof data.returnOrderSync,
-        );
-      }
-      if ("invoiceOrderSync" in fetcher.data && fetcher.data.invoiceOrderSync) {
-        setInvoiceOrderSync(
-          fetcher.data.invoiceOrderSync as typeof data.invoiceOrderSync,
-        );
-      }
-      if ("numberSeries" in fetcher.data && fetcher.data.numberSeries) {
-        setNumberSeries(fetcher.data.numberSeries as typeof data.numberSeries);
-        setSavedNumberSeries(
-          fetcher.data.numberSeries as typeof data.numberSeries,
-        );
-        setIsNumberSeriesDirty(false);
-        setIsEditingSeries(false);
-        setPreviewDrafts({});
-      }
     }
 
     if (typeof shopify !== "undefined" && shopify.toast) {
@@ -1612,111 +1096,10 @@ export default function SettingsPage() {
               })()
             : fetcher.data.section === "multi-currency"
               ? "Multi currency settings saved"
-            : fetcher.data.section === "email-templates"
-              ? "Email templates saved"
-              : fetcher.data.section === "number-series"
-                ? "Transaction numbers saved"
-                : fetcher.data.section === "number-series-sync"
-                ? (() => {
-                    const assigned =
-                      "assigned" in fetcher.data &&
-                      typeof fetcher.data.assigned === "number"
-                        ? fetcher.data.assigned
-                        : 0;
-                    const skipped =
-                      "skipped" in fetcher.data &&
-                      typeof fetcher.data.skipped === "number"
-                        ? fetcher.data.skipped
-                        : 0;
-                    if (assigned === 0 && skipped > 0) {
-                      return `All ${skipped} orders already have numbers`;
-                    }
-                    if (assigned === 0) {
-                      return "No orders to sync";
-                    }
-                    return `Synced ${assigned} sales order number${assigned === 1 ? "" : "s"}`;
-                  })()
-                : fetcher.data.section === "number-series-reset"
-                  ? (() => {
-                      const reverted =
-                        "reverted" in fetcher.data &&
-                        typeof fetcher.data.reverted === "number"
-                          ? fetcher.data.reverted
-                          : 0;
-                      return reverted > 0
-                        ? `Reset sync for ${reverted} order${reverted === 1 ? "" : "s"}`
-                        : "Sync reset";
-                    })()
-                  : fetcher.data.section === "draft-number-series-sync"
-                    ? (() => {
-                        const assigned =
-                          "assigned" in fetcher.data &&
-                          typeof fetcher.data.assigned === "number"
-                            ? fetcher.data.assigned
-                            : 0;
-                        if (assigned === 0) {
-                          return "No draft orders to sync";
-                        }
-                        return `Synced ${assigned} draft order number${assigned === 1 ? "" : "s"}`;
-                      })()
-                    : fetcher.data.section === "draft-number-series-reset"
-                      ? (() => {
-                          const reverted =
-                            "reverted" in fetcher.data &&
-                            typeof fetcher.data.reverted === "number"
-                              ? fetcher.data.reverted
-                              : 0;
-                          return reverted > 0
-                            ? `Reset draft sync for ${reverted} draft${reverted === 1 ? "" : "s"}`
-                            : "Draft sync reset";
-                        })()
-                      : fetcher.data.section === "return-number-series-sync"
-                        ? (() => {
-                            const assigned =
-                              "assigned" in fetcher.data &&
-                              typeof fetcher.data.assigned === "number"
-                                ? fetcher.data.assigned
-                                : 0;
-                            if (assigned === 0) {
-                              return "No returns to sync";
-                            }
-                            return `Synced ${assigned} return number${assigned === 1 ? "" : "s"}`;
-                          })()
-                        : fetcher.data.section === "return-number-series-reset"
-                          ? (() => {
-                              const reverted =
-                                "reverted" in fetcher.data &&
-                                typeof fetcher.data.reverted === "number"
-                                  ? fetcher.data.reverted
-                                  : 0;
-                              return reverted > 0
-                                ? `Reset return sync for ${reverted} return${reverted === 1 ? "" : "s"}`
-                                : "Return sync reset";
-                            })()
-                          : fetcher.data.section === "invoice-number-series-sync"
-                            ? (() => {
-                                const assigned =
-                                  "assigned" in fetcher.data &&
-                                  typeof fetcher.data.assigned === "number"
-                                    ? fetcher.data.assigned
-                                    : 0;
-                                if (assigned === 0) {
-                                  return "No paid orders to invoice";
-                                }
-                                return `Synced ${assigned} invoice number${assigned === 1 ? "" : "s"}`;
-                              })()
-                            : fetcher.data.section ===
-                                "invoice-number-series-reset"
-                              ? (() => {
-                                  const reverted =
-                                    "reverted" in fetcher.data &&
-                                    typeof fetcher.data.reverted === "number"
-                                      ? fetcher.data.reverted
-                                      : 0;
-                                  return reverted > 0
-                                    ? `Reset invoice sync for ${reverted} invoice${reverted === 1 ? "" : "s"}`
-                                    : "Invoice sync reset";
-                                })()
+              : fetcher.data.section === "email-templates"
+                ? "Email templates saved"
+                : fetcher.data.section === "number-series"
+                  ? "Transaction numbers saved"
                   : fetcher.data.section === "store-details" &&
                       "storeDetails" in fetcher.data
                     ? "Store details saved"
@@ -2132,192 +1515,6 @@ export default function SettingsPage() {
     setIsEditingSeries(true);
   };
 
-  const syncSalesOrderNumbers = () => {
-    if (isNumberSeriesDirty || isEditingSeries || salesOrderSync.synced) return;
-    setSyncConfirmAction("sync");
-  };
-
-  const resetSalesOrderNumberSync = () => {
-    if (!salesOrderSync.canReset) return;
-    setSyncConfirmAction("reset");
-  };
-
-  const syncDraftOrderNumbers = () => {
-    if (isNumberSeriesDirty || isEditingSeries || draftOrderSync.synced) return;
-    setSyncConfirmAction("draft-sync");
-  };
-
-  const resetDraftOrderNumberSync = () => {
-    if (!draftOrderSync.canReset) return;
-    setSyncConfirmAction("draft-reset");
-  };
-
-  const syncReturnOrderNumbers = () => {
-    if (isNumberSeriesDirty || isEditingSeries || returnOrderSync.synced) return;
-    setSyncConfirmAction("return-sync");
-  };
-
-  const resetReturnOrderNumberSync = () => {
-    if (!returnOrderSync.canReset) return;
-    setSyncConfirmAction("return-reset");
-  };
-
-  const syncInvoiceOrderNumbers = () => {
-    if (isNumberSeriesDirty || isEditingSeries || invoiceOrderSync.synced)
-      return;
-    setSyncConfirmAction("invoice-sync");
-  };
-
-  const resetInvoiceOrderNumberSync = () => {
-    if (!invoiceOrderSync.canReset) return;
-    setSyncConfirmAction("invoice-reset");
-  };
-
-  const closeSyncConfirm = () => setSyncConfirmAction(null);
-
-  const confirmSyncAction = () => {
-    const action = syncConfirmAction;
-    setSyncConfirmAction(null);
-    if (action === "sync") {
-      fetcher.submit(
-        { intent: "sync-sales-order-numbers" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "reset") {
-      fetcher.submit(
-        { intent: "reset-sales-order-number-sync" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "draft-sync") {
-      fetcher.submit(
-        { intent: "sync-draft-order-numbers" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "draft-reset") {
-      fetcher.submit(
-        { intent: "reset-draft-order-number-sync" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "return-sync") {
-      fetcher.submit(
-        { intent: "sync-return-order-numbers" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "return-reset") {
-      fetcher.submit(
-        { intent: "reset-return-order-number-sync" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "invoice-sync") {
-      fetcher.submit(
-        { intent: "sync-invoice-order-numbers" },
-        { method: "post" },
-      );
-      return;
-    }
-    if (action === "invoice-reset") {
-      fetcher.submit(
-        { intent: "reset-invoice-order-number-sync" },
-        { method: "post" },
-      );
-    }
-  };
-
-  const syncConfirmCopy =
-    syncConfirmAction === "reset"
-      ? {
-          title: "Reset Sales Order sync?",
-          confirm: "Reset sync",
-          destructive: true,
-          warning:
-            "This permanently clears Sales Order numbers from all orders that were numbered by sync. Invoice and packing slip documents are not deleted, but reset is blocked if any synced order already has those.",
-          message:
-            "Are you sure you want to reset? After reset you must Sync again so orders get numbers from your saved Prefix and Starting number (oldest → newest).",
-        }
-      : syncConfirmAction === "sync"
-        ? {
-            title: "Sync existing orders?",
-            confirm: "Sync existing orders",
-            destructive: false,
-            warning:
-              "This assigns Sales Order numbers once using your saved Prefix and Starting number. Oldest order gets the starting number; newer orders get the next numbers. After sync, use Reset before you can sync again.",
-            message:
-              "Are you sure you want to sync now? Make sure Prefix and Starting number are saved before continuing.",
-          }
-        : syncConfirmAction === "draft-reset"
-          ? {
-              title: "Reset Draft order sync?",
-              confirm: "Reset sync",
-              destructive: true,
-              warning:
-                "This clears DFT- numbers from all Shopify draft orders so you can sync again from your saved Prefix and Starting number.",
-              message:
-                "Are you sure you want to reset? After reset, Sync again (oldest → newest).",
-            }
-          : syncConfirmAction === "draft-sync"
-            ? {
-                title: "Sync existing draft orders?",
-                confirm: "Sync existing drafts",
-                destructive: false,
-                warning:
-                  "This assigns Draft numbers once. Existing DFT- numbers are replaced. After sync, use Reset before you can sync again.",
-                message:
-                  "Are you sure you want to sync now? Make sure Prefix and Starting number are saved before continuing.",
-              }
-            : syncConfirmAction === "return-reset"
-              ? {
-                  title: "Reset Return order sync?",
-                  confirm: "Reset sync",
-                  destructive: true,
-                  warning:
-                    "This clears RET- numbers from all return documents so you can sync again from your saved Prefix and Starting number.",
-                  message:
-                    "Are you sure you want to reset? After reset, Sync again (oldest → newest).",
-                }
-              : syncConfirmAction === "return-sync"
-                ? {
-                    title: "Sync existing returns?",
-                    confirm: "Sync existing returns",
-                    destructive: false,
-                    warning:
-                      "This assigns Return numbers once. Existing RET- numbers are replaced. After sync, use Reset before you can sync again.",
-                    message:
-                      "Are you sure you want to sync now? Make sure Prefix and Starting number are saved before continuing.",
-                  }
-                : syncConfirmAction === "invoice-reset"
-                  ? {
-                      title: "Reset Invoice sync?",
-                      confirm: "Reset sync",
-                      destructive: true,
-                      warning:
-                        "This permanently deletes every Billoxi invoice for this shop. Only available when no invoices were created after the last sync. If a new paid order already created an invoice, reset stays locked until you delete those newer invoices.",
-                      message:
-                        "Are you sure? After reset the Invoice list is empty and Sync unlocks again.",
-                    }
-                  : syncConfirmAction === "invoice-sync"
-                    ? {
-                        title: "Sync existing invoices?",
-                        confirm: "Sync existing invoices",
-                        destructive: false,
-                        warning:
-                          "Creates invoices for all paid Shopify orders once (oldest → newest). After sync, Sync stays locked until you Reset. New paid orders still get the next INV- numbers automatically.",
-                        message:
-                          "Save Prefix and Starting number first. Continue only when you are ready.",
-                      }
-                    : null;
-
   const mainCardHeading =
     activeSection === "store-details"
       ? "Store details"
@@ -2348,37 +1545,6 @@ export default function SettingsPage() {
       </SaveBar>
 
       <AppProvider i18n={enTranslations}>
-        <Modal
-          open={syncConfirmAction !== null}
-          onClose={closeSyncConfirm}
-          title={syncConfirmCopy?.title ?? "Are you sure?"}
-          primaryAction={{
-            content: syncConfirmCopy?.confirm ?? "Yes",
-            destructive: syncConfirmCopy?.destructive,
-            onAction: confirmSyncAction,
-          }}
-          secondaryActions={[
-            {
-              content: "No, cancel",
-              onAction: closeSyncConfirm,
-            },
-          ]}
-        >
-          <Modal.Section>
-            <BlockStack gap="400">
-              {syncConfirmCopy?.warning ? (
-                <Banner tone="warning" title="Important">
-                  <p>{syncConfirmCopy.warning}</p>
-                </Banner>
-              ) : null}
-              <Text as="p">
-                {syncConfirmCopy?.message ??
-                  "Are you sure you want to continue?"}
-              </Text>
-            </BlockStack>
-          </Modal.Section>
-        </Modal>
-
         <Page
           title="Settings"
           fullWidth
@@ -3041,413 +2207,14 @@ export default function SettingsPage() {
 
                           <Divider />
 
-                          <BlockStack gap="300">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              gap="300"
-                              wrap
-                            >
-                              <BlockStack gap="100">
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Text as="h3" variant="headingSm">
-                                    Sales Order sync
-                                  </Text>
-                                  {salesOrderSync.synced ? (
-                                    <Badge tone="success">Synced</Badge>
-                                  ) : (
-                                    <Badge>Not synced</Badge>
-                                  )}
-                                </InlineStack>
-                                <Text as="p" tone="subdued">
-                                  Save Sales Order Prefix and Starting number,
-                                  then Sync once. Oldest Shopify order gets the
-                                  starting number (e.g. SO-0001). Sync again
-                                  only after Reset. Reset clears Sales Order
-                                  numbers — blocked if those orders already have
-                                  invoices or packing slips.
-                                </Text>
-                              </BlockStack>
-                              <InlineStack gap="200" wrap>
-                                {salesOrderSync.assignedCount > 0 ||
-                                salesOrderSync.synced ? (
-                                  <Button
-                                    onClick={resetSalesOrderNumberSync}
-                                    disabled={
-                                      isSaving || !salesOrderSync.canReset
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "reset-sales-order-number-sync"
-                                    }
-                                  >
-                                    Reset sync
-                                  </Button>
-                                ) : null}
-                                {salesOrderSync.synced ? null : (
-                                  <Button
-                                    variant="primary"
-                                    onClick={syncSalesOrderNumbers}
-                                    disabled={
-                                      isSaving ||
-                                      isNumberSeriesDirty ||
-                                      isEditingSeries ||
-                                      numberSeries["sales-order"].entryMode ===
-                                        "manual"
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "sync-sales-order-numbers"
-                                    }
-                                  >
-                                    Sync existing orders
-                                  </Button>
-                                )}
-                              </InlineStack>
-                            </InlineStack>
-                            {isNumberSeriesDirty || isEditingSeries ? (
-                              <Banner tone="info">
-                                <p>
-                                  Save your Transaction numbers first, then
-                                  sync.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {numberSeries["sales-order"].entryMode ===
-                            "manual" ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Sales Order numbering is manual — sync is
-                                  disabled. New numbers are entered per order.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {salesOrderSync.synced ? (
-                              <Banner tone="info">
-                                <p>
-                                  Important: Sync runs once. To sync again,
-                                  Reset first (clears Sales Order numbers).
-                                  Reset stays locked if invoices or packing
-                                  slips exist on numbered orders.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {salesOrderSync.blockedCount > 0 ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Reset locked:{" "}
-                                  {salesOrderSync.invoicedCount > 0
-                                    ? `${salesOrderSync.invoicedCount} invoice${salesOrderSync.invoicedCount === 1 ? "" : "s"}`
-                                    : null}
-                                  {salesOrderSync.invoicedCount > 0 &&
-                                  salesOrderSync.packingSlipCount > 0
-                                    ? " and "
-                                    : null}
-                                  {salesOrderSync.packingSlipCount > 0
-                                    ? `${salesOrderSync.packingSlipCount} packing slip${salesOrderSync.packingSlipCount === 1 ? "" : "s"}`
-                                    : null}{" "}
-                                  exist on numbered orders. Delete those
-                                  documents to unlock Reset.
-                                </p>
-                              </Banner>
-                            ) : null}
-                          </BlockStack>
-
-                          <Divider />
-
-                          <BlockStack gap="300">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              gap="300"
-                              wrap
-                            >
-                              <BlockStack gap="100">
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Text as="h3" variant="headingSm">
-                                    Invoice sync
-                                  </Text>
-                                  {invoiceOrderSync.synced ? (
-                                    <Badge tone="success">Synced</Badge>
-                                  ) : (
-                                    <Badge>Not synced</Badge>
-                                  )}
-                                </InlineStack>
-                                <Text as="p" tone="subdued">
-                                  Save Invoice Prefix and Starting number, then
-                                  Sync once. Paid Shopify orders get INV-
-                                  numbers (oldest → newest). New paid orders
-                                  after sync keep the next numbers. Sync again
-                                  only after Reset. Reset deletes all invoices
-                                  and locks if any invoice was created after
-                                  sync.
-                                </Text>
-                              </BlockStack>
-                              <InlineStack gap="200" wrap>
-                                {invoiceOrderSync.assignedCount > 0 ||
-                                invoiceOrderSync.synced ? (
-                                  <Button
-                                    onClick={resetInvoiceOrderNumberSync}
-                                    disabled={
-                                      isSaving || !invoiceOrderSync.canReset
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "reset-invoice-order-number-sync"
-                                    }
-                                  >
-                                    Reset sync
-                                  </Button>
-                                ) : null}
-                                {invoiceOrderSync.synced ? null : (
-                                  <Button
-                                    variant="primary"
-                                    onClick={syncInvoiceOrderNumbers}
-                                    disabled={
-                                      isSaving ||
-                                      isNumberSeriesDirty ||
-                                      isEditingSeries ||
-                                      numberSeries.invoice.entryMode ===
-                                        "manual"
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "sync-invoice-order-numbers"
-                                    }
-                                  >
-                                    Sync existing invoices
-                                  </Button>
-                                )}
-                              </InlineStack>
-                            </InlineStack>
-                            {isNumberSeriesDirty || isEditingSeries ? (
-                              <Banner tone="info">
-                                <p>
-                                  Save your Transaction numbers first, then
-                                  sync.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {numberSeries.invoice.entryMode === "manual" ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Invoice numbering is manual — sync is
-                                  disabled. New numbers are entered per invoice.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {invoiceOrderSync.synced ? (
-                              <Banner tone="info">
-                                <p>
-                                  Important: Sync runs once. To sync again,
-                                  Reset first (deletes all invoices). Reset
-                                  locks after any new invoice from a paid order.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {invoiceOrderSync.blockedCount > 0 ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Reset locked:{" "}
-                                  {invoiceOrderSync.postSyncCount} invoice
-                                  {invoiceOrderSync.postSyncCount === 1
-                                    ? ""
-                                    : "s"}{" "}
-                                  created after sync (new paid orders). Delete
-                                  those newer invoices to unlock Reset.
-                                </p>
-                              </Banner>
-                            ) : null}
-                          </BlockStack>
-
-                          <Divider />
-
-                          <BlockStack gap="300">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              gap="300"
-                              wrap
-                            >
-                              <BlockStack gap="100">
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Text as="h3" variant="headingSm">
-                                    Draft order sync
-                                  </Text>
-                                  {draftOrderSync.synced ? (
-                                    <Badge tone="success">Synced</Badge>
-                                  ) : (
-                                    <Badge>Not synced</Badge>
-                                  )}
-                                </InlineStack>
-                                <Text as="p" tone="subdued">
-                                  Save Draft Prefix and Starting number, then
-                                  Sync once. Oldest Shopify draft gets DFT-0001.
-                                  Sync again only after Reset (clears DFT-
-                                  numbers).
-                                </Text>
-                              </BlockStack>
-                              <InlineStack gap="200" wrap>
-                                {draftOrderSync.assignedCount > 0 ||
-                                draftOrderSync.synced ? (
-                                  <Button
-                                    onClick={resetDraftOrderNumberSync}
-                                    disabled={
-                                      isSaving || !draftOrderSync.canReset
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "reset-draft-order-number-sync"
-                                    }
-                                  >
-                                    Reset sync
-                                  </Button>
-                                ) : null}
-                                {draftOrderSync.synced ? null : (
-                                  <Button
-                                    variant="primary"
-                                    onClick={syncDraftOrderNumbers}
-                                    disabled={
-                                      isSaving ||
-                                      isNumberSeriesDirty ||
-                                      isEditingSeries ||
-                                      numberSeries.draft.entryMode === "manual"
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "sync-draft-order-numbers"
-                                    }
-                                  >
-                                    Sync existing drafts
-                                  </Button>
-                                )}
-                              </InlineStack>
-                            </InlineStack>
-                            {isNumberSeriesDirty || isEditingSeries ? (
-                              <Banner tone="info">
-                                <p>
-                                  Save your Transaction numbers first, then
-                                  sync.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {numberSeries.draft.entryMode === "manual" ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Draft numbering is manual — sync is disabled.
-                                  New numbers are entered per draft.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {draftOrderSync.synced ? (
-                              <Banner tone="info">
-                                <p>
-                                  Important: Sync runs once. To sync again,
-                                  Reset first (clears DFT- numbers). Shopify
-                                  drafts stay; only Billoxi numbers are removed.
-                                </p>
-                              </Banner>
-                            ) : null}
-                          </BlockStack>
-
-                          <Divider />
-
-                          <BlockStack gap="300">
-                            <InlineStack
-                              align="space-between"
-                              blockAlign="center"
-                              gap="300"
-                              wrap
-                            >
-                              <BlockStack gap="100">
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Text as="h3" variant="headingSm">
-                                    Return order sync
-                                  </Text>
-                                  {returnOrderSync.synced ? (
-                                    <Badge tone="success">Synced</Badge>
-                                  ) : (
-                                    <Badge>Not synced</Badge>
-                                  )}
-                                </InlineStack>
-                                <Text as="p" tone="subdued">
-                                  Save Return Prefix and Starting number, then
-                                  Sync once. Oldest Shopify return gets
-                                  RET-0001. Sync again only after Reset (clears
-                                  RET- numbers).
-                                </Text>
-                              </BlockStack>
-                              <InlineStack gap="200" wrap>
-                                {returnOrderSync.assignedCount > 0 ||
-                                returnOrderSync.synced ? (
-                                  <Button
-                                    onClick={resetReturnOrderNumberSync}
-                                    disabled={
-                                      isSaving || !returnOrderSync.canReset
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "reset-return-order-number-sync"
-                                    }
-                                  >
-                                    Reset sync
-                                  </Button>
-                                ) : null}
-                                {returnOrderSync.synced ? null : (
-                                  <Button
-                                    variant="primary"
-                                    onClick={syncReturnOrderNumbers}
-                                    disabled={
-                                      isSaving ||
-                                      isNumberSeriesDirty ||
-                                      isEditingSeries ||
-                                      numberSeries.return.entryMode === "manual"
-                                    }
-                                    loading={
-                                      isSaving &&
-                                      fetcher.formData?.get("intent") ===
-                                        "sync-return-order-numbers"
-                                    }
-                                  >
-                                    Sync existing returns
-                                  </Button>
-                                )}
-                              </InlineStack>
-                            </InlineStack>
-                            {isNumberSeriesDirty || isEditingSeries ? (
-                              <Banner tone="info">
-                                <p>
-                                  Save your Transaction numbers first, then
-                                  sync.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {numberSeries.return.entryMode === "manual" ? (
-                              <Banner tone="warning">
-                                <p>
-                                  Return numbering is manual — sync is
-                                  disabled. New numbers are entered per return.
-                                </p>
-                              </Banner>
-                            ) : null}
-                            {returnOrderSync.synced ? (
-                              <Banner tone="info">
-                                <p>
-                                  Important: Sync runs once. To sync again,
-                                  Reset first (clears RET- numbers). Shopify
-                                  returns stay linked; only Billoxi numbers are
-                                  removed.
-                                </p>
-                              </Banner>
-                            ) : null}
-                          </BlockStack>
+                          <Banner tone="info">
+                            <p>
+                              Numbers for existing Shopify orders, invoices,
+                              drafts, and returns are assigned automatically
+                              when the app is installed. Save Prefix and
+                              Starting number above for new documents.
+                            </p>
+                          </Banner>
                         </BlockStack>
                       ) : activeSection === "smtp" ? (
                         <BlockStack gap="400">
@@ -3931,57 +2698,7 @@ export default function SettingsPage() {
                   </Layout.Section>
                 ) : (
                   <Layout.Section variant="oneThird">
-                    <div
-                      className="settings-recommend-column"
-                      aria-label="Recommended apps"
-                    >
-                      <BlockStack gap="300">
-                        <Text as="h2" variant="headingSm" tone="subdued">
-                          More from XLOXI
-                        </Text>
-                        {RECOMMENDED_APPS.map((app) => (
-                          <a
-                            key={app.id}
-                            className="settings-recommend-card"
-                            href={app.href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <div className="settings-recommend-card__header">
-                              <img
-                                src={app.logo}
-                                alt=""
-                                className="settings-recommend-card__logo"
-                                width={40}
-                                height={40}
-                              />
-                              <div className="settings-recommend-card__meta">
-                                <div className="settings-recommend-card__title-row">
-                                  <Text as="h3" variant="headingSm">
-                                    {app.name}
-                                  </Text>
-                                  <Badge size="small" tone="info">
-                                    {app.badge}
-                                  </Badge>
-                                </div>
-                                <Text as="p" tone="subdued" variant="bodySm">
-                                  {app.tagline}
-                                </Text>
-                              </div>
-                            </div>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              {app.description}
-                            </Text>
-                            <span className="settings-recommend-card__cta">
-                              <span>View on App Store</span>
-                              <span className="settings-recommend-card__cta-icon">
-                                <Icon source={ExternalIcon} tone="base" />
-                              </span>
-                            </span>
-                          </a>
-                        ))}
-                      </BlockStack>
-                    </div>
+                    <RecommendedAppsSidebar />
                   </Layout.Section>
                 )}
               </Layout>

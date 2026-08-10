@@ -21,7 +21,10 @@ import {
   getDraftMetaByOrderGids,
   markOrderDraft,
 } from "./order-invoice-draft-status.server";
-import { hasDraftOrderNumbersSynced } from "./draft-order-number-sync.server";
+import {
+  hasDraftOrderNumbersSynced,
+  syncDraftOrderNumbersForShop,
+} from "./draft-order-number-sync.server";
 
 const PAGE_SIZE = 25;
 
@@ -899,8 +902,21 @@ export async function loadShopifyDraftOrdersPage(
 
     const nodes = result.data.draftOrders.nodes;
     const gids = nodes.map((node) => node.id);
-    // After Draft sync: fill any new drafts missing a DFT- number.
-    // Before sync: Draft column shows "—" (Reference keeps Shopify #D…).
+
+    // After DB reset / install: assign DFT- numbers on first Draft list load.
+    if (!(await hasDraftOrderNumbersSynced(shop))) {
+      try {
+        await syncDraftOrderNumbersForShop(shop, admin);
+      } catch (error) {
+        console.warn(
+          "[draft-orders] auto number sync failed:",
+          shop,
+          error,
+        );
+      }
+    }
+
+    // Fill any new drafts missing a DFT- number (Reference keeps Shopify #D…).
     if (gids.length > 0 && (await hasDraftOrderNumbersSynced(shop))) {
       let draftMeta = await getDraftMetaByOrderGids(shop, gids);
       const missing = gids.filter(

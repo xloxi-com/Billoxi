@@ -27,7 +27,6 @@ import {
   Page,
   ProgressBar,
   Text,
-  Thumbnail,
 } from "@shopify/polaris";
 import {
   CheckCircleIcon,
@@ -63,8 +62,7 @@ import {
 import { isSmtpReadyForSend } from "../smtp-settings";
 import { loadSetupGuideProgress } from "../setup-guide.server";
 import prisma from "../db.server";
-import offrefyLogo from "../assets/recommended/offrefy.png";
-import approvefyLogo from "../assets/recommended/approvefy.png";
+import { RecommendedAppsCard } from "../components/recommended-apps";
 
 type SetupStepId =
   | "store-details"
@@ -96,7 +94,7 @@ const FULL_SETUP_STEPS: Array<{
   {
     id: "transaction-numbers",
     label: "Transaction numbers",
-    detail: "Sync SO, INV, DFT, and RET numbers for existing orders.",
+    detail: "Set prefixes and starting numbers for SO, INV, DFT, and RET.",
     cta: "Open Transaction numbers",
     href: "/app/settings?section=number-series",
   },
@@ -251,25 +249,6 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
   );
 }
 
-const RECOMMENDED_APPS = [
-  {
-    id: "approvefy",
-    name: "Approvefy",
-    tagline: "B2B registration & approval",
-    href: "https://apps.shopify.com/approvefy",
-    badge: "From $4.99/mo",
-    logo: approvefyLogo,
-  },
-  {
-    id: "offrefy",
-    name: "Offrefy",
-    tagline: "Quantity breaks at checkout",
-    href: "https://apps.shopify.com/offrefy",
-    badge: "Free plan",
-    logo: offrefyLogo,
-  },
-] as const;
-
 /** Placeholder plan until Shopify Billing is wired. */
 const PLAN_SUMMARY = {
   planName: "Grow",
@@ -420,7 +399,7 @@ export default function AppHomePage() {
   return (
     <AppProvider i18n={enTranslations}>
       <Page
-        title="Home"
+        title=""
         primaryAction={{
           content: "Sales orders",
           onAction: () => navigate("/app/sales-order"),
@@ -729,55 +708,7 @@ export default function AppHomePage() {
           </Layout.Section>
 
           <Layout.Section variant="oneHalf">
-            <Card>
-              <BlockStack gap="400">
-                <BlockStack gap="100">
-                  <Text as="h2" variant="headingMd">
-                    More from us
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Apps that work well alongside Billioxi.
-                  </Text>
-                </BlockStack>
-
-                <BlockStack gap="300">
-                  {RECOMMENDED_APPS.map((app, index) => (
-                    <Box key={app.id}>
-                      {index > 0 ? <Divider /> : null}
-                      <Box paddingBlockStart={index > 0 ? "300" : "0"}>
-                        <InlineStack gap="300" blockAlign="start" wrap={false}>
-                          <Thumbnail
-                            source={app.logo}
-                            alt={`${app.name} icon`}
-                            size="small"
-                          />
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="h3" variant="headingSm">
-                                {app.name}
-                              </Text>
-                              <Badge size="small" tone="info">
-                                {app.badge}
-                              </Badge>
-                            </InlineStack>
-                            <Text as="p" tone="subdued" variant="bodySm">
-                              {app.tagline}
-                            </Text>
-                            <Link
-                              url={app.href}
-                              target="_blank"
-                              removeUnderline
-                            >
-                              View on App Store
-                            </Link>
-                          </BlockStack>
-                        </InlineStack>
-                      </Box>
-                    </Box>
-                  ))}
-                </BlockStack>
-              </BlockStack>
-            </Card>
+            <RecommendedAppsCard />
           </Layout.Section>
         </Layout>
       </Page>

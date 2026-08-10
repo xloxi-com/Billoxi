@@ -3,6 +3,7 @@ import {
   getSalesOrderDocumentNumbersByOrderGids,
   hasCompletedSalesOrderNumberSync,
 } from "./sales-order-number.server";
+import { syncSalesOrderNumbersForShop } from "./sales-order-number-sync.server";
 import {
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
@@ -16,7 +17,14 @@ import {
   getReturnOrderGids,
   type ReturnOrderMeta,
 } from "./order-return-status.server";
-import { hasReturnOrderNumbersSynced } from "./return-order-number-sync.server";
+import {
+  hasReturnOrderNumbersSynced,
+  syncReturnOrderNumbersForShop,
+} from "./return-order-number-sync.server";
+import {
+  hasInvoiceOrderNumbersSynced,
+  syncInvoiceOrderNumbersForShop,
+} from "./invoice-order-number-sync.server";
 import {
   ensureDraftDocumentNumbers,
   getAllDraftOrderGids,
@@ -902,6 +910,32 @@ export async function loadSalesOrdersPage(
   const isReturnView = options?.listFilter === "return";
   const isDraftView = options?.listFilter === "draft";
 
+  // After DB reset / install: assign numbers on first list open (idempotent).
+  try {
+    if (
+      !isInvoicedView &&
+      !isCreditNoteView &&
+      !isPackingSlipView &&
+      !isReturnView &&
+      !isDraftView &&
+      !(await hasCompletedSalesOrderNumberSync(shop))
+    ) {
+      await syncSalesOrderNumbersForShop(shop, admin);
+    } else if (
+      isInvoicedView &&
+      !(await hasInvoiceOrderNumbersSynced(shop))
+    ) {
+      await syncInvoiceOrderNumbersForShop(shop, admin);
+    } else if (
+      isReturnView &&
+      !(await hasReturnOrderNumbersSynced(shop))
+    ) {
+      await syncReturnOrderNumbersForShop(shop, admin);
+    }
+  } catch (error) {
+    console.warn("[sales-orders] auto number sync failed:", shop, error);
+  }
+
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
     pageInfo: {
@@ -1186,7 +1220,7 @@ export async function loadSalesOrdersPage(
     }
 
     let ensuredReturnNumbers = new Map<string, string>();
-    // After Return sync: fill gaps. Before sync: leave "—" until merchant Syncs.
+    // After Return sync: fill gaps. Auto-sync above runs first if needed.
     if (
       forceReturn &&
       orderGids.length > 0 &&
