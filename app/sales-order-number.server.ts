@@ -53,9 +53,13 @@ export async function getLastAllocatedSequence(
 }
 
 /** True after merchant Sync. Before that, list must not allocate history out of order. */
+const completedSalesOrderSyncShops = new Set<string>();
+
 export async function hasCompletedSalesOrderNumberSync(
   shop: string,
 ): Promise<boolean> {
+  if (completedSalesOrderSyncShops.has(shop)) return true;
+
   try {
     const rows = await prisma.$queryRaw<
       Array<{ salesOrderNumbersSyncedAt: Date | null }>
@@ -65,7 +69,10 @@ export async function hasCompletedSalesOrderNumberSync(
       WHERE shop = ${shop}
       LIMIT 1
     `;
-    if (rows[0]?.salesOrderNumbersSyncedAt) return true;
+    if (rows[0]?.salesOrderNumbersSyncedAt) {
+      completedSalesOrderSyncShops.add(shop);
+      return true;
+    }
   } catch {
     // Column / table may lag — fall through to number-row check.
   }
@@ -90,10 +97,20 @@ export async function hasCompletedSalesOrderNumberSync(
       `
       .catch(() => undefined);
 
+    completedSalesOrderSyncShops.add(shop);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Clear process memo after Sync reset so list re-checks DB. */
+export function clearCompletedSalesOrderNumberSyncMemo(shop?: string) {
+  if (!shop) {
+    completedSalesOrderSyncShops.clear();
+    return;
+  }
+  completedSalesOrderSyncShops.delete(shop);
 }
 
 /** Batch lookup of already-assigned sales order numbers (does not allocate). */

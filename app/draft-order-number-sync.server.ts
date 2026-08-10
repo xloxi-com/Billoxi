@@ -46,7 +46,7 @@ async function countAssignedDraftNumbers(shop: string): Promise<number> {
 export async function hasDraftOrderNumbersSynced(
   shop: string,
 ): Promise<boolean> {
-  // Always read DB — process cache alone is wrong after a DB wipe/reset.
+  if (syncedShops.has(shop)) return true;
   try {
     const rows = await prisma.$queryRaw<
       Array<{ draftOrderNumbersSyncedAt: Date | null }>

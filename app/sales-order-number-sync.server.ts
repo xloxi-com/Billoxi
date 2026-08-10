@@ -11,6 +11,7 @@ import { getInvoicedOrderGids } from "./order-invoice-status.server";
 import { getPackingSlipOrderGids } from "./order-packing-slip-status.server";
 import {
   backfillSalesOrderDocumentNumbers,
+  clearCompletedSalesOrderNumberSyncMemo,
   fetchAllOrderGidsOldestFirst,
   getLastAllocatedSequence,
   resetSalesOrderNumberCounter,
@@ -38,7 +39,7 @@ async function listAssignedSalesOrderGids(shop: string): Promise<{
 }
 
 export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
-  // Always read DB — process cache alone is wrong after a DB wipe/reset.
+  if (syncedShops.has(shop)) return true;
   try {
     const rows = await prisma.$queryRaw<
       Array<{ salesOrderNumbersSyncedAt: Date | null }>
@@ -182,6 +183,7 @@ async function markSalesOrderNumbersSynced(shop: string): Promise<void> {
 
 async function clearSalesOrderNumbersSynced(shop: string): Promise<void> {
   syncedShops.delete(shop);
+  clearCompletedSalesOrderNumberSyncMemo(shop);
   try {
     await prisma.$executeRaw`
       UPDATE "ShopSettings"

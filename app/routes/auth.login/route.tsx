@@ -1,10 +1,11 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
+import { Form, useActionData, useLoaderData, useRouteError } from "react-router";
 
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
+import { renderEmbeddedRouteError } from "../../embedded-route-error";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const errors = loginErrorMessage(await login(request));
@@ -46,4 +47,8 @@ export default function Auth() {
       </s-page>
     </AppProvider>
   );
+}
+
+export function ErrorBoundary() {
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:auth-login-reload");
 }

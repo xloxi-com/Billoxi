@@ -182,6 +182,58 @@ type CacheEntry = {
 
 const listCache = new Map<string, CacheEntry>();
 
+/** Latest store-wide order touch — used to skip full list reloads when idle. */
+const listWatermarkByShop = new Map<string, string>();
+
+const ORDERS_WATERMARK_QUERY = `#graphql
+  query SalesOrdersWatermark {
+    orders(first: 1, sortKey: UPDATED_AT, reverse: true) {
+      nodes {
+        id
+        updatedAt
+      }
+    }
+  }
+`;
+
+async function readOrdersWatermark(admin: AdminGraphql): Promise<string> {
+  try {
+    const response = await admin.graphql(ORDERS_WATERMARK_QUERY);
+    const json = (await response.json()) as {
+      data?: {
+        orders?: { nodes?: Array<{ id?: string; updatedAt?: string } | null> };
+      };
+    };
+    const node = json.data?.orders?.nodes?.[0];
+    if (!node?.id) return "empty";
+    return `${node.id}:${node.updatedAt || ""}`;
+  } catch {
+    return `error:${Date.now()}`;
+  }
+}
+
+/**
+ * Cheap poll helper: true when orders may have changed since the last list load.
+ * Unknown watermark → true (force refresh).
+ */
+export async function salesOrdersListMayHaveChanged(
+  admin: AdminGraphql,
+  shop: string,
+): Promise<boolean> {
+  const previous = listWatermarkByShop.get(shop);
+  const next = await readOrdersWatermark(admin);
+  listWatermarkByShop.set(shop, next);
+  if (!previous) return true;
+  return previous !== next;
+}
+
+export async function rememberSalesOrdersWatermark(
+  admin: AdminGraphql,
+  shop: string,
+): Promise<void> {
+  listWatermarkByShop.set(shop, await readOrdersWatermark(admin));
+}
+
 const SALES_ORDERS_QUERY = `#graphql
   query SalesOrders(
     $first: Int
@@ -910,32 +962,6 @@ export async function loadSalesOrdersPage(
   const isReturnView = options?.listFilter === "return";
   const isDraftView = options?.listFilter === "draft";
 
-  // After DB reset / install: assign numbers on first list open (idempotent).
-  try {
-    if (
-      !isInvoicedView &&
-      !isCreditNoteView &&
-      !isPackingSlipView &&
-      !isReturnView &&
-      !isDraftView &&
-      !(await hasCompletedSalesOrderNumberSync(shop))
-    ) {
-      await syncSalesOrderNumbersForShop(shop, admin);
-    } else if (
-      isInvoicedView &&
-      !(await hasInvoiceOrderNumbersSynced(shop))
-    ) {
-      await syncInvoiceOrderNumbersForShop(shop, admin);
-    } else if (
-      isReturnView &&
-      !(await hasReturnOrderNumbersSynced(shop))
-    ) {
-      await syncReturnOrderNumbersForShop(shop, admin);
-    }
-  } catch (error) {
-    console.warn("[sales-orders] auto number sync failed:", shop, error);
-  }
-
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
     pageInfo: {
@@ -1029,6 +1055,33 @@ export async function loadSalesOrdersPage(
         availableViews,
       };
     }
+  }
+
+  // After DB reset / install: assign numbers on first list open (idempotent).
+  // Runs only on cache miss so warm polls/navigations skip the sync-flag queries.
+  try {
+    if (
+      !isInvoicedView &&
+      !isCreditNoteView &&
+      !isPackingSlipView &&
+      !isReturnView &&
+      !isDraftView &&
+      !(await hasCompletedSalesOrderNumberSync(shop))
+    ) {
+      await syncSalesOrderNumbersForShop(shop, admin);
+    } else if (
+      isInvoicedView &&
+      !(await hasInvoiceOrderNumbersSynced(shop))
+    ) {
+      await syncInvoiceOrderNumbersForShop(shop, admin);
+    } else if (
+      isReturnView &&
+      !(await hasReturnOrderNumbersSynced(shop))
+    ) {
+      await syncReturnOrderNumbersForShop(shop, admin);
+    }
+  } catch (error) {
+    console.warn("[sales-orders] auto number sync failed:", shop, error);
   }
 
   const buildPage = async (
@@ -1585,6 +1638,7 @@ export async function loadSalesOrdersPage(
   );
   listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
   pruneCache(now);
+  void rememberSalesOrdersWatermark(admin, shop);
   return data;
 }
 

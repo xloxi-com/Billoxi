@@ -24,6 +24,7 @@ import {
 } from "react-router";
 import { SaveBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Banner,
@@ -4477,7 +4478,7 @@ export default function TemplateEditorPage() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:template-edit-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

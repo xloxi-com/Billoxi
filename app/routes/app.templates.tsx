@@ -7,6 +7,7 @@ import {
   useLoaderData,
   useLocation,
   useNavigate,
+  useRouteError,
   useSearchParams,
 } from "react-router";
 import {
@@ -22,6 +23,7 @@ import {
   Box,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   defaultTemplateSettings,
   getSalesOrderTemplatePreset,
@@ -1002,4 +1004,8 @@ export default function TemplatesPage() {
     </div>
     </AppProvider>
   );
+}
+
+export function ErrorBoundary() {
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:templates-reload");
 }

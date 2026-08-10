@@ -5,6 +5,7 @@ import type {
 } from "react-router";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
@@ -66,23 +67,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
     selectedTemplateId,
   );
 
-  // Heal: Auto on refund / partial — create missing CNs for this page.
-  const healed = await ensureAutoCreditNotesForOrders(
-    session.shop,
-    page.orders.map((order) => ({
-      orderGid: order.id,
-      financialStatus: order.paymentStatusKey,
-      hasInvoice: order.invoiced,
-      hasCreditNote: Boolean(order.creditNote) && !order.creditNoteVoided,
-    })),
-  );
-  if (healed.created > 0) {
-    page = await loadSalesOrdersPage(
-      admin,
+  // Heal only when this page has refunded invoices that still need a CN.
+  const healCandidates = page.orders.filter((order) => {
+    if (!order.invoiced) return false;
+    if (order.creditNote && !order.creditNoteVoided) return false;
+    const status = String(order.paymentStatusKey || "").toUpperCase();
+    return status === "REFUNDED" || status === "PARTIALLY_REFUNDED";
+  });
+  if (healCandidates.length > 0) {
+    const healed = await ensureAutoCreditNotesForOrders(
       session.shop,
-      params,
-      selectedTemplateId,
+      healCandidates.map((order) => ({
+        orderGid: order.id,
+        financialStatus: order.paymentStatusKey,
+        hasInvoice: order.invoiced,
+        hasCreditNote: Boolean(order.creditNote) && !order.creditNoteVoided,
+      })),
     );
+    if (healed.created > 0) {
+      page = await loadSalesOrdersPage(
+        admin,
+        session.shop,
+        params,
+        selectedTemplateId,
+      );
+    }
   }
 
   return {
@@ -113,7 +122,7 @@ export function shouldRevalidate({
 export default SalesOrdersListPage;
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:invoice-list-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

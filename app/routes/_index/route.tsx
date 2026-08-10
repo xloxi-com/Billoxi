@@ -1,7 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { redirect, Form, useLoaderData } from "react-router";
+import { redirect, Form, useLoaderData, useRouteError } from "react-router";
 
 import { login } from "../../shopify.server";
+import { renderEmbeddedRouteError } from "../../embedded-route-error";
 
 import styles from "./styles.module.css";
 
@@ -54,4 +55,8 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export function ErrorBoundary() {
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:landing-reload");
 }

@@ -15,6 +15,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Avatar,
@@ -95,6 +96,7 @@ import {
   invalidateSalesOrdersCache,
   loadSalesOrdersPage,
   parseSalesOrdersSearchParams,
+  salesOrdersListMayHaveChanged,
   type SalesOrderRow,
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
@@ -398,7 +400,7 @@ export function shouldRevalidate({
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await requireAdminAuth(request);
+  const { session, admin } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 
@@ -421,8 +423,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "reload-list") {
-    invalidateSalesOrdersCache(session.shop);
-    return Response.json({ ok: true, document: "reload" as const });
+    // Cheap watermark check — skip full GraphQL list reload when nothing changed.
+    const changed = await salesOrdersListMayHaveChanged(admin, session.shop);
+    if (changed) invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "reload" as const,
+      changed,
+    });
   }
 
   const orderIds = formData
@@ -986,8 +994,9 @@ export default function SalesOrderPage() {
     const result = pollFetcher.data as {
       ok?: boolean;
       document?: string;
+      changed?: boolean;
     };
-    if (result.ok && result.document === "reload") {
+    if (result.ok && result.document === "reload" && result.changed !== false) {
       revalidator.revalidate();
     }
   }, [pollFetcher.data, pollFetcher.state, revalidator]);
@@ -3160,5 +3169,5 @@ export default function SalesOrderPage() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:sales-order-list-reload");
 }

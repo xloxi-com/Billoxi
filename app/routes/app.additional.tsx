@@ -1,3 +1,6 @@
+import { useRouteError } from "react-router";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
+
 export default function AdditionalPage() {
   return (
     <s-page heading="Additional page">
@@ -34,4 +37,8 @@ export default function AdditionalPage() {
       </s-section>
     </s-page>
   );
+}
+
+export function ErrorBoundary() {
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:additional-reload");
 }

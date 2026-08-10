@@ -7,6 +7,7 @@ import type {
 import { useFetcher, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { SaveBar } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Page,
@@ -2711,37 +2712,7 @@ export default function SettingsPage() {
 }
 
 export function ErrorBoundary() {
-  const error = useRouteError();
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
-
-  // Auth bounce Responses are status 200 with empty statusText — default UI
-  // would render only "200". Reload once to recover embedded session params.
-  const status =
-    error &&
-    typeof error === "object" &&
-    "status" in error &&
-    typeof (error as { status?: unknown }).status === "number"
-      ? (error as { status: number }).status
-      : null;
-  if (
-    typeof window !== "undefined" &&
-    (status === 200 || /No result found for routeId/i.test(message))
-  ) {
-    const key = "billoxi:settings-recover-reload";
-    const last = Number(sessionStorage.getItem(key) || "0");
-    if (Date.now() - last > 4000) {
-      sessionStorage.setItem(key, String(Date.now()));
-      window.location.reload();
-      return null;
-    }
-  }
-
-  return boundary.error(error);
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:settings-recover-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

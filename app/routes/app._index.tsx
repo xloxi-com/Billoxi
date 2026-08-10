@@ -1,6 +1,7 @@
 import type {
   HeadersFunction,
   LoaderFunctionArgs,
+  ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useEffect, useState } from "react";
 import {
@@ -9,6 +10,7 @@ import {
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Badge,
@@ -282,6 +284,17 @@ async function loadShopInstalledAt(shop: string): Promise<Date> {
     // Fall through.
   }
   return new Date();
+}
+
+export function shouldRevalidate({
+  formMethod,
+  currentUrl,
+  nextUrl,
+}: ShouldRevalidateFunctionArgs) {
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (currentUrl.search !== nextUrl.search) return true;
+  // Soft navigations / parent revalidations should not redo home analytics.
+  return false;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -717,7 +730,7 @@ export default function AppHomePage() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:home-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

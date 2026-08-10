@@ -8,6 +8,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import { scheduleInstallNumberSync } from "../install-number-sync.server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Warm auth for nested loaders (shared WeakMap memo).
@@ -46,38 +47,7 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  const error = useRouteError();
-  const message =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
-
-  // Recover from React Router single-fetch / route-discovery mismatches
-  // (e.g. "No result found for routeId routes/app.templates").
-  // Also recover auth-bounce Responses that surface as blank "200".
-  const status =
-    error &&
-    typeof error === "object" &&
-    "status" in error &&
-    typeof (error as { status?: unknown }).status === "number"
-      ? (error as { status: number }).status
-      : null;
-  if (
-    typeof window !== "undefined" &&
-    (status === 200 || /No result found for routeId/i.test(message))
-  ) {
-    const key = "billoxi:routeId-reload";
-    const last = Number(sessionStorage.getItem(key) || "0");
-    if (Date.now() - last > 4000) {
-      sessionStorage.setItem(key, String(Date.now()));
-      window.location.reload();
-      return null;
-    }
-  }
-
-  return boundary.error(error);
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:routeId-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

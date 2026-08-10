@@ -15,6 +15,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Badge,
@@ -2765,7 +2766,7 @@ export default function SalesOrderDocumentPage() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:sales-order-detail-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

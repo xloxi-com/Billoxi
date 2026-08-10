@@ -5,6 +5,7 @@ import type {
 } from "react-router";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { renderEmbeddedRouteError } from "../embedded-route-error";
 
 import { requireAdminAuth } from "../shopify-context.server";
 import {
@@ -89,7 +90,7 @@ export function shouldRevalidate({
 export default SalesOrdersListPage;
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  return renderEmbeddedRouteError(useRouteError(), "billoxi:credit-note-list-reload");
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

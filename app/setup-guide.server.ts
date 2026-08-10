@@ -9,6 +9,12 @@ export type SetupGuideStepId =
 
 export type SetupGuideProgress = Partial<Record<SetupGuideStepId, boolean>>;
 
+const SETUP_GUIDE_TTL_MS = 120_000;
+const setupGuideCache = new Map<
+  string,
+  { expires: number; value: SetupGuideProgress }
+>();
+
 function normalizeSetupGuide(value: unknown): SetupGuideProgress {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const raw = value as Record<string, unknown>;
@@ -27,6 +33,9 @@ function normalizeSetupGuide(value: unknown): SetupGuideProgress {
 export async function loadSetupGuideProgress(
   shop: string,
 ): Promise<SetupGuideProgress> {
+  const cached = setupGuideCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   try {
     const rows = await prisma.$queryRaw<Array<{ setupGuide: unknown }>>`
       SELECT "setupGuide"
@@ -34,7 +43,12 @@ export async function loadSetupGuideProgress(
       WHERE shop = ${shop}
       LIMIT 1
     `;
-    return normalizeSetupGuide(rows[0]?.setupGuide);
+    const value = normalizeSetupGuide(rows[0]?.setupGuide);
+    setupGuideCache.set(shop, {
+      expires: Date.now() + SETUP_GUIDE_TTL_MS,
+      value,
+    });
+    return value;
   } catch {
     return {};
   }
@@ -83,5 +97,9 @@ export async function markSetupGuideStep(
     return current;
   }
 
+  setupGuideCache.set(shop, {
+    expires: Date.now() + SETUP_GUIDE_TTL_MS,
+    value: next,
+  });
   return next;
 }

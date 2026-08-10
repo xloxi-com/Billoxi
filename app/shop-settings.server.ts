@@ -62,6 +62,30 @@ const smtpSettingsCache = new Map<
   { expires: number; value: SmtpSettings }
 >();
 
+const CREDIT_NOTE_SETTINGS_TTL_MS = 120_000;
+const creditNoteSettingsCache = new Map<
+  string,
+  { expires: number; value: CreditNoteSettings }
+>();
+
+const INVOICE_SETTINGS_TTL_MS = 120_000;
+const invoiceSettingsCache = new Map<
+  string,
+  { expires: number; value: InvoiceSettings }
+>();
+
+const MULTI_CURRENCY_SETTINGS_TTL_MS = 120_000;
+const multiCurrencySettingsCache = new Map<
+  string,
+  { expires: number; value: MultiCurrencySettings }
+>();
+
+const EMAIL_TEMPLATES_TTL_MS = 120_000;
+const emailTemplatesCache = new Map<
+  string,
+  { expires: number; value: EmailTemplatesSettings }
+>();
+
 const NUMBER_SERIES_TTL_MS = 120_000;
 const numberSeriesCache = new Map<
   string,
@@ -129,6 +153,9 @@ export async function loadSmtpSettingsForShop(shop: string): Promise<SmtpSetting
 export async function loadCreditNoteSettingsForShop(
   shop: string,
 ): Promise<CreditNoteSettings> {
+  const cached = creditNoteSettingsCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   try {
     const rows = await prisma.$queryRaw<
       Array<{ creditNoteSettings: unknown }>
@@ -138,7 +165,12 @@ export async function loadCreditNoteSettingsForShop(
       WHERE shop = ${shop}
       LIMIT 1
     `;
-    return normalizeCreditNoteSettings(rows[0]?.creditNoteSettings);
+    const value = normalizeCreditNoteSettings(rows[0]?.creditNoteSettings);
+    creditNoteSettingsCache.set(shop, {
+      expires: Date.now() + CREDIT_NOTE_SETTINGS_TTL_MS,
+      value,
+    });
+    return value;
   } catch {
     return normalizeCreditNoteSettings(null);
   }
@@ -178,12 +210,19 @@ export async function saveCreditNoteSettingsForShop(
     `;
   }
 
+  creditNoteSettingsCache.set(shop, {
+    expires: Date.now() + CREDIT_NOTE_SETTINGS_TTL_MS,
+    value: normalized,
+  });
   return normalized;
 }
 
 export async function loadInvoiceSettingsForShop(
   shop: string,
 ): Promise<InvoiceSettings> {
+  const cached = invoiceSettingsCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   try {
     const rows = await prisma.$queryRaw<
       Array<{ invoiceSettings: unknown }>
@@ -193,7 +232,12 @@ export async function loadInvoiceSettingsForShop(
       WHERE shop = ${shop}
       LIMIT 1
     `;
-    return normalizeInvoiceSettings(rows[0]?.invoiceSettings);
+    const value = normalizeInvoiceSettings(rows[0]?.invoiceSettings);
+    invoiceSettingsCache.set(shop, {
+      expires: Date.now() + INVOICE_SETTINGS_TTL_MS,
+      value,
+    });
+    return value;
   } catch {
     return normalizeInvoiceSettings(null);
   }
@@ -234,12 +278,19 @@ export async function saveInvoiceSettingsForShop(
     `;
   }
 
+  invoiceSettingsCache.set(shop, {
+    expires: Date.now() + INVOICE_SETTINGS_TTL_MS,
+    value: normalized,
+  });
   return normalized;
 }
 
 export async function loadMultiCurrencySettingsForShop(
   shop: string,
 ): Promise<MultiCurrencySettings> {
+  const cached = multiCurrencySettingsCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   try {
     const rows = await prisma.$queryRaw<
       Array<{ multiCurrencySettings: unknown }>
@@ -249,7 +300,14 @@ export async function loadMultiCurrencySettingsForShop(
       WHERE shop = ${shop}
       LIMIT 1
     `;
-    return normalizeMultiCurrencySettings(rows[0]?.multiCurrencySettings);
+    const value = normalizeMultiCurrencySettings(
+      rows[0]?.multiCurrencySettings,
+    );
+    multiCurrencySettingsCache.set(shop, {
+      expires: Date.now() + MULTI_CURRENCY_SETTINGS_TTL_MS,
+      value,
+    });
+    return value;
   } catch {
     return normalizeMultiCurrencySettings(null);
   }
@@ -291,6 +349,10 @@ export async function saveMultiCurrencySettingsForShop(
     `;
   }
 
+  multiCurrencySettingsCache.set(shop, {
+    expires: Date.now() + MULTI_CURRENCY_SETTINGS_TTL_MS,
+    value: normalized,
+  });
   return normalized;
 }
 
@@ -345,6 +407,9 @@ export async function saveSmtpSettingsForShop(
 export async function loadEmailTemplatesForShop(
   shop: string,
 ): Promise<EmailTemplatesSettings> {
+  const cached = emailTemplatesCache.get(shop);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
   try {
     const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
       SELECT id, shop, "emailTemplates"
@@ -361,6 +426,11 @@ export async function loadEmailTemplatesForShop(
       } catch {
         // Ignore persist errors (e.g. migration pending); still return ready copy.
       }
+    } else {
+      emailTemplatesCache.set(shop, {
+        expires: Date.now() + EMAIL_TEMPLATES_TTL_MS,
+        value: normalized,
+      });
     }
     return normalized;
   } catch {
@@ -403,6 +473,10 @@ export async function saveEmailTemplatesForShop(
     `;
   }
 
+  emailTemplatesCache.set(shop, {
+    expires: Date.now() + EMAIL_TEMPLATES_TTL_MS,
+    value: normalized,
+  });
   return normalized;
 }
 

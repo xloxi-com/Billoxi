@@ -49,7 +49,8 @@ async function countAssignedInvoiceNumbers(shop: string): Promise<number> {
 export async function hasInvoiceOrderNumbersSynced(
   shop: string,
 ): Promise<boolean> {
-  // Always read DB — process cache alone is wrong after a DB wipe/reset.
+  if (syncedShops.has(shop)) return true;
+  // Always read DB until confirmed — then trust process set (reset clears it).
   try {
     const rows = await prisma.$queryRaw<
       Array<{ invoiceOrderNumbersSyncedAt: Date | null }>
