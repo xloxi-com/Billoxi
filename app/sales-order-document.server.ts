@@ -101,9 +101,112 @@ export function invalidateDocumentTemplateSettingsCache(shop?: string) {
 
 export type { SalesOrderDocumentData, TemplateEditorSettings };
 
+const columnsReupdateDoneShops = new Set<string>();
+
 /**
- * Wipe saved customizations and re-seed every sales-order + invoice preset with the
- * current clean code defaults (margins, appearance, totals, labels, etc.).
+ * Re-merge every saved template customization with current code defaults
+ * (barcode column, SKU width 12, column order, etc.) for all document types.
+ */
+export async function reupdateAllShopTemplates(shop: string) {
+  const rows = await prisma.templateCustomization.findMany({
+    where: {
+      shop,
+      documentType: {
+        in: [
+          "sales-order",
+          "invoice",
+          "draft",
+          "credit-note",
+          "packing-slip",
+          "return",
+        ],
+      },
+    },
+    select: {
+      id: true,
+      documentType: true,
+      templateId: true,
+      settings: true,
+    },
+  });
+
+  let updated = 0;
+  for (const row of rows) {
+    const name = salesOrderTemplateName(row.templateId);
+    const merged = mergeTemplateSettings(row.settings, name, row.templateId);
+    await prisma.templateCustomization.update({
+      where: { id: row.id },
+      data: { settings: merged as unknown as Prisma.InputJsonValue },
+    });
+    updated += 1;
+  }
+
+  // Seed any missing presets so new templates also exist in DB.
+  const existing = new Set(
+    rows.map((row) => `${row.documentType}::${row.templateId}`),
+  );
+  const seedPresets = [
+    ...SALES_ORDER_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "sales-order" as const,
+      preset,
+    })),
+    ...INVOICE_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "invoice" as const,
+      preset,
+    })),
+    ...DRAFT_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "draft" as const,
+      preset,
+    })),
+    ...CREDIT_NOTE_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "credit-note" as const,
+      preset,
+    })),
+    ...PACKING_SLIP_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "packing-slip" as const,
+      preset,
+    })),
+    ...RETURN_TEMPLATE_PRESETS.map((preset) => ({
+      documentType: "return" as const,
+      preset,
+    })),
+  ];
+  const missing = seedPresets.filter(
+    ({ documentType, preset }) =>
+      !existing.has(`${documentType}::${preset.id}`),
+  );
+  if (missing.length > 0) {
+    await prisma.templateCustomization.createMany({
+      data: missing.map(({ documentType, preset }) => ({
+        shop,
+        documentType,
+        templateId: preset.id,
+        settings: defaultTemplateSettings(
+          preset.name,
+          preset.id,
+        ) as unknown as Prisma.InputJsonValue,
+      })),
+    });
+  }
+
+  invalidateDocumentTemplateSettingsCache(shop);
+  columnsReupdateDoneShops.add(shop);
+  return { updated, seeded: missing.length };
+}
+
+/** Run column schema reupdate once per shop per server process. */
+export async function reupdateAllShopTemplatesIfNeeded(shop: string) {
+  if (columnsReupdateDoneShops.has(shop)) {
+    return { updated: 0, seeded: 0, skipped: true as const };
+  }
+  const result = await reupdateAllShopTemplates(shop);
+  columnsReupdateDoneShops.add(shop);
+  return { ...result, skipped: false as const };
+}
+
+/**
+ * Wipe saved customizations and re-seed every document-type preset with the
+ * current clean code defaults (margins, appearance, totals, labels, columns).
  */
 export async function resetAllTemplatesToCleanDefaults(shop: string) {
   const deleted = await prisma.templateCustomization.deleteMany({
@@ -150,6 +253,7 @@ export async function resetAllTemplatesToCleanDefaults(shop: string) {
   });
 
   invalidateDocumentTemplateSettingsCache(shop);
+  columnsReupdateDoneShops.add(shop);
   return { deleted: deleted.count, seeded: seedPresets.length };
 }
 

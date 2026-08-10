@@ -721,10 +721,12 @@
   white-space: normal;
 }
 
-.live-document__table td.live-document__cell--sku {
-  white-space: nowrap;
-  overflow-wrap: normal;
-  word-break: keep-all;
+.live-document__table td.live-document__cell--sku,
+.live-document__table th.live-document__cell--sku {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
 }
 
 .live-document__rate-cell {
@@ -786,6 +788,10 @@
   color: var(--doc-muted-color, #737373);
   font-size: 0.9em;
   line-height: 1.4;
+}
+
+.live-document__item-meta {
+  font-variant-numeric: tabular-nums;
 }
 
 .live-document__items-in-total {

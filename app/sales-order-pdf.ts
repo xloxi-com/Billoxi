@@ -18,6 +18,7 @@ import {
   paperMarginMm,
   resolveDisplayedUnitPrice,
   expandEnabledTableColumns,
+  itemBelowTitleMetaLines,
   resolveTaxSummaryLabel,
   salesOrderLogoPosition,
   taxSummaryDisplayRows,
@@ -526,9 +527,17 @@ function cellValue(
   }
 }
 
-function itemColumnLines(item: SalesOrderDocumentData["lineItems"][number]) {
+function itemColumnLines(
+  item: SalesOrderDocumentData["lineItems"][number],
+  columns?: TemplateEditorSettings["columns"],
+) {
   const lines = [asText(item.title) || "-"];
   if (item.variantTitle) lines.push(asText(item.variantTitle));
+  if (columns) {
+    for (const line of itemBelowTitleMetaLines(item, columns)) {
+      lines.push(asText(line));
+    }
+  }
   return lines;
 }
 
@@ -1220,7 +1229,7 @@ async function buildSalesOrderVectorPdf({
   }
 
   order.lineItems.forEach((item, index) => {
-    const itemLines = itemColumnLines(item);
+    const itemLines = itemColumnLines(item, settings.columns);
     const displayedRate = resolveDisplayedUnitPrice(item, showComparePrice);
     const showCompare = Boolean(displayedRate.compareAtPrice);
     const itemColIndex = columns.findIndex((column) => column.key === "item");
@@ -2045,13 +2054,19 @@ function lockExportTableColumnWidths(root: HTMLElement) {
         cell.classList.contains("live-document__cell--numeric") ||
         cell.classList.contains("live-document__cell--sku")
       ) {
-        // Keep column width; nowrap lives on the inner align wrap only.
+        // Keep column width; allow SKU/Barcode to wrap instead of overflowing.
         cell.style.overflow = "hidden";
-        cell.style.whiteSpace = cell.classList.contains(
-          "live-document__cell--rate",
-        )
-          ? "normal"
-          : "nowrap";
+        if (cell.classList.contains("live-document__cell--sku")) {
+          cell.style.whiteSpace = "normal";
+          cell.style.overflowWrap = "anywhere";
+          cell.style.wordBreak = "break-word";
+        } else {
+          cell.style.whiteSpace = cell.classList.contains(
+            "live-document__cell--rate",
+          )
+            ? "normal"
+            : "nowrap";
+        }
       }
     });
   }

@@ -20,6 +20,7 @@ import {
   resolveDisplayedUnitPrice,
   expandEnabledTableColumns,
   isCustomTableColumnKey,
+  itemBelowTitleMetaLines,
   resolveTaxSummaryLabel,
   taxSummaryDisplayRows,
   taxSummaryTotals,
@@ -346,6 +347,10 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         );
         const showImage = Boolean(itemColumn?.showImage && item.imageUrl);
         const imagePx = lineItemImageSizePx(itemColumn?.imageSize);
+        const belowTitleLines = itemBelowTitleMetaLines(
+          item,
+          settings.columns,
+        );
         return (
           <span className="live-document__item-cell">
             {showImage ? (
@@ -362,6 +367,11 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
             <span className="live-document__item-text">
               {item.title}
               {item.variantTitle ? <small>{item.variantTitle}</small> : null}
+              {belowTitleLines.map((line) => (
+                <small key={line} className="live-document__item-meta">
+                  {line}
+                </small>
+              ))}
             </span>
           </span>
         );

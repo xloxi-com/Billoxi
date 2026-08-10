@@ -38,7 +38,7 @@ import {
 } from "../sales-order-document";
 import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { requireAdminAuth } from "../shopify-context.server";
-import { resetAllTemplatesToCleanDefaults } from "../sales-order-document.server";
+import { resetAllTemplatesToCleanDefaults, reupdateAllShopTemplates, reupdateAllShopTemplatesIfNeeded } from "../sales-order-document.server";
 import {
   loadNumberSeriesForShop,
   loadSelectedTemplatesForShop,
@@ -270,6 +270,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
 
   try {
+    await reupdateAllShopTemplatesIfNeeded(session.shop);
+
     const [selectedTemplates, storeDetails, numberSeries, customizations, shopCurrencyCode] =
       await Promise.all([
         loadSelectedTemplatesForShop(session.shop),
@@ -341,6 +343,11 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (intent === "reset-all-templates") {
     const result = await resetAllTemplatesToCleanDefaults(session.shop);
+    return Response.json({ ok: true, ...result });
+  }
+
+  if (intent === "reupdate-all-templates") {
+    const result = await reupdateAllShopTemplates(session.shop);
     return Response.json({ ok: true, ...result });
   }
 

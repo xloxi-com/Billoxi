@@ -400,13 +400,15 @@ s-page:has(.sales-order-document-page) > * {
 
 .template-editor__paper.is-print-export .live-document__table td.live-document__cell--sku,
 .template-editor__paper.is-print-export .live-document__table th.live-document__cell--sku {
-  white-space: nowrap !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
   overflow: hidden !important;
 }
 
 .template-editor__paper.is-print-export
   .live-document__table
-  td:not(.live-document__cell--numeric):not(.live-document__cell--sku) {
+  td:not(.live-document__cell--numeric) {
   overflow-wrap: break-word;
   word-break: normal;
   hyphens: manual;

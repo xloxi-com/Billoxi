@@ -248,6 +248,8 @@ export type TemplateEditorSettings = {
     showComparePrice?: boolean;
     showImage?: boolean;
     imageSize?: "small" | "medium" | "large";
+    /** When true, SKU/Barcode render under the item title instead of a table column. */
+    showBelowItem?: boolean;
   }>;
   selectedCustomFields: Array<{
     id: string;
@@ -2872,6 +2874,15 @@ export function expandEnabledTableColumns(
 
   for (const column of columns) {
     if (!column.enabled) continue;
+    // SKU / Barcode can render under the item title instead of as columns.
+    if (
+      (column.key === "sku" ||
+        column.key === "ean" ||
+        column.key === "barcode") &&
+      column.showBelowItem === true
+    ) {
+      continue;
+    }
     if (column.key !== "custom") {
       result.push(column);
       continue;
@@ -2935,7 +2946,7 @@ export function defaultColumnsForPreset(
     {
       key: "sku",
       enabled: true,
-      width: showImage ? (isPackingSlip ? 14 : 10) : isPackingSlip ? 16 : 11,
+      width: showImage ? (isPackingSlip ? 14 : 10) : isPackingSlip ? 16 : 12,
       label: "SKU",
     },
     {
@@ -2974,6 +2985,24 @@ export function defaultColumnsForPreset(
       label: "Amount",
     },
   ];
+}
+
+/** SKU / Barcode lines shown under the product title when opted in. */
+export function itemBelowTitleMetaLines(
+  item: SalesOrderDocumentData["lineItems"][number],
+  columns: TemplateEditorSettings["columns"],
+): string[] {
+  const lines: string[] = [];
+  for (const key of ["sku", "barcode"] as const) {
+    const column = columns.find((entry) => entry.key === key);
+    if (!column?.enabled || column.showBelowItem !== true) continue;
+    const value =
+      key === "sku" ? item.sku?.trim() : item.barcode?.trim();
+    if (!value) continue;
+    const label = column.label?.trim() || (key === "sku" ? "SKU" : "Barcode");
+    lines.push(`${label}: ${value}`);
+  }
+  return lines;
 }
 
 export function formatPercentOf(part: string, whole: string) {
@@ -4512,10 +4541,19 @@ export function mergeTemplateSettings(
               next = {
                 ...next,
                 enabled: next.enabled === true,
+                showBelowItem: next.showBelowItem === true,
                 label:
                   typeof next.label === "string" && next.label.trim()
                     ? next.label
                     : "Barcode",
+              };
+            }
+            if (next.key === "sku") {
+              next = {
+                ...next,
+                showBelowItem: next.showBelowItem === true,
+                // Legacy default was 11 — bump to current default 12.
+                width: next.width === 11 ? 12 : next.width,
               };
             }
             if (next.key === "rate") {

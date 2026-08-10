@@ -140,6 +140,7 @@ type TemplateColumn = {
   showComparePrice?: boolean;
   showImage?: boolean;
   imageSize?: "small" | "medium" | "large";
+  showBelowItem?: boolean;
 };
 
 type CustomFieldKind = "metafield" | "metaobject";
@@ -663,7 +664,7 @@ const defaultColumns: TemplateColumn[] = [
   { key: "number", enabled: true, width: 4, label: "#" },
   { key: "item", enabled: true, width: 36, label: "Item", showImage: false },
   { key: "custom", enabled: false, width: 12, label: "Custom" },
-  { key: "sku", enabled: true, width: 11, label: "SKU" },
+  { key: "sku", enabled: true, width: 12, label: "SKU" },
   {
     key: "barcode",
     enabled: false,
@@ -1397,7 +1398,15 @@ function mergeSettings(
                 next = {
                   ...next,
                   enabled: next.enabled === true,
+                  showBelowItem: next.showBelowItem === true,
                   label: next.label?.trim() ? next.label : "Barcode",
+                };
+              }
+              if (next.key === "sku") {
+                next = {
+                  ...next,
+                  showBelowItem: next.showBelowItem === true,
+                  width: next.width === 11 ? 12 : next.width,
                 };
               }
               if (next.key === "rate") {
@@ -3657,6 +3666,17 @@ export default function TemplateEditorPage() {
                                 checked={Boolean(column.showComparePrice)}
                                 onChange={(showComparePrice) =>
                                   updateColumn(index, { showComparePrice })
+                                }
+                              />
+                            </div>
+                          ) : null}
+                          {column.key === "sku" || column.key === "barcode" ? (
+                            <div className="template-editor__column-option">
+                              <Checkbox
+                                label="Show below item title"
+                                checked={Boolean(column.showBelowItem)}
+                                onChange={(showBelowItem) =>
+                                  updateColumn(index, { showBelowItem })
                                 }
                               />
                             </div>
