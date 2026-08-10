@@ -25,6 +25,7 @@ import {
   PACKING_SLIP_TEMPLATE_PRESETS,
   RETURN_TEMPLATE_PRESETS,
   type CreditNoteRefundSource,
+  type CreditNoteRefundLineSource,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
@@ -487,6 +488,7 @@ type OrderNode = {
           image?: { url?: string | null } | null;
           variant?: {
             sku?: string | null;
+            barcode?: string | null;
             product?: {
               featuredImage?: { url?: string | null } | null;
             } | null;
@@ -534,6 +536,7 @@ type OrderNode = {
       image?: { url?: string | null } | null;
       variant?: {
         sku?: string | null;
+        barcode?: string | null;
         title?: string | null;
         compareAtPrice?: unknown;
         price?: unknown;
@@ -690,7 +693,7 @@ function expectedShipmentDateFromOrder(order: {
 function creditNoteRefundSourceFromOrder(
   order: OrderNode,
 ): CreditNoteRefundSource {
-  const refundLineItems: CreditNoteRefundSource["refundLineItems"] = [];
+  const refundLineItems: CreditNoteRefundLineSource[] = [];
   let shippingRefunded = 0;
 
   for (const refund of order.refunds ?? []) {
@@ -710,7 +713,7 @@ function creditNoteRefundSourceFromOrder(
         }
         return raw;
       })();
-      refundLineItems.push({
+      const entry: CreditNoteRefundLineSource = {
         quantity: Number(node.quantity) || 0,
         subtotal: moneyAmount(node.subtotalSet?.shopMoney),
         tax: moneyAmount(node.totalTaxSet?.shopMoney),
@@ -721,7 +724,9 @@ function creditNoteRefundSourceFromOrder(
           line?.variant?.product?.featuredImage?.url?.trim() ||
           "",
         sku: line?.variant?.sku?.trim() || line?.sku?.trim() || "",
-      });
+        barcode: line?.variant?.barcode?.trim() || "",
+      };
+      refundLineItems.push(entry);
     }
     for (const ship of refund.refundShippingLines?.nodes ?? []) {
       if (!ship) continue;
@@ -834,6 +839,7 @@ export async function fetchSalesOrderDocument(
                   image { url }
                   variant {
                     sku
+                    barcode
                     product {
                       featuredImage { url }
                     }
@@ -883,6 +889,7 @@ export async function fetchSalesOrderDocument(
               }
               variant {
                 sku
+                barcode
                 title
                 compareAtPrice
                 price
@@ -1026,6 +1033,7 @@ export async function fetchSalesOrderDocument(
         taxAmount: taxAmountNum.toFixed(2),
         amount: Number.isFinite(amount) ? amount.toFixed(2) : "0.00",
         sku: item.variant?.sku || "",
+        barcode: item.variant?.barcode?.trim() || "",
       };
     });
 

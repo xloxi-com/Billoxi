@@ -249,7 +249,13 @@ export type TemplateEditorSettings = {
     showImage?: boolean;
     imageSize?: "small" | "medium" | "large";
   }>;
-  selectedCustomFields: Array<{ id: string; name: string }>;
+  selectedCustomFields: Array<{
+    id: string;
+    name: string;
+    width?: number;
+    namespace?: string;
+    key?: string;
+  }>;
   totals: {
     showSubtotal: boolean;
     subtotalLabel: string;
@@ -520,6 +526,8 @@ export type SalesOrderDocumentData = {
     taxAmount: string;
     amount: string;
     sku: string;
+    /** Variant barcode (ISBN, UPC, GTIN, etc.). */
+    barcode: string;
   }>;
   subtotal: string;
   discount: string;
@@ -2836,6 +2844,77 @@ export function salesOrderMetaStyle(
   return preset.metaStyle;
 }
 
+/** True for the base Custom column or an expanded per-metafield column. */
+export function isCustomTableColumnKey(key: string): boolean {
+  return key === "custom" || key.startsWith("custom:");
+}
+
+export type ExpandedTableColumn = TemplateEditorSettings["columns"][number] & {
+  customFieldId?: string;
+};
+
+/**
+ * Enabled columns for document render. Each selected product metafield becomes
+ * its own Custom column (side by side), not one joined header.
+ */
+export function expandEnabledTableColumns(
+  columns: TemplateEditorSettings["columns"],
+  selectedCustomFields?: ReadonlyArray<{
+    id: string;
+    name?: string | null;
+    width?: number | null;
+  }> | null,
+): ExpandedTableColumn[] {
+  const selected = (selectedCustomFields ?? []).filter(
+    (field) => typeof field.id === "string" && field.id.trim(),
+  );
+  const result: ExpandedTableColumn[] = [];
+
+  for (const column of columns) {
+    if (!column.enabled) continue;
+    if (column.key !== "custom") {
+      result.push(column);
+      continue;
+    }
+    if (selected.length === 0) {
+      result.push(column);
+      continue;
+    }
+    for (const field of selected) {
+      const name =
+        typeof field.name === "string" ? field.name.trim() : "";
+      const fieldWidth =
+        typeof field.width === "number" && Number.isFinite(field.width)
+          ? Math.max(1, field.width)
+          : column.width;
+      result.push({
+        ...column,
+        key: `custom:${field.id}`,
+        label: name || column.label || "Custom",
+        width: fieldWidth,
+        customFieldId: field.id,
+      });
+    }
+  }
+
+  return result;
+}
+
+/** @deprecated Prefer expandEnabledTableColumns for multi-metafield headers. */
+export function resolveTableColumnLabel(
+  column: { key: string; label: string },
+  selectedCustomFields?: ReadonlyArray<{ name?: string | null }> | null,
+): string {
+  if (!isCustomTableColumnKey(column.key) || column.key.startsWith("custom:")) {
+    return column.label;
+  }
+  const names = (selectedCustomFields ?? [])
+    .map((field) => (typeof field.name === "string" ? field.name.trim() : ""))
+    .filter(Boolean);
+  if (names.length === 0) return column.label;
+  return names[0]!;
+}
+
 export function defaultColumnsForPreset(
   preset: SalesOrderTemplatePreset,
 ): TemplateEditorSettings["columns"] {
@@ -2858,6 +2937,12 @@ export function defaultColumnsForPreset(
       enabled: true,
       width: showImage ? (isPackingSlip ? 14 : 10) : isPackingSlip ? 16 : 11,
       label: "SKU",
+    },
+    {
+      key: "barcode",
+      enabled: false,
+      width: showImage ? (isPackingSlip ? 14 : 12) : 12,
+      label: "Barcode",
     },
     {
       key: "quantity",
@@ -3075,15 +3160,12 @@ export function shouldShowDocumentPaidAmount(
   return hasNonZeroAmount(order.paidAmount);
 }
 
-/** Show Balance Due; fully refunded orders still show $0.00. */
+/** Show Balance Due whenever enabled (including $0.00 when fully paid). */
 export function shouldShowDocumentBalanceDue(
-  order: Pick<SalesOrderDocumentData, "balanceDue" | "financialStatus">,
+  _order: Pick<SalesOrderDocumentData, "balanceDue" | "financialStatus">,
   enabled: boolean,
 ) {
-  if (!enabled) return false;
-  const status = normalizeFinancialStatus(order.financialStatus);
-  if (status === "REFUNDED") return true;
-  return hasNonZeroAmount(order.balanceDue);
+  return enabled === true;
 }
 
 export function shouldShowDocumentRefundedAmount(
@@ -3111,6 +3193,7 @@ export type CreditNoteRefundLineSource = {
   variantTitle: string;
   imageUrl: string;
   sku: string;
+  barcode: string;
 };
 
 export type CreditNoteRefundSource = {
@@ -3136,6 +3219,7 @@ function emptyCreditLine(
     taxAmount: "0.00",
     amount,
     sku: "",
+    barcode: "",
   };
 }
 
@@ -3212,6 +3296,7 @@ export function adaptDocumentForCreditNote(
         taxAmount: taxAmt.toFixed(2),
         amount: sub.toFixed(2),
         sku: item.sku || "",
+        barcode: item.barcode || "",
       };
     });
 
@@ -4412,14 +4497,25 @@ export function mergeTemplateSettings(
             if (next.key === "ean") {
               next = {
                 ...next,
-                key: "sku",
+                key: "barcode",
+                enabled: false,
                 label:
                   typeof next.label === "string" &&
                   next.label !== "EAN" &&
-                  next.label.trim()
+                  next.label.trim() &&
+                  next.label.trim() !== "SKU"
                     ? next.label
-                    : "SKU",
-                enabled: true,
+                    : "Barcode",
+              };
+            }
+            if (next.key === "barcode") {
+              next = {
+                ...next,
+                enabled: next.enabled === true,
+                label:
+                  typeof next.label === "string" && next.label.trim()
+                    ? next.label
+                    : "Barcode",
               };
             }
             if (next.key === "rate") {
@@ -4504,13 +4600,72 @@ export function mergeTemplateSettings(
             const next = [...merged];
             const [skuColumn] = next.splice(skuIndex, 1);
             next.splice(qtyIndex, 0, skuColumn);
-            return next;
+            merged.length = 0;
+            merged.push(...next);
+          }
+
+          const skuAfter = merged.findIndex(
+            (column) =>
+              column &&
+              typeof column === "object" &&
+              "key" in column &&
+              column.key === "sku",
+          );
+          const barcodeIndex = merged.findIndex(
+            (column) =>
+              column &&
+              typeof column === "object" &&
+              "key" in column &&
+              column.key === "barcode",
+          );
+          if (
+            skuAfter >= 0 &&
+            barcodeIndex >= 0 &&
+            barcodeIndex !== skuAfter + 1
+          ) {
+            const [barcodeColumn] = merged.splice(barcodeIndex, 1);
+            const insertAt =
+              barcodeIndex < skuAfter ? skuAfter : skuAfter + 1;
+            merged.splice(insertAt, 0, barcodeColumn);
           }
           return merged;
         })()
       : defaults.columns,
     selectedCustomFields: Array.isArray(input.selectedCustomFields)
       ? input.selectedCustomFields
+          .filter(
+            (entry): entry is { id: string; name: string; width?: number } =>
+              Boolean(
+                entry &&
+                  typeof entry === "object" &&
+                  typeof (entry as { id?: unknown }).id === "string" &&
+                  (entry as { id: string }).id,
+              ),
+          )
+          .map((entry) => {
+            const widthRaw = (entry as { width?: unknown }).width;
+            const width =
+              typeof widthRaw === "number" && Number.isFinite(widthRaw)
+                ? Math.max(1, widthRaw)
+                : undefined;
+            return {
+              id: entry.id,
+              name:
+                typeof (entry as { name?: unknown }).name === "string" &&
+                (entry as { name: string }).name.trim()
+                  ? (entry as { name: string }).name.trim()
+                  : "Custom field",
+              ...(width != null ? { width } : {}),
+              ...((entry as { namespace?: unknown }).namespace &&
+              typeof (entry as { namespace?: unknown }).namespace === "string"
+                ? { namespace: (entry as { namespace: string }).namespace }
+                : {}),
+              ...((entry as { key?: unknown }).key &&
+              typeof (entry as { key?: unknown }).key === "string"
+                ? { key: (entry as { key: string }).key }
+                : {}),
+            };
+          })
       : defaults.selectedCustomFields,
     totals: isPremiumSales
       ? {

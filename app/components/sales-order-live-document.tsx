@@ -18,6 +18,8 @@ import {
   lineItemImageSizePx,
   normalizePaymentStatusStyle,
   resolveDisplayedUnitPrice,
+  expandEnabledTableColumns,
+  isCustomTableColumnKey,
   resolveTaxSummaryLabel,
   taxSummaryDisplayRows,
   taxSummaryTotals,
@@ -124,8 +126,12 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   showLogoPlaceholder?: boolean;
 }) {
   const columns = useMemo(
-    () => settings.columns.filter((column) => column.enabled),
-    [settings.columns],
+    () =>
+      expandEnabledTableColumns(
+        settings.columns,
+        settings.selectedCustomFields,
+      ),
+    [settings.columns, settings.selectedCustomFields],
   );
   const totalWidth =
     columns.reduce((total, column) => total + Math.max(column.width, 1), 0) || 1;
@@ -365,6 +371,8 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
       case "ean":
       case "sku":
         return item.sku || "—";
+      case "barcode":
+        return item.barcode || "—";
       case "rate": {
         const showCompare = Boolean(
           settings.columns.find((column) => column.key === "rate")
@@ -397,9 +405,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         return `${currencyPrefix}${formatAmountDisplay(item.taxAmount || 0)}`;
       case "amount":
         return `${currencyPrefix}${formatAmountDisplay(item.amount || 0)}`;
-      case "custom":
-        return "—";
       default:
+        // Base `custom` and expanded `custom:<id>` metafield columns.
+        if (isCustomTableColumnKey(columnKey)) return "—";
         return "—";
     }
   };
@@ -554,7 +562,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                   numericColumnKeys.has(column.key)
                     ? "live-document__cell--numeric"
                     : "",
-                  column.key === "sku" || column.key === "ean"
+                  column.key === "sku" ||
+                  column.key === "ean" ||
+                  column.key === "barcode"
                     ? "live-document__cell--sku"
                     : "",
                 ]
@@ -577,7 +587,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                       ? "live-document__cell--numeric"
                       : "",
                     column.key === "rate" ? "live-document__cell--rate" : "",
-                    column.key === "sku" || column.key === "ean"
+                    column.key === "sku" ||
+                    column.key === "ean" ||
+                    column.key === "barcode"
                       ? "live-document__cell--sku"
                       : "",
                   ]

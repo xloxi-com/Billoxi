@@ -143,6 +143,44 @@
   background: var(--p-color-bg-surface-secondary, #f7f7f7);
 }
 
+.template-editor__custom-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.template-editor__custom-field-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: var(--p-border-radius-100, 6px);
+}
+
+.template-editor__custom-field-row--dragging {
+  opacity: 0.55;
+}
+
+.template-editor__custom-field-row--drop-target {
+  background: var(--p-color-bg-surface-selected, #f2f7fe);
+}
+
+.template-editor__custom-field-row .Polaris-Choice {
+  min-width: 0;
+}
+
+.template-editor__custom-field-width {
+  min-width: 0;
+}
+
+.template-editor__column-spacer {
+  display: block;
+  min-height: 1px;
+}
+
 .template-editor__setup-steps li + li {
   margin-top: 4px;
 }

@@ -308,6 +308,7 @@ type DraftOrderLineNode = {
   image?: { url?: string | null } | null;
   variant?: {
     sku?: string | null;
+    barcode?: string | null;
     title?: string | null;
     compareAtPrice?: string | number | null;
     price?: string | number | null;
@@ -431,6 +432,7 @@ const DRAFT_ORDER_DOCUMENT_QUERY = `#graphql
           image { url }
           variant {
             sku
+            barcode
             title
             compareAtPrice
             price
@@ -665,6 +667,7 @@ export async function fetchDraftOrderDocument(
       taxAmount: taxAmountNum.toFixed(2),
       amount: Number.isFinite(amount) ? amount.toFixed(2) : "0.00",
       sku: item.variant?.sku || "",
+      barcode: item.variant?.barcode || "",
     };
   });
 

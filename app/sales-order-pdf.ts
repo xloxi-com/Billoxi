@@ -17,6 +17,7 @@ import {
   normalizePaymentStatusStyle,
   paperMarginMm,
   resolveDisplayedUnitPrice,
+  expandEnabledTableColumns,
   resolveTaxSummaryLabel,
   salesOrderLogoPosition,
   taxSummaryDisplayRows,
@@ -506,6 +507,8 @@ function cellValue(
     case "ean":
     case "sku":
       return asText(item.sku) || "-";
+    case "barcode":
+      return asText(item.barcode) || "-";
     case "rate":
       return `${currencyPrefix}${formatAmountDisplay(item.rate)}`;
     case "discount":
@@ -789,7 +792,10 @@ async function buildSalesOrderVectorPdf({
     order.currencyCode,
     settings.currencyDisplay,
   );
-  const columns = settings.columns.filter((column) => column.enabled);
+  const columns = expandEnabledTableColumns(
+    settings.columns,
+    settings.selectedCustomFields,
+  );
   const totalColWidth =
     columns.reduce((sum, column) => sum + Math.max(column.width, 1), 0) || 1;
 

@@ -20,7 +20,6 @@ import {
   useFetcher,
   useLoaderData,
   useNavigate,
-  useRevalidator,
   useRouteError,
 } from "react-router";
 import { SaveBar } from "@shopify/app-bridge-react";
@@ -160,6 +159,7 @@ type SelectedCustomField = {
   id: string;
   kind: CustomFieldKind;
   name: string;
+  width?: number;
   namespace?: string;
   key?: string;
   ownerType?: string;
@@ -664,6 +664,12 @@ const defaultColumns: TemplateColumn[] = [
   { key: "item", enabled: true, width: 36, label: "Item", showImage: false },
   { key: "custom", enabled: false, width: 12, label: "Custom" },
   { key: "sku", enabled: true, width: 11, label: "SKU" },
+  {
+    key: "barcode",
+    enabled: false,
+    width: 12,
+    label: "Barcode",
+  },
   { key: "quantity", enabled: true, width: 10, label: "Qty", showUnit: false },
   { key: "rate", enabled: true, width: 10, label: "Rate", showComparePrice: true },
   { key: "discount", enabled: false, width: 10, label: "Discount" },
@@ -678,6 +684,7 @@ const columnFieldLabels: Record<string, string> = {
   item: "Item",
   custom: "Custom",
   sku: "SKU",
+  barcode: "Barcode",
   quantity: "Qty",
   rate: "Rate",
   discount: "Discount",
@@ -1376,14 +1383,23 @@ function mergeSettings(
                 column.key === "ean"
                   ? {
                       ...column,
-                      key: "sku",
+                      key: "barcode",
+                      enabled: false,
                       label:
-                        column.label === "EAN" || !column.label.trim()
-                          ? "SKU"
+                        column.label === "EAN" ||
+                        !column.label.trim() ||
+                        column.label.trim() === "SKU"
+                          ? "Barcode"
                           : column.label,
-                      enabled: true,
                     }
                   : column;
+              if (next.key === "barcode") {
+                next = {
+                  ...next,
+                  enabled: next.enabled === true,
+                  label: next.label?.trim() ? next.label : "Barcode",
+                };
+              }
               if (next.key === "rate") {
                 next = {
                   ...next,
@@ -1442,6 +1458,18 @@ function mergeSettings(
           if (skuIndex >= 0 && qtyIndex >= 0 && skuIndex > qtyIndex) {
             const [skuColumn] = merged.splice(skuIndex, 1);
             merged.splice(qtyIndex, 0, skuColumn);
+          }
+
+          // Keep Barcode immediately after SKU.
+          const skuAfter = merged.findIndex((column) => column.key === "sku");
+          const barcodeIndex = merged.findIndex(
+            (column) => column.key === "barcode",
+          );
+          if (skuAfter >= 0 && barcodeIndex >= 0 && barcodeIndex !== skuAfter + 1) {
+            const [barcodeColumn] = merged.splice(barcodeIndex, 1);
+            const insertAt =
+              barcodeIndex < skuAfter ? skuAfter : skuAfter + 1;
+            merged.splice(insertAt, 0, barcodeColumn);
           }
 
           return merged;
@@ -1554,6 +1582,11 @@ function normalizeSelectedCustomFields(value: unknown): SelectedCustomField[] {
     }
     if (seen.has(field.id)) continue;
     seen.add(field.id);
+    const widthRaw = (field as { width?: unknown }).width;
+    const width =
+      typeof widthRaw === "number" && Number.isFinite(widthRaw)
+        ? Math.max(1, widthRaw)
+        : undefined;
     normalized.push({
       id: field.id,
       kind: "metafield",
@@ -1561,6 +1594,7 @@ function normalizeSelectedCustomFields(value: unknown): SelectedCustomField[] {
         typeof field.name === "string" && field.name.trim()
           ? field.name.trim()
           : field.key || "Custom field",
+      ...(width != null ? { width } : {}),
       namespace: typeof field.namespace === "string" ? field.namespace : undefined,
       key: typeof field.key === "string" ? field.key : undefined,
       ownerType: "PRODUCT",
@@ -1817,17 +1851,51 @@ export default function TemplateEditorPage() {
   const navigate = useNavigate();
   const fetcher = useFetcher<typeof action>();
   const customFieldsFetcher = useFetcher<{ sources: CustomFieldSource[] }>();
-  const revalidator = useRevalidator();
-  const customFieldsRequestedRef = useRef(false);
+  const [customFieldSources, setCustomFieldSources] = useState<
+    CustomFieldSource[]
+  >([]);
+  const [customFieldsLoadRequested, setCustomFieldsLoadRequested] =
+    useState(false);
+  const [customFieldsRefreshing, setCustomFieldsRefreshing] = useState(false);
+  const customFieldsSawLoadingRef = useRef(false);
+
+  const refreshCustomFieldSources = () => {
+    setCustomFieldsLoadRequested(true);
+    setCustomFieldsRefreshing(true);
+    customFieldsSawLoadingRef.current = false;
+    customFieldsFetcher.load(
+      `/app/templates/custom-fields?fresh=1&t=${Date.now()}`,
+    );
+  };
 
   useEffect(() => {
-    if (customFieldsRequestedRef.current) return;
-    customFieldsRequestedRef.current = true;
-    customFieldsFetcher.load("/app/templates/custom-fields");
-  }, [customFieldsFetcher]);
+    if (!customFieldsRefreshing) return;
 
-  const customFieldSources =
-    customFieldsFetcher.data?.sources ?? data.customFieldSources;
+    if (
+      customFieldsFetcher.state === "loading" ||
+      customFieldsFetcher.state === "submitting"
+    ) {
+      customFieldsSawLoadingRef.current = true;
+      return;
+    }
+
+    if (
+      customFieldsFetcher.state === "idle" &&
+      customFieldsSawLoadingRef.current
+    ) {
+      if (customFieldsFetcher.data?.sources) {
+        setCustomFieldSources(customFieldsFetcher.data.sources);
+      }
+      setCustomFieldsRefreshing(false);
+      customFieldsSawLoadingRef.current = false;
+    }
+  }, [
+    customFieldsRefreshing,
+    customFieldsFetcher.state,
+    customFieldsFetcher.data,
+  ]);
+
+  const customFieldsLoading = customFieldsRefreshing;
   const defaultAppearance = useMemo(() => {
     const preset = findTemplatePreset(data.templateId) ?? null;
     return {
@@ -1932,6 +2000,12 @@ export default function TemplateEditorPage() {
     section: AddressSection;
     index: number;
   } | null>(null);
+  const [draggingCustomFieldIndex, setDraggingCustomFieldIndex] = useState<
+    number | null
+  >(null);
+  const [dragOverCustomFieldIndex, setDragOverCustomFieldIndex] = useState<
+    number | null
+  >(null);
   const [expandedLabel, setExpandedLabel] = useState<{
     section: AddressSection;
     key: CustomerDetailKey;
@@ -2186,6 +2260,10 @@ export default function TemplateEditorPage() {
 
   const toggleCustomField = (source: CustomFieldSource, enabled: boolean) => {
     const selected = settings.selectedCustomFields;
+    const customColumn = settings.columns.find(
+      (column) => column.key === "custom",
+    );
+    const defaultWidth = Math.max(1, customColumn?.width ?? 12);
     const nextSelected = enabled
       ? selected.some((field) => field.id === source.id)
         ? selected
@@ -2195,6 +2273,7 @@ export default function TemplateEditorPage() {
               id: source.id,
               kind: source.kind,
               name: source.name,
+              width: defaultWidth,
               namespace: source.namespace,
               key: source.key,
               ownerType: source.ownerType,
@@ -2207,9 +2286,18 @@ export default function TemplateEditorPage() {
       (column) => column.key === "custom",
     );
     const nextColumns =
-      enabled && customIndex >= 0
+      customIndex >= 0
         ? settings.columns.map((column, index) =>
-            index === customIndex ? { ...column, enabled: true } : column,
+            index === customIndex
+              ? {
+                  ...column,
+                  enabled: enabled ? true : column.enabled,
+                  label:
+                    nextSelected.length === 1
+                      ? nextSelected[0]!.name.trim() || "Custom"
+                      : "Custom",
+                }
+              : column,
           )
         : settings.columns;
 
@@ -2217,6 +2305,33 @@ export default function TemplateEditorPage() {
       selectedCustomFields: nextSelected,
       columns: nextColumns,
     });
+  };
+
+  const updateSelectedCustomFieldWidth = (id: string, width: number) => {
+    const nextWidth = Number.isFinite(width) ? Math.max(1, width) : 1;
+    updateSettings({
+      selectedCustomFields: settings.selectedCustomFields.map((field) =>
+        field.id === id ? { ...field, width: nextWidth } : field,
+      ),
+    });
+  };
+
+  const moveSelectedCustomField = (fromIndex: number, toIndex: number) => {
+    const fields = settings.selectedCustomFields;
+    if (
+      fromIndex === toIndex ||
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= fields.length ||
+      toIndex >= fields.length
+    ) {
+      return;
+    }
+    const next = [...fields];
+    const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
+    next.splice(toIndex, 0, moved);
+    updateSettings({ selectedCustomFields: next });
   };
 
   const getAddressFields = (section: AddressSection) =>
@@ -2619,12 +2734,6 @@ export default function TemplateEditorPage() {
                     <Text as="h2" variant="headingLg">
                       Template Properties
                     </Text>
-                    <TextField
-                      label="Template Name"
-                      value={settings.name}
-                      onChange={(name) => updateSettings({ name })}
-                      autoComplete="off"
-                    />
                     <Select
                       label="Language"
                       options={TEMPLATE_LANGUAGES.map((entry) => ({
@@ -3511,25 +3620,36 @@ export default function TemplateEditorPage() {
                               updateColumn(index, { enabled })
                             }
                           />
-                          <TextField
-                            label="Width"
-                            labelHidden
-                            type="number"
-                            value={String(column.width)}
-                            onChange={(value) =>
-                              updateColumn(index, { width: Number(value) })
-                            }
-                            autoComplete="off"
-                          />
-                          <TextField
-                            label="Label"
-                            labelHidden
-                            value={column.label}
-                            onChange={(label) =>
-                              updateColumn(index, { label })
-                            }
-                            autoComplete="off"
-                          />
+                          {column.key === "custom" ? (
+                            <>
+                              <span className="template-editor__column-spacer" />
+                              <span className="template-editor__column-spacer" />
+                            </>
+                          ) : (
+                            <>
+                              <TextField
+                                label="Width"
+                                labelHidden
+                                type="number"
+                                value={String(column.width)}
+                                onChange={(value) =>
+                                  updateColumn(index, {
+                                    width: Number(value),
+                                  })
+                                }
+                                autoComplete="off"
+                              />
+                              <TextField
+                                label="Label"
+                                labelHidden
+                                value={column.label}
+                                onChange={(label) =>
+                                  updateColumn(index, { label })
+                                }
+                                autoComplete="off"
+                              />
+                            </>
+                          )}
                           {column.key === "rate" ? (
                             <div className="template-editor__column-option">
                               <Checkbox
@@ -3588,7 +3708,34 @@ export default function TemplateEditorPage() {
                         </div>
                         {column.key === "custom" && column.enabled ? (
                           <div className="template-editor__custom-fields">
-                            {customFieldSources.length === 0 ? (
+                            {!customFieldsLoadRequested ? (
+                              <BlockStack gap="300">
+                                <Text as="p" variant="bodySm" tone="subdued">
+                                  Click <strong>Refresh list</strong> to load
+                                  product metafields for this column.
+                                </Text>
+                                <InlineStack gap="200" wrap>
+                                  <Button
+                                    variant="primary"
+                                    onClick={refreshCustomFieldSources}
+                                    loading={customFieldsLoading}
+                                  >
+                                    Refresh list
+                                  </Button>
+                                  <Button
+                                    url="shopify://admin/settings/custom_data/product/metafields"
+                                    target="_top"
+                                  >
+                                    Manage metafields
+                                  </Button>
+                                </InlineStack>
+                              </BlockStack>
+                            ) : customFieldsLoading &&
+                              customFieldSources.length === 0 ? (
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                Loading metafields…
+                              </Text>
+                            ) : customFieldSources.length === 0 ? (
                               <BlockStack gap="300">
                                 <Text as="h3" variant="headingSm">
                                   Set up product metafields
@@ -3601,7 +3748,9 @@ export default function TemplateEditorPage() {
                                 <ol className="template-editor__setup-steps">
                                   <li>
                                     Open{" "}
-                                    <strong>Settings → Custom data → Products</strong>
+                                    <strong>
+                                      Settings → Custom data → Products
+                                    </strong>
                                   </li>
                                   <li>
                                     Click <strong>Add definition</strong>, name
@@ -3621,8 +3770,8 @@ export default function TemplateEditorPage() {
                                     Create product metafield
                                   </Button>
                                   <Button
-                                    onClick={() => revalidator.revalidate()}
-                                    loading={revalidator.state === "loading"}
+                                    onClick={refreshCustomFieldSources}
+                                    loading={customFieldsLoading}
                                   >
                                     Refresh list
                                   </Button>
@@ -3631,26 +3780,164 @@ export default function TemplateEditorPage() {
                             ) : (
                               <BlockStack gap="200">
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  Select product metafields to show in this
-                                  column.
+                                  Select product metafields to show as separate
+                                  columns. Drag selected fields to change order.
                                 </Text>
-                                {customFieldSources.map((source) => {
-                                  const checked =
-                                    settings.selectedCustomFields.some(
-                                      (field) => field.id === source.id,
-                                    );
-                                  const detail = `${source.namespace}.${source.key}`;
-                                  return (
-                                    <Checkbox
-                                      key={source.id}
-                                      label={`${source.name} (${detail})`}
-                                      checked={checked}
-                                      onChange={(enabled) =>
-                                        toggleCustomField(source, enabled)
-                                      }
-                                    />
-                                  );
-                                })}
+                                {settings.selectedCustomFields.length > 0 ? (
+                                  <div className="template-editor__custom-field-list">
+                                    {settings.selectedCustomFields.map(
+                                      (field, index) => {
+                                        const source =
+                                          customFieldSources.find(
+                                            (entry) => entry.id === field.id,
+                                          ) ?? null;
+                                        const label =
+                                          source?.name?.trim() ||
+                                          field.name.trim() ||
+                                          "Custom field";
+                                        const isDragging =
+                                          draggingCustomFieldIndex === index;
+                                        const isDropTarget =
+                                          dragOverCustomFieldIndex === index &&
+                                          draggingCustomFieldIndex !== index;
+
+                                        return (
+                                          <div
+                                            key={field.id}
+                                            className={[
+                                              "template-editor__custom-field-row",
+                                              isDragging
+                                                ? "template-editor__custom-field-row--dragging"
+                                                : "",
+                                              isDropTarget
+                                                ? "template-editor__custom-field-row--drop-target"
+                                                : "",
+                                            ]
+                                              .filter(Boolean)
+                                              .join(" ")}
+                                            onDragOver={(event) => {
+                                              event.preventDefault();
+                                              if (
+                                                dragOverCustomFieldIndex !==
+                                                index
+                                              ) {
+                                                setDragOverCustomFieldIndex(
+                                                  index,
+                                                );
+                                              }
+                                            }}
+                                            onDrop={(event) => {
+                                              event.preventDefault();
+                                              if (
+                                                draggingCustomFieldIndex !==
+                                                null
+                                              ) {
+                                                moveSelectedCustomField(
+                                                  draggingCustomFieldIndex,
+                                                  index,
+                                                );
+                                              }
+                                              setDraggingCustomFieldIndex(null);
+                                              setDragOverCustomFieldIndex(null);
+                                            }}
+                                          >
+                                            <button
+                                              type="button"
+                                              className="template-editor__drag-handle"
+                                              draggable
+                                              aria-label={`Drag to reorder ${field.name}`}
+                                              onDragStart={(event) => {
+                                                event.dataTransfer.effectAllowed =
+                                                  "move";
+                                                setDraggingCustomFieldIndex(
+                                                  index,
+                                                );
+                                                setDragOverCustomFieldIndex(
+                                                  index,
+                                                );
+                                              }}
+                                              onDragEnd={() => {
+                                                setDraggingCustomFieldIndex(
+                                                  null,
+                                                );
+                                                setDragOverCustomFieldIndex(
+                                                  null,
+                                                );
+                                              }}
+                                            >
+                                              <Icon
+                                                source={DragHandleIcon}
+                                                tone="subdued"
+                                              />
+                                            </button>
+                                            <Checkbox
+                                              label={label}
+                                              checked
+                                              onChange={(enabled) => {
+                                                if (!enabled) {
+                                                  if (source) {
+                                                    toggleCustomField(
+                                                      source,
+                                                      false,
+                                                    );
+                                                  } else {
+                                                    updateSettings({
+                                                      selectedCustomFields:
+                                                        settings.selectedCustomFields.filter(
+                                                          (entry) =>
+                                                            entry.id !==
+                                                            field.id,
+                                                        ),
+                                                    });
+                                                  }
+                                                }
+                                              }}
+                                            />
+                                            <div className="template-editor__custom-field-width">
+                                              <TextField
+                                                label="Width"
+                                                labelHidden
+                                                type="number"
+                                                value={String(
+                                                  field.width ??
+                                                    settings.columns.find(
+                                                      (column) =>
+                                                        column.key === "custom",
+                                                    )?.width ??
+                                                    12,
+                                                )}
+                                                onChange={(value) =>
+                                                  updateSelectedCustomFieldWidth(
+                                                    field.id,
+                                                    Number(value),
+                                                  )
+                                                }
+                                                autoComplete="off"
+                                              />
+                                            </div>
+                                          </div>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                ) : null}
+                                {customFieldSources
+                                  .filter(
+                                    (source) =>
+                                      !settings.selectedCustomFields.some(
+                                        (field) => field.id === source.id,
+                                      ),
+                                  )
+                                  .map((source) => (
+                                      <Checkbox
+                                        key={source.id}
+                                        label={source.name}
+                                        checked={false}
+                                        onChange={(enabled) =>
+                                          toggleCustomField(source, enabled)
+                                        }
+                                      />
+                                    ))}
                                 <InlineStack gap="200">
                                   <Button
                                     url="shopify://admin/settings/custom_data/product/metafields"
@@ -3659,8 +3946,8 @@ export default function TemplateEditorPage() {
                                     Manage metafields
                                   </Button>
                                   <Button
-                                    onClick={() => revalidator.revalidate()}
-                                    loading={revalidator.state === "loading"}
+                                    onClick={refreshCustomFieldSources}
+                                    loading={customFieldsLoading}
                                   >
                                     Refresh list
                                   </Button>

@@ -60,6 +60,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
       taxAmount: "14.04",
       amount: "270.00",
       sku: "WATCH-CL-01",
+      barcode: "0885909506026",
     },
     {
       title: "Wireless Headphones",
@@ -75,6 +76,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
       taxAmount: "13.00",
       amount: "250.00",
       sku: "AUDIO-WH-02",
+      barcode: "0718037872507",
     },
     {
       title: "Running Sneakers",
@@ -90,6 +92,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
       taxAmount: "4.16",
       amount: "80.00",
       sku: "SHOE-RN-03",
+      barcode: "0194252098666",
     },
   ],
   // Gross of line rates (300+250+80)
@@ -151,7 +154,8 @@ export function sampleCreditNoteForShop(
         title: item.title,
         variantTitle: item.variantTitle,
         imageUrl: item.imageUrl,
-        sku: item.sku,
+      sku: item.sku,
+        barcode: item.barcode || "",
       })),
       shippingRefunded: 0,
     },
