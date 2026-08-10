@@ -18,6 +18,60 @@ type ErrorInfo = {
   message: string;
 };
 
+const EMBEDDED_QUERY_KEYS = [
+  "shop",
+  "host",
+  "embedded",
+  "id_token",
+  "locale",
+  "session",
+] as const;
+
+function embeddedAppPath(path: string) {
+  if (typeof window === "undefined") return path;
+  const current = new URLSearchParams(window.location.search);
+  const next = new URLSearchParams();
+  for (const key of EMBEDDED_QUERY_KEYS) {
+    const value = current.get(key);
+    if (value) next.set(key, value);
+  }
+  const qs = next.toString();
+  return qs ? `${path}${path.includes("?") ? "&" : "?"}${qs}` : path;
+}
+
+function clearRecoverReloadKeys() {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (key && key.startsWith("billoxi:") && key.includes("reload")) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) sessionStorage.removeItem(key);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+/** Navigate inside the embedded admin iframe (keeps shop/host params). */
+function navigateEmbedded(path: string) {
+  const target = embeddedAppPath(path);
+  const shopify = (
+    window as Window & {
+      shopify?: { navigate?: (url: string) => void };
+    }
+  ).shopify;
+
+  if (typeof shopify?.navigate === "function") {
+    shopify.navigate(target);
+    return;
+  }
+
+  window.location.assign(target);
+}
+
 function getErrorInfo(error: unknown): ErrorInfo {
   if (isRouteErrorResponse(error)) {
     const dataMessage =
@@ -117,6 +171,16 @@ export function EmbeddedRouteErrorPage({
   title: string;
   description: string;
 }) {
+  const goHome = () => {
+    clearRecoverReloadKeys();
+    navigateEmbedded("/app");
+  };
+
+  const reload = () => {
+    clearRecoverReloadKeys();
+    window.location.reload();
+  };
+
   return (
     <AppProvider i18n={enTranslations}>
       <Page title={title}>
@@ -135,8 +199,8 @@ export function EmbeddedRouteErrorPage({
                 </Text>
               </BlockStack>
               <InlineStack gap="300" align="center">
-                <Button url="/app">Go to Home</Button>
-                <Button variant="primary" onClick={() => window.location.reload()}>
+                <Button onClick={goHome}>Go to Home</Button>
+                <Button variant="primary" onClick={reload}>
                   Reload page
                 </Button>
               </InlineStack>
