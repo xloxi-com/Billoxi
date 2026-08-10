@@ -54,9 +54,17 @@ export function ErrorBoundary() {
 
   // Recover from React Router single-fetch / route-discovery mismatches
   // (e.g. "No result found for routeId routes/app.templates").
+  // Also recover auth-bounce Responses that surface as blank "200".
+  const status =
+    error &&
+    typeof error === "object" &&
+    "status" in error &&
+    typeof (error as { status?: unknown }).status === "number"
+      ? (error as { status: number }).status
+      : null;
   if (
     typeof window !== "undefined" &&
-    /No result found for routeId/i.test(message)
+    (status === 200 || /No result found for routeId/i.test(message))
   ) {
     const key = "billoxi:routeId-reload";
     const last = Number(sessionStorage.getItem(key) || "0");

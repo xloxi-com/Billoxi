@@ -19,6 +19,7 @@ import type {
 import {
   useFetcher,
   useLoaderData,
+  useNavigate,
   useRevalidator,
   useRouteError,
 } from "react-router";
@@ -1813,6 +1814,7 @@ const sectionItems: Array<{
 
 export default function TemplateEditorPage() {
   const data = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const fetcher = useFetcher<typeof action>();
   const customFieldsFetcher = useFetcher<{ sources: CustomFieldSource[] }>();
   const revalidator = useRevalidator();
@@ -3232,7 +3234,9 @@ export default function TemplateEditorPage() {
                                   ),
                                 )}
                                 <Button
-                                  url="/app/settings?section=store-details"
+                                  onClick={() =>
+                                    navigate("/app/settings?section=store-details")
+                                  }
                                   size="slim"
                                 >
                                   Edit store details
@@ -3286,7 +3290,9 @@ export default function TemplateEditorPage() {
                                     Store details to show it on all templates.
                                   </Text>
                                   <Button
-                                    url="/app/settings?section=store-details"
+                                    onClick={() =>
+                                      navigate("/app/settings?section=store-details")
+                                    }
                                     size="slim"
                                   >
                                     Upload store logo
