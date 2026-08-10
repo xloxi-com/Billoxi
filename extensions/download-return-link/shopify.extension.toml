@@ -1,0 +1,18 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "download-return-link"
+uid = "5304ea5b-2324-4cd8-865c-8963cb0967e368655d5c"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.targeting]]
+module = "./src/Action.jsx"
+target = "admin.order-details.action.render"
+
+[extensions.targeting.should_render]
+module = "./src/ShouldRender.js"

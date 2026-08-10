@@ -1,0 +1,15 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "download-draft-link"
+uid = "f5df75e6-4d29-4f0d-816a-d12f2d52e3e7ea0da061"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.targeting]]
+module = "./src/Action.jsx"
+target = "admin.draft-order-details.action.render"

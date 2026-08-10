@@ -6,7 +6,13 @@ import {
 } from "./extension-download-ticket.server";
 import { loader as exportLoader } from "./routes/app.sales-order.export.$orderId";
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 /**
  * Load the same export JSON the in-app Download uses, then stash it in a
@@ -36,7 +42,7 @@ export async function createDomDownloadTicket(args: {
     request: exportRequest,
     params: { orderId: args.orderId },
     context: {},
-  } as LoaderFunctionArgs);
+  } as unknown as LoaderFunctionArgs);
 
   const payload = (await exportResponse.json()) as
     | ExtensionExportPayload

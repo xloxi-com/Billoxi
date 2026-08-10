@@ -4,6 +4,7 @@ import { createDomDownloadTicket } from "../extension-dom-download-ticket.server
 import { extensionPublicOrigin } from "../extension-public-origin.server";
 import { markOrderInvoiced } from "../order-invoice-status.server";
 import { markOrderPackingSlip } from "../order-packing-slip-status.server";
+import { markOrderReturn } from "../order-return-status.server";
 import { toOrderGid } from "../sales-order-document";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { authenticate } from "../shopify.server";
@@ -75,7 +76,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     );
   }
 
-  if (documentKind !== "invoice" && documentKind !== "packing-slip") {
+  if (
+    documentKind !== "invoice" &&
+    documentKind !== "packing-slip" &&
+    documentKind !== "return"
+  ) {
     return cors(
       corsJson(
         request,
@@ -90,8 +95,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     if (documentKind === "invoice") {
       await markOrderInvoiced(session.shop, orderGid);
-    } else {
+    } else if (documentKind === "packing-slip") {
       await markOrderPackingSlip(session.shop, orderGid);
+    } else {
+      await markOrderReturn(session.shop, orderGid);
     }
     invalidateSalesOrdersCache(session.shop);
   } catch (error) {

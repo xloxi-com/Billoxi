@@ -378,7 +378,6 @@ export default function AppHomePage() {
   const { analytics, plan, eventLogs, setupGuide } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const [setupOpen, setSetupOpen] = useState(true);
   const [stepSynced, setStepSynced] = useState(setupGuide.steps);
 
   useEffect(() => {
@@ -412,6 +411,12 @@ export default function AppHomePage() {
     (setupDoneCount / setupSteps.length) * 100,
   );
 
+  // Incomplete → open; fully done → stay collapsed (auto-close).
+  const [setupOpen, setSetupOpen] = useState(!setupComplete);
+  useEffect(() => {
+    if (setupComplete) setSetupOpen(false);
+  }, [setupComplete]);
+
   return (
     <AppProvider i18n={enTranslations}>
       <Page
@@ -434,8 +439,7 @@ export default function AppHomePage() {
         <Layout>
           <Layout.Section>
             <BlockStack gap="400">
-              {!setupComplete ? (
-                <Card>
+              <Card>
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center" wrap>
                       <BlockStack gap="100">
@@ -443,12 +447,16 @@ export default function AppHomePage() {
                           <Text as="h2" variant="headingMd">
                             Setup guide
                           </Text>
-                          <Badge tone="attention">
-                            {`${setupDoneCount}/${setupSteps.length}`}
+                          <Badge tone={setupComplete ? "success" : "attention"}>
+                            {setupComplete
+                              ? "Complete"
+                              : `${setupDoneCount}/${setupSteps.length}`}
                           </Badge>
                         </InlineStack>
                         <Text as="p" tone="subdued" variant="bodySm">
-                          Finish these steps to get Billoxi ready.
+                          {setupComplete
+                            ? "All setup steps are done."
+                            : "Finish these steps to get Billoxi ready."}
                         </Text>
                       </BlockStack>
                       <Button
@@ -559,7 +567,6 @@ export default function AppHomePage() {
                     </Collapsible>
                   </BlockStack>
                 </Card>
-              ) : null}
 
               <Card>
                 <BlockStack gap="400">

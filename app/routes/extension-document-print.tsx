@@ -9,6 +9,7 @@ import {
   createExtensionPrintTicket,
   peekExtensionPrintTicket,
 } from "../extension-print-ticket.server";
+import { extensionPublicOrigin } from "../extension-public-origin.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import type {
   SalesOrderDocumentData,
@@ -63,14 +64,22 @@ function throwHtml(request: Request, html: string, status = 200): never {
   throw new Response(html, { status, headers });
 }
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 function parseDocumentKinds(value: string): DocumentKind[] {
   const allowed = new Set<DocumentKind>([
     "sales-order",
     "invoice",
+    "draft",
     "credit-note",
     "packing-slip",
+    "return",
   ]);
   const parts = value
     .split(",")
@@ -92,6 +101,8 @@ function errorHtml(message: string) {
 <head>
   <meta charset="utf-8" />
   <title>Print unavailable</title>
+  <link rel="icon" href="/billoxi-favicon.svg" type="image/svg+xml" />
+  <link rel="shortcut icon" href="/billoxi-favicon.svg" />
   <style>
     body { font-family: system-ui, sans-serif; padding: 24px; color: #202223; margin: 0; }
     h1 { font-size: 18px; margin: 0 0 8px; }
@@ -168,11 +179,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const orderId = String(url.searchParams.get("orderId") || "")
-    .replace(/^gid:\/\/shopify\/Order\//i, "")
+    .replace(/^gid:\/\/shopify\/(?:DraftOrder|Order)\//i, "")
     .trim();
   const documentKinds = parseDocumentKinds(
     String(url.searchParams.get("document") || "sales-order"),
   );
+  const autoprint = url.searchParams.get("autoprint") === "1";
 
   if (!orderId || !/^\d+$/.test(orderId)) {
     if (isPrep) {
@@ -213,7 +225,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       throwHtml(request, errorHtml("Document not found."), 404);
     }
 
-    const html = await buildExtensionPrintHtml(pages);
+    const html = await buildExtensionPrintHtml(pages, { autoprint });
     const body = Buffer.from(html);
     const ticket = createExtensionPrintTicket({
       body,
@@ -221,7 +233,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       fileName: "billoxi-print.html",
       shop: session.shop,
     });
-    const src = `/extension-document-print?ticket=${encodeURIComponent(ticket)}`;
+    // Relative for AdminPrintAction iframe; absolute when opening a new tab.
+    const relativeSrc = `/extension-document-print?ticket=${encodeURIComponent(ticket)}`;
+    const src = autoprint
+      ? `${extensionPublicOrigin(request)}${relativeSrc}`
+      : relativeSrc;
 
     const firstOrder = pages[0]?.order;
     const orderName =
@@ -234,10 +250,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
         ? firstOrder.documentNumber.trim()
         : null;
 
+    const primaryKind = documentKinds[0] || "sales-order";
     void incrementShopMonthlyUsage(session.shop, "printed", 1, {
-      documentKind: documentKinds[0] || "sales-order",
+      documentKind: primaryKind,
       documentNumber,
-      orderGid: orderId ? `gid://shopify/Order/${orderId}` : null,
+      orderGid: orderId
+        ? primaryKind === "draft"
+          ? `gid://shopify/DraftOrder/${orderId}`
+          : `gid://shopify/Order/${orderId}`
+        : null,
       orderName,
       processType: "extension",
     });

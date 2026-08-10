@@ -4,6 +4,7 @@ import { createDomDownloadTicket } from "../extension-dom-download-ticket.server
 import { extensionPublicOrigin } from "../extension-public-origin.server";
 import { getInvoicedOrderGids } from "../order-invoice-status.server";
 import { getPackingSlipOrderGids } from "../order-packing-slip-status.server";
+import { getReturnOrderGids } from "../order-return-status.server";
 import { toOrderGid } from "../sales-order-document";
 import { authenticate } from "../shopify.server";
 
@@ -57,13 +58,21 @@ async function withAdminCors(request: Request) {
   }
 }
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 function parseDocumentKind(value: string): DocumentKind {
   if (
     value === "invoice" ||
+    value === "draft" ||
     value === "credit-note" ||
-    value === "packing-slip"
+    value === "packing-slip" ||
+    value === "return"
   ) {
     return value;
   }
@@ -78,7 +87,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, cors } = await withAdminCors(request);
   const url = new URL(request.url);
   const orderId = String(url.searchParams.get("orderId") || "")
-    .replace(/^gid:\/\/shopify\/Order\//i, "")
+    .replace(/^gid:\/\/shopify\/(?:DraftOrder|Order)\//i, "")
     .trim();
   const documentKind = parseDocumentKind(
     String(url.searchParams.get("document") || "sales-order"),
@@ -94,6 +103,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   let needsConvert = false;
   let isConverted = false;
 
+  // Shopify DraftOrder docs never need convert — export uses document=draft.
   if (documentKind === "invoice") {
     const invoiced = await getInvoicedOrderGids(session.shop, [orderGid]);
     isConverted = invoiced.has(orderGid);
@@ -101,6 +111,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } else if (documentKind === "packing-slip") {
     const packing = await getPackingSlipOrderGids(session.shop, [orderGid]);
     isConverted = packing.has(orderGid);
+    needsConvert = !isConverted;
+  } else if (documentKind === "return") {
+    const returns = await getReturnOrderGids(session.shop, [orderGid]);
+    isConverted = returns.has(orderGid);
     needsConvert = !isConverted;
   }
 
@@ -110,7 +124,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   downloadUrl.searchParams.set("document", documentKind);
 
   const convertPath =
-    documentKind === "invoice" || documentKind === "packing-slip"
+    documentKind === "invoice" ||
+    documentKind === "packing-slip" ||
+    documentKind === "return"
       ? `/extension-document-convert?${new URLSearchParams({
           orderId,
           document: documentKind,

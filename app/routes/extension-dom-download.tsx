@@ -21,13 +21,21 @@ function withBearerFromQuery(request: Request) {
   return new Request(request.url, { method: request.method, headers });
 }
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 function parseDocumentKind(value: string): DocumentKind {
   if (
     value === "invoice" ||
+    value === "draft" ||
     value === "credit-note" ||
-    value === "packing-slip"
+    value === "packing-slip" ||
+    value === "return"
   ) {
     return value;
   }
@@ -47,8 +55,8 @@ function downloadHtmlPage(payloadJson: string) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Downloading…</title>
-  <link rel="icon" href="/extension-pdf-favicon.png" type="image/png" />
-  <link rel="shortcut icon" href="/extension-pdf-favicon.png" />
+  <link rel="icon" href="/billoxi-favicon.svg" type="image/svg+xml" />
+  <link rel="shortcut icon" href="/billoxi-favicon.svg" />
   <link rel="preload" href="/fonts/NotoSans-Regular.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="preload" href="/fonts/NotoSans-Bold.ttf" as="font" type="font/ttf" crossorigin />
   <link rel="stylesheet" href="/extension-pdf-download.css?v=${bust}" />
@@ -71,7 +79,7 @@ function downloadHtmlPage(payloadJson: string) {
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const orderId = String(url.searchParams.get("orderId") || "")
-    .replace(/^gid:\/\/shopify\/Order\//i, "")
+    .replace(/^gid:\/\/shopify\/(?:DraftOrder|Order)\//i, "")
     .trim();
   const documentKind = parseDocumentKind(
     String(url.searchParams.get("document") || "sales-order"),
@@ -115,7 +123,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       request: exportRequest,
       params: { orderId },
       context: {},
-    } as LoaderFunctionArgs);
+    } as unknown as LoaderFunctionArgs);
 
     const body = await exportResponse.json();
     if (!exportResponse.ok || !body || body.ok !== true) {
@@ -151,7 +159,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     void incrementShopMonthlyUsage(shop, "downloaded", 1, {
       documentKind: kind,
       documentNumber,
-      orderGid: `gid://shopify/Order/${orderId}`,
+      orderGid:
+        kind === "draft"
+          ? `gid://shopify/DraftOrder/${orderId}`
+          : `gid://shopify/Order/${orderId}`,
       orderName,
       processType: "extension",
     });

@@ -12,7 +12,13 @@ import {
 } from "./sales-order-document";
 import type { StoreDetails } from "./store-details";
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 export type PrintDocumentPayload = {
   order: SalesOrderDocumentData;
@@ -181,17 +187,25 @@ async function documentPage(payload: PrintDocumentPayload) {
  * Same Billoxi live-document markup as Download PDF, as static HTML
  * (Admin print iframe cannot run scripts / PDF embeds).
  */
-export async function buildExtensionPrintHtml(pages: PrintDocumentPayload[]) {
+export async function buildExtensionPrintHtml(
+  pages: PrintDocumentPayload[],
+  options?: { autoprint?: boolean },
+) {
   const css = await loadPrintCss();
   const pageBreak = `<div class="page-break" aria-hidden="true"></div>`;
   const renderedPages = await Promise.all(pages.map((page) => documentPage(page)));
   const body = renderedPages.join(pageBreak);
+  const autoprintScript = options?.autoprint
+    ? `<script>window.addEventListener("load",function(){try{window.focus();}catch(e){}window.print();});</script>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Billoxi print</title>
+  <link rel="icon" href="/billoxi-favicon.svg" type="image/svg+xml" />
+  <link rel="shortcut icon" href="/billoxi-favicon.svg" />
   <style>
 ${css}
 html, body {
@@ -241,6 +255,7 @@ html, body {
   <!--email_off-->
   ${body}
   <!--/email_off-->
+  ${autoprintScript}
 </body>
 </html>`;
 }

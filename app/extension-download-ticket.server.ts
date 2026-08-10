@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-type DocumentKind = "sales-order" | "invoice" | "credit-note" | "packing-slip";
+type DocumentKind =
+  | "sales-order"
+  | "invoice"
+  | "draft"
+  | "credit-note"
+  | "packing-slip"
+  | "return";
 
 /** Opaque export JSON — same shape as /app/sales-order/export. */
 export type ExtensionExportPayload = {

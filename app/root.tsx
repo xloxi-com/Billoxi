@@ -4,6 +4,8 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: polarisStyles },
+  { rel: "icon", href: "/billoxi-favicon.svg", type: "image/svg+xml" },
+  { rel: "shortcut icon", href: "/billoxi-favicon.svg" },
 ];
 
 export default function App() {

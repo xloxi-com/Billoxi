@@ -42,6 +42,8 @@ function downloadHtmlPage(fileName: string, pdfBase64: string) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Downloading ${label}</title>
+  <link rel="icon" href="/billoxi-favicon.svg" type="image/svg+xml" />
+  <link rel="shortcut icon" href="/billoxi-favicon.svg" />
   <style>
     body { font-family: system-ui, sans-serif; padding: 24px; color: #202223; }
     a { color: #2c6ecb; }
