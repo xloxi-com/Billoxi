@@ -7,6 +7,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminAuth } from "../shopify-context.server";
 import type { EmailDocumentKind } from "../email-templates";
 import { sendDocumentEmail } from "../send-email.server";
+import { invalidateSalesOrdersCache } from "../sales-orders.server";
 
 function asDocumentKind(value: string): EmailDocumentKind {
   if (
@@ -78,7 +79,8 @@ export async function action({ request }: ActionFunctionArgs) {
   if (!result.ok) {
     return Response.json(result, { status: 400 });
   }
-  return Response.json(result);
+  invalidateSalesOrdersCache(session.shop);
+  return Response.json({ ...result, orderId });
 }
 
 export const headers: HeadersFunction = (args) => boundary.headers(args);

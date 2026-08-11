@@ -39,6 +39,7 @@ import {
   getCreditNoteOrderGids,
   type CreditNoteOrderMeta,
 } from "./order-credit-note-status.server";
+import { getDocumentActionFlagsByOrderGids } from "./document-event-log.server";
 import { DEFAULT_SALES_ORDER_TEMPLATE_ID } from "./sales-order-ids";
 import {
   INVOICED_VIEW_QUERY,
@@ -64,12 +65,16 @@ export type { SalesOrderViewId } from "./sales-orders";
 export const SORT_OPTIONS = {
   "order asc": { sortKey: "ORDER_NUMBER", reverse: false },
   "order desc": { sortKey: "ORDER_NUMBER", reverse: true },
+  "reference asc": { sortKey: "ORDER_NUMBER", reverse: false },
+  "reference desc": { sortKey: "ORDER_NUMBER", reverse: true },
   "customer asc": { sortKey: "CUSTOMER_NAME", reverse: false },
   "customer desc": { sortKey: "CUSTOMER_NAME", reverse: true },
   "date asc": { sortKey: "CREATED_AT", reverse: false },
   "date desc": { sortKey: "CREATED_AT", reverse: true },
   "total asc": { sortKey: "CURRENT_TOTAL_PRICE", reverse: false },
   "total desc": { sortKey: "CURRENT_TOTAL_PRICE", reverse: true },
+  "balance asc": { sortKey: "CURRENT_TOTAL_PRICE", reverse: false },
+  "balance desc": { sortKey: "CURRENT_TOTAL_PRICE", reverse: true },
 } as const;
 
 export type SortSelected = keyof typeof SORT_OPTIONS;
@@ -149,7 +154,12 @@ export type SalesOrderRow = {
   paymentProgress: "complete" | "partiallyComplete" | "incomplete";
   fulfillmentTone: "success" | "warning" | "info" | "attention" | "critical" | undefined;
   fulfillmentProgress: "complete" | "partiallyComplete" | "incomplete";
+  printed: boolean;
+  downloaded: boolean;
+  emailed: boolean;
 };
+
+export type DocumentFlagFilter = "" | "yes" | "no";
 
 export type SalesOrdersPage = {
   orders: SalesOrderRow[];
@@ -166,6 +176,10 @@ export type SalesOrdersPage = {
   paymentStatus: string;
   fulfillmentStatus: string;
   sortSelected: SortSelected;
+  invoicedFilter?: DocumentFlagFilter;
+  packingSlipFilter?: DocumentFlagFilter;
+  returnFilter?: DocumentFlagFilter;
+  creditNoteFilter?: DocumentFlagFilter;
 };
 
 type AdminGraphql = {
@@ -494,27 +508,49 @@ function paginateItems<T extends { id: string }>(
   };
 }
 
+function numericDocRank(value: string): number {
+  return Number((value || "").replace(/\D/g, "")) || 0;
+}
+
 function sortRawOrders(
   orders: RawSalesOrder[],
   sortSelected: SortSelected,
   invoicedAtByGid: Map<string, number>,
+  extras?: {
+    documentNumberByGid?: Map<string, string>;
+    referenceByGid?: Map<string, string>;
+  },
 ): RawSalesOrder[] {
   const sorted = [...orders];
   const reverse = SORT_OPTIONS[sortSelected].reverse;
+  const dir = reverse ? -1 : 1;
 
   sorted.sort((a, b) => {
     switch (sortSelected) {
       case "order asc":
       case "order desc": {
-        const aName = Number((a.name || "").replace(/\D/g, "")) || 0;
-        const bName = Number((b.name || "").replace(/\D/g, "")) || 0;
-        return (aName - bName) * (reverse ? -1 : 1);
+        const aName = numericDocRank(
+          extras?.documentNumberByGid?.get(a.id) || a.name || "",
+        );
+        const bName = numericDocRank(
+          extras?.documentNumberByGid?.get(b.id) || b.name || "",
+        );
+        return (aName - bName) * dir;
+      }
+      case "reference asc":
+      case "reference desc": {
+        const aRef = extras?.referenceByGid?.get(a.id) || a.name || "";
+        const bRef = extras?.referenceByGid?.get(b.id) || b.name || "";
+        const aNum = numericDocRank(aRef);
+        const bNum = numericDocRank(bRef);
+        if (aNum !== bNum) return (aNum - bNum) * dir;
+        return aRef.localeCompare(bRef) * dir;
       }
       case "customer asc":
       case "customer desc": {
         const aName = (a.customer?.displayName || "").toLowerCase();
         const bName = (b.customer?.displayName || "").toLowerCase();
-        return aName.localeCompare(bName) * (reverse ? -1 : 1);
+        return aName.localeCompare(bName) * dir;
       }
       case "total asc":
       case "total desc": {
@@ -528,7 +564,13 @@ function sortRawOrders(
             (b.totalPriceSet?.shopMoney ?? b.currentTotalPriceSet.shopMoney)
               .amount,
           ) || 0;
-        return (aTotal - bTotal) * (reverse ? -1 : 1);
+        return (aTotal - bTotal) * dir;
+      }
+      case "balance asc":
+      case "balance desc": {
+        const aBal = Number(resolveBalanceDue(a).amount) || 0;
+        const bBal = Number(resolveBalanceDue(b).amount) || 0;
+        return (aBal - bBal) * dir;
       }
       case "date asc":
       case "date desc":
@@ -893,6 +935,9 @@ function toRow(
     fulfillmentStatus: formatFulfillmentStatus(order.displayFulfillmentStatus),
     ...payment,
     ...fulfillment,
+    printed: false,
+    downloaded: false,
+    emailed: false,
   };
 }
 
@@ -921,6 +966,12 @@ export function parseSalesOrdersSearchParams(url: URL) {
       : 0;
   const paymentStatus = url.searchParams.get("payment") ?? "";
   const fulfillmentStatus = url.searchParams.get("fulfillment") ?? "";
+  const invoicedFilter = parseDocumentFlagFilter(url.searchParams.get("invoiced"));
+  const packingSlipFilter = parseDocumentFlagFilter(
+    url.searchParams.get("packing"),
+  );
+  const returnFilter = parseDocumentFlagFilter(url.searchParams.get("return"));
+  const creditNoteFilter = parseDocumentFlagFilter(url.searchParams.get("credit"));
   const requestedSort = url.searchParams.get("sort") ?? "date desc";
   const sortSelected = (
     requestedSort in SORT_OPTIONS ? requestedSort : "date desc"
@@ -934,9 +985,70 @@ export function parseSalesOrdersSearchParams(url: URL) {
     selectedView,
     paymentStatus,
     fulfillmentStatus,
+    invoicedFilter,
+    packingSlipFilter,
+    returnFilter,
+    creditNoteFilter,
     sortSelected,
     bypassCache,
   };
+}
+
+function parseDocumentFlagFilter(value: string | null): DocumentFlagFilter {
+  return value === "yes" || value === "no" ? value : "";
+}
+
+function listDocumentKind(args: {
+  invoiced?: boolean;
+  creditNote?: boolean;
+  packingSlip?: boolean;
+  draft?: boolean;
+  returnSlip?: boolean;
+}): string {
+  if (args.creditNote) return "credit-note";
+  if (args.packingSlip) return "packing-slip";
+  if (args.returnSlip) return "return";
+  if (args.draft) return "draft";
+  if (args.invoiced) return "invoice";
+  return "sales-order";
+}
+
+async function withActionFlags(
+  shop: string,
+  data: SalesOrdersPage,
+  documentKind: string,
+): Promise<SalesOrdersPage> {
+  const flags = await getDocumentActionFlagsByOrderGids(
+    shop,
+    data.orders.map((order) => order.id),
+    documentKind,
+  );
+  if (flags.size === 0) return data;
+  return {
+    ...data,
+    orders: data.orders.map((order) => {
+      const flag = flags.get(order.id);
+      if (!flag) return order;
+      return {
+        ...order,
+        printed: flag.printed,
+        downloaded: flag.downloaded,
+        emailed: flag.sent,
+      };
+    }),
+  };
+}
+
+function applyFlagToGids(
+  source: string[],
+  typedGids: string[],
+  filter: DocumentFlagFilter,
+): string[] {
+  if (!filter) return source;
+  const typed = new Set(typedGids);
+  return filter === "yes"
+    ? source.filter((id) => typed.has(id))
+    : source.filter((id) => !typed.has(id));
 }
 
 export async function loadSalesOrdersPage(
@@ -976,6 +1088,10 @@ export async function loadSalesOrdersPage(
     paymentStatus: params.paymentStatus,
     fulfillmentStatus: params.fulfillmentStatus,
     sortSelected: params.sortSelected,
+    invoicedFilter: params.invoicedFilter,
+    packingSlipFilter: params.packingSlipFilter,
+    returnFilter: params.returnFilter,
+    creditNoteFilter: params.creditNoteFilter,
   });
 
   const cacheKeyBase = [
@@ -997,6 +1113,10 @@ export async function loadSalesOrdersPage(
     params.query,
     params.paymentStatus,
     params.fulfillmentStatus,
+    params.invoicedFilter,
+    params.packingSlipFilter,
+    params.returnFilter,
+    params.creditNoteFilter,
     params.sortSelected,
   ].join("|");
 
@@ -1039,21 +1159,33 @@ export async function loadSalesOrdersPage(
                 expires: now + CACHE_TTL_MS,
                 data,
               });
-              return {
-                ...data,
-                selectedView,
-                availableViews,
-              };
+              return withActionFlags(
+                shop,
+                { ...data, selectedView, availableViews },
+                listDocumentKind({
+                  invoiced: isInvoicedView,
+                  creditNote: isCreditNoteView,
+                  packingSlip: isPackingSlipView,
+                  draft: isDraftView,
+                  returnSlip: isReturnView,
+                }),
+              );
             }
           }
         }
       }
 
-      return {
-        ...cached.data,
-        selectedView,
-        availableViews,
-      };
+      return withActionFlags(
+        shop,
+        { ...cached.data, selectedView, availableViews },
+        listDocumentKind({
+          invoiced: isInvoicedView,
+          creditNote: isCreditNoteView,
+          packingSlip: isPackingSlipView,
+          draft: isDraftView,
+          returnSlip: isReturnView,
+        }),
+      );
     }
   }
 
@@ -1303,7 +1435,7 @@ export async function loadSalesOrdersPage(
       }
     }
 
-    return {
+    const page: SalesOrdersPage = {
       orders: nodes.map((order) => {
         const meta = invoicedMeta.get(order.id) ?? null;
         const cnMeta = creditNoteMeta.get(order.id) ?? null;
@@ -1382,7 +1514,22 @@ export async function loadSalesOrdersPage(
       paymentStatus: params.paymentStatus,
       fulfillmentStatus: params.fulfillmentStatus,
       sortSelected: params.sortSelected,
+      invoicedFilter: params.invoicedFilter,
+      packingSlipFilter: params.packingSlipFilter,
+      returnFilter: params.returnFilter,
+      creditNoteFilter: params.creditNoteFilter,
     };
+    return withActionFlags(
+      shop,
+      page,
+      listDocumentKind({
+        invoiced: forceInvoiced,
+        creditNote: forceCreditNote,
+        packingSlip: forcePackingSlip,
+        draft: forceDraft,
+        returnSlip: forceReturn,
+      }),
+    );
   };
 
   const filterAndPaginateDocumentOrders = async (
@@ -1455,10 +1602,25 @@ export async function loadSalesOrdersPage(
         ? params.sortSelected
         : ("date desc" as SortSelected);
     const dateByGid = new Map<string, number>();
+    const documentNumberByGid = new Map<string, string>();
     for (const [gid, meta] of metaForSort) {
       dateByGid.set(gid, meta.sortAt);
+      if (meta.searchNumber) documentNumberByGid.set(gid, meta.searchNumber);
     }
-    orders = sortRawOrders(orders, sortSelected, dateByGid);
+    let referenceByGid: Map<string, string> | undefined;
+    if (sortSelected === "reference asc" || sortSelected === "reference desc") {
+      if (forceInvoiced || forceCreditNote) {
+        referenceByGid = await getSalesOrderDocumentNumbersByOrderGids(
+          shop,
+          templateId,
+          orders.map((order) => order.id),
+        );
+      }
+    }
+    orders = sortRawOrders(orders, sortSelected, dateByGid, {
+      documentNumberByGid,
+      referenceByGid,
+    });
     const { pageItems, pageInfo } = paginateItems(
       orders,
       params.after,
@@ -1592,6 +1754,111 @@ export async function loadSalesOrdersPage(
       true,
       false,
     );
+  }
+
+  const hasDocumentFlagFilter = Boolean(
+    params.invoicedFilter ||
+      params.packingSlipFilter ||
+      params.returnFilter ||
+      params.creditNoteFilter,
+  );
+
+  if (hasDocumentFlagFilter) {
+    const [invoicedGids, packingGids, returnGids, creditGids] =
+      await Promise.all([
+        params.invoicedFilter
+          ? getAllInvoicedOrderGids(shop)
+          : Promise.resolve([] as string[]),
+        params.packingSlipFilter
+          ? getAllPackingSlipOrderGids(shop)
+          : Promise.resolve([] as string[]),
+        params.returnFilter
+          ? getAllReturnOrderGids(shop)
+          : Promise.resolve([] as string[]),
+        params.creditNoteFilter
+          ? getAllCreditNoteOrderGids(shop)
+          : Promise.resolve([] as string[]),
+      ]);
+
+    const yesSets: string[][] = [];
+    if (params.invoicedFilter === "yes") yesSets.push(invoicedGids);
+    if (params.packingSlipFilter === "yes") yesSets.push(packingGids);
+    if (params.returnFilter === "yes") yesSets.push(returnGids);
+    if (params.creditNoteFilter === "yes") yesSets.push(creditGids);
+
+    if (yesSets.length > 0) {
+      let sourceGids = yesSets[0];
+      for (let i = 1; i < yesSets.length; i++) {
+        sourceGids = applyFlagToGids(sourceGids, yesSets[i], "yes");
+      }
+      if (params.invoicedFilter === "no") {
+        sourceGids = applyFlagToGids(sourceGids, invoicedGids, "no");
+      }
+      if (params.packingSlipFilter === "no") {
+        sourceGids = applyFlagToGids(sourceGids, packingGids, "no");
+      }
+      if (params.returnFilter === "no") {
+        sourceGids = applyFlagToGids(sourceGids, returnGids, "no");
+      }
+      if (params.creditNoteFilter === "no") {
+        sourceGids = applyFlagToGids(sourceGids, creditGids, "no");
+      }
+      return filterAndPaginateDocumentOrders(
+        sourceGids,
+        new Map(),
+        false,
+        false,
+      );
+    }
+
+    const textSearchNo = params.query.trim()
+      ? await buildSalesOrdersTextSearch(admin, shop, templateId, params.query)
+      : "";
+    const orderQueryNo = [
+      textSearchNo,
+      viewQuery,
+      params.paymentStatus ? `financial_status:${params.paymentStatus}` : "",
+      params.fulfillmentStatus
+        ? `fulfillment_status:${params.fulfillmentStatus}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const noFilterResponse = await admin.graphql(SALES_ORDERS_QUERY, {
+      variables: {
+        first: MAX_INVOICED_FETCH,
+        query: orderQueryNo || undefined,
+        sortKey: sortConfig.sortKey,
+        reverse: sortConfig.reverse,
+      },
+    });
+    const noFilterResult = (await noFilterResponse.json()) as OrdersResponse;
+    if (!noFilterResult.data?.orders) {
+      const message =
+        noFilterResult.errors?.map((error) => error.message).join(", ") ||
+        "Shopify orders could not be loaded.";
+      throw new Response(message, { status: 502 });
+    }
+    let filteredNodes = noFilterResult.data.orders.nodes;
+    const exclude = (typedGids: string[], filter: DocumentFlagFilter) => {
+      if (filter !== "no") return;
+      const typed = new Set(typedGids);
+      filteredNodes = filteredNodes.filter((order) => !typed.has(order.id));
+    };
+    exclude(invoicedGids, params.invoicedFilter);
+    exclude(packingGids, params.packingSlipFilter);
+    exclude(returnGids, params.returnFilter);
+    exclude(creditGids, params.creditNoteFilter);
+    const { pageItems, pageInfo } = paginateItems(
+      filteredNodes,
+      params.after,
+      params.before,
+    );
+    const data = await buildPage(pageItems, pageInfo, false);
+    listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
+    pruneCache(now);
+    void rememberSalesOrdersWatermark(admin, shop);
+    return data;
   }
 
   const textSearch = params.query.trim()

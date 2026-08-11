@@ -6,6 +6,7 @@ import {
   Icon,
   Popover,
   Text,
+  Tooltip,
   UnstyledButton,
 } from "@shopify/polaris";
 import {
@@ -27,6 +28,8 @@ export type IndexColumnDef = {
 export type IndexColumnsState = {
   order: string[];
   hidden: string[];
+  /** defaultHidden ids already applied, so merchants can unhide without a reset. */
+  appliedDefaultHidden?: string[];
 };
 
 export const SALES_ORDER_INDEX_COLUMNS: IndexColumnDef[] = [
@@ -40,6 +43,8 @@ export const SALES_ORDER_INDEX_COLUMNS: IndexColumnDef[] = [
   { id: "fulfillmentStatus", label: "Fulfillment status" },
   { id: "invoiced", label: "Invoiced" },
   { id: "packingSlip", label: "Packing slip" },
+  { id: "creditNote", label: "Credit note", defaultHidden: true },
+  { id: "returnSlip", label: "Return", defaultHidden: true },
   { id: "actions", label: "Actions", locked: true },
 ];
 
@@ -116,29 +121,70 @@ function readStored(key: string, columns: IndexColumnDef[]): IndexColumnsState {
   const defaultOrder = columns.map((c) => c.id);
   const defaultsHidden = defaultHiddenIds(columns);
   if (typeof window === "undefined") {
-    return { order: defaultOrder, hidden: defaultsHidden };
+    return {
+      order: defaultOrder,
+      hidden: defaultsHidden,
+      appliedDefaultHidden: defaultsHidden,
+    };
   }
   try {
     const raw = window.localStorage.getItem(key);
-    if (!raw) return { order: defaultOrder, hidden: defaultsHidden };
+    if (!raw) {
+      return {
+        order: defaultOrder,
+        hidden: defaultsHidden,
+        appliedDefaultHidden: defaultsHidden,
+      };
+    }
     const parsed = JSON.parse(raw) as IndexColumnsState;
     const known = new Set(columns.map((c) => c.id));
     const newlyAdded = defaultOrder.filter((id) => !parsed.order.includes(id));
-    const order = [
-      ...parsed.order.filter((id) => known.has(id)),
-      ...newlyAdded,
+    const order = parsed.order.filter((id) => known.has(id));
+    for (const id of newlyAdded) {
+      const defaultIndex = defaultOrder.indexOf(id);
+      let insertAt = order.length;
+      for (let i = defaultIndex + 1; i < defaultOrder.length; i++) {
+        const existingIndex = order.indexOf(defaultOrder[i]);
+        if (existingIndex >= 0) {
+          insertAt = existingIndex;
+          break;
+        }
+      }
+      order.splice(insertAt, 0, id);
+    }
+    const appliedDefaultHidden = [
+      ...new Set([
+        ...(parsed.appliedDefaultHidden || []),
+        ...newlyAdded.filter((id) =>
+          columns.find((c) => c.id === id)?.defaultHidden,
+        ),
+      ]),
     ];
+    const pendingDefaultHidden = defaultsHidden.filter(
+      (id) => !appliedDefaultHidden.includes(id),
+    );
     const hidden = [
       ...(parsed.hidden || []),
       ...newlyAdded.filter((id) =>
         columns.find((c) => c.id === id)?.defaultHidden,
       ),
+      ...pendingDefaultHidden,
     ].filter(
       (id) => known.has(id) && !columns.find((c) => c.id === id)?.locked,
     );
-    return { order, hidden: [...new Set(hidden)] };
+    return {
+      order,
+      hidden: [...new Set(hidden)],
+      appliedDefaultHidden: [
+        ...new Set([...appliedDefaultHidden, ...pendingDefaultHidden]),
+      ],
+    };
   } catch {
-    return { order: defaultOrder, hidden: defaultsHidden };
+    return {
+      order: defaultOrder,
+      hidden: defaultsHidden,
+      appliedDefaultHidden: defaultsHidden,
+    };
   }
 }
 
@@ -217,12 +263,19 @@ export function useIndexColumns(
       preferredAlignment="right"
       onClose={() => setOpen(false)}
       activator={
-        <Button
-          icon={LayoutColumns3Icon}
-          variant="tertiary"
-          accessibilityLabel="Edit columns"
-          onClick={() => setOpen((v) => !v)}
-        />
+        <Tooltip
+          content="Edit columns"
+          preferredPosition="above"
+          hoverDelay={400}
+        >
+          <Button
+            size="slim"
+            icon={LayoutColumns3Icon}
+            accessibilityLabel="Edit columns"
+            pressed={open}
+            onClick={() => setOpen((v) => !v)}
+          />
+        </Tooltip>
       }
     >
       <Box minWidth="240px" paddingBlockStart="200">

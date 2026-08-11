@@ -247,6 +247,9 @@ function toDraftRow(
       statusKey === "COMPLETED" ? "complete" : "incomplete",
     fulfillmentTone: undefined,
     fulfillmentProgress: "incomplete",
+    printed: false,
+    downloaded: false,
+    emailed: false,
   };
 }
 
@@ -257,16 +260,20 @@ function resolveDraftSort(sortSelected: SortSelected): {
 } {
   switch (sortSelected) {
     case "order asc":
+    case "reference asc":
       return { sortKey: "NUMBER", reverse: false };
     case "order desc":
+    case "reference desc":
       return { sortKey: "NUMBER", reverse: true };
     case "customer asc":
       return { sortKey: "CUSTOMER_NAME", reverse: false };
     case "customer desc":
       return { sortKey: "CUSTOMER_NAME", reverse: true };
     case "total asc":
+    case "balance asc":
       return { sortKey: "TOTAL_PRICE", reverse: false };
     case "total desc":
+    case "balance desc":
       return { sortKey: "TOTAL_PRICE", reverse: true };
     case "date asc":
       return { sortKey: "UPDATED_AT", reverse: false };

@@ -42,6 +42,8 @@ import {
 } from "@shopify/polaris";
 import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
 import {
+  CaretDownIcon,
+  CaretUpIcon,
   CheckCircleIcon,
   EmailIcon,
   ImportIcon,
@@ -228,16 +230,39 @@ function documentStatusDisplay(
   };
 }
 
-const SORT_UI_OPTIONS: IndexFiltersProps["sortOptions"] = [
-  { label: "Sales Order", value: "order asc", directionLabel: "Ascending" },
-  { label: "Sales Order", value: "order desc", directionLabel: "Descending" },
-  { label: "Customer", value: "customer asc", directionLabel: "A–Z" },
-  { label: "Customer", value: "customer desc", directionLabel: "Z–A" },
-  { label: "Date", value: "date asc", directionLabel: "Oldest first" },
-  { label: "Date", value: "date desc", directionLabel: "Newest first" },
-  { label: "Total", value: "total asc", directionLabel: "Ascending" },
-  { label: "Total", value: "total desc", directionLabel: "Descending" },
-];
+const SORTABLE_COLUMN_IDS = new Set([
+  "document",
+  "reference",
+  "date",
+  "total",
+  "balanceDue",
+]);
+
+/** Shopify Admin Orders-style defaults: Order ↑, Date ↓ */
+const COLUMN_DEFAULT_DIRECTION: Record<string, "ascending" | "descending"> = {
+  document: "ascending",
+  reference: "ascending",
+  date: "descending",
+  total: "descending",
+  balanceDue: "descending",
+};
+
+function headingSortKey(columnId: string): string | null {
+  switch (columnId) {
+    case "document":
+      return "order";
+    case "reference":
+      return "reference";
+    case "date":
+      return "date";
+    case "total":
+      return "total";
+    case "balanceDue":
+      return "balance";
+    default:
+      return null;
+  }
+}
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -264,7 +289,7 @@ const BULK_CONFIRM_COPY: Record<
   invoice: {
     title: "Convert to invoice?",
     message: "Are you sure you want to convert this sales order to an invoice?",
-    confirm: "Convert",
+    confirm: "Yes",
   },
   "packing-slip": {
     title: "Convert to packing slip?",
@@ -292,7 +317,7 @@ const BULK_CONFIRM_COPY: Record<
     title: "Convert to invoice?",
     message:
       "Are you sure you want to convert this draft to an invoice? The draft will be replaced by the invoice.",
-    confirm: "Convert",
+    confirm: "Yes",
   },
   email: {
     title: "Send email?",
@@ -1299,6 +1324,15 @@ export default function SalesOrderPage() {
         result.attachedPdf
           ? `Email sent to ${result.to} with PDF attached`
           : `Email sent to ${result.to}`,
+      );
+    }
+    const emailedOrderId =
+      typeof result.orderId === "string" ? result.orderId : "";
+    if (emailedOrderId) {
+      setOrders((prev) =>
+        prev.map((row) =>
+          row.id === emailedOrderId ? { ...row, emailed: true } : row,
+        ),
       );
     }
   }, [quickActionOrderId, sendFetcher.data, sendFetcher.state]);
@@ -2375,6 +2409,42 @@ export default function SalesOrderPage() {
   const handleFulfillmentStatusRemove = useCallback(() => {
     updateParams({ fulfillment: "" });
   }, [updateParams]);
+  const handleInvoicedFilterChange = useCallback(
+    (value: string[]) => {
+      updateParams({ invoiced: value[0] ?? "" });
+    },
+    [updateParams],
+  );
+  const handlePackingFilterChange = useCallback(
+    (value: string[]) => {
+      updateParams({ packing: value[0] ?? "" });
+    },
+    [updateParams],
+  );
+  const handleReturnFilterChange = useCallback(
+    (value: string[]) => {
+      updateParams({ return: value[0] ?? "" });
+    },
+    [updateParams],
+  );
+  const handleCreditFilterChange = useCallback(
+    (value: string[]) => {
+      updateParams({ credit: value[0] ?? "" });
+    },
+    [updateParams],
+  );
+  const handleInvoicedFilterRemove = useCallback(() => {
+    updateParams({ invoiced: "" });
+  }, [updateParams]);
+  const handlePackingFilterRemove = useCallback(() => {
+    updateParams({ packing: "" });
+  }, [updateParams]);
+  const handleReturnFilterRemove = useCallback(() => {
+    updateParams({ return: "" });
+  }, [updateParams]);
+  const handleCreditFilterRemove = useCallback(() => {
+    updateParams({ credit: "" });
+  }, [updateParams]);
   const handleQueryValueRemove = useCallback(() => {
     setQueryValue("");
     updateParams({ q: "" });
@@ -2388,6 +2458,10 @@ export default function SalesOrderPage() {
         : "",
       payment: "",
       fulfillment: "",
+      invoiced: "",
+      packing: "",
+      return: "",
+      credit: "",
       sort: "",
     });
   }, [isInvoiceList, updateParams]);
@@ -2445,16 +2519,88 @@ export default function SalesOrderPage() {
       shortcut: true,
     };
 
+    const yesNoChoices = [
+      { label: "Yes", value: "yes" },
+      { label: "No", value: "no" },
+    ];
+    const invoicedFilter = {
+      key: "invoiced",
+      label: "Invoiced",
+      filter: (
+        <ChoiceList
+          title="Invoiced"
+          titleHidden
+          choices={yesNoChoices}
+          selected={data.invoicedFilter ? [data.invoicedFilter] : []}
+          onChange={handleInvoicedFilterChange}
+        />
+      ),
+    };
+    const packingSlipFilter = {
+      key: "packingSlip",
+      label: "Packing slip",
+      filter: (
+        <ChoiceList
+          title="Packing slip"
+          titleHidden
+          choices={yesNoChoices}
+          selected={data.packingSlipFilter ? [data.packingSlipFilter] : []}
+          onChange={handlePackingFilterChange}
+        />
+      ),
+    };
+    const returnFilter = {
+      key: "returnSlip",
+      label: "Return",
+      filter: (
+        <ChoiceList
+          title="Return"
+          titleHidden
+          choices={yesNoChoices}
+          selected={data.returnFilter ? [data.returnFilter] : []}
+          onChange={handleReturnFilterChange}
+        />
+      ),
+    };
+    const creditNoteFilter = {
+      key: "creditNote",
+      label: "Credit note",
+      filter: (
+        <ChoiceList
+          title="Credit note"
+          titleHidden
+          choices={yesNoChoices}
+          selected={data.creditNoteFilter ? [data.creditNoteFilter] : []}
+          onChange={handleCreditFilterChange}
+        />
+      ),
+    };
+
     if (isReturnList) return [fulfillmentFilter];
     if (isPackingSlipList) return [fulfillmentFilter];
     if (isInvoiceList || isCreditNoteList || isDraftList) return [paymentFilter];
 
-    return [paymentFilter, fulfillmentFilter];
+    return [
+      paymentFilter,
+      fulfillmentFilter,
+      invoicedFilter,
+      packingSlipFilter,
+      returnFilter,
+      creditNoteFilter,
+    ];
   }, [
-    data.paymentStatus,
+    data.creditNoteFilter,
     data.fulfillmentStatus,
-    handlePaymentStatusChange,
+    data.invoicedFilter,
+    data.packingSlipFilter,
+    data.paymentStatus,
+    data.returnFilter,
+    handleCreditFilterChange,
     handleFulfillmentStatusChange,
+    handleInvoicedFilterChange,
+    handlePackingFilterChange,
+    handlePaymentStatusChange,
+    handleReturnFilterChange,
     isCreditNoteList,
     isDocumentList,
     isDraftList,
@@ -2481,9 +2627,43 @@ export default function SalesOrderPage() {
       onRemove: handleFulfillmentStatusRemove,
     });
   }
+  if (!isDocumentList && data.invoicedFilter) {
+    appliedFilters.push({
+      key: "invoiced",
+      label: `Invoiced is ${data.invoicedFilter === "yes" ? "Yes" : "No"}`,
+      onRemove: handleInvoicedFilterRemove,
+    });
+  }
+  if (!isDocumentList && data.packingSlipFilter) {
+    appliedFilters.push({
+      key: "packingSlip",
+      label: `Packing slip is ${data.packingSlipFilter === "yes" ? "Yes" : "No"}`,
+      onRemove: handlePackingFilterRemove,
+    });
+  }
+  if (!isDocumentList && data.returnFilter) {
+    appliedFilters.push({
+      key: "returnSlip",
+      label: `Return is ${data.returnFilter === "yes" ? "Yes" : "No"}`,
+      onRemove: handleReturnFilterRemove,
+    });
+  }
+  if (!isDocumentList && data.creditNoteFilter) {
+    appliedFilters.push({
+      key: "creditNote",
+      label: `Credit note is ${data.creditNoteFilter === "yes" ? "Yes" : "No"}`,
+      onRemove: handleCreditFilterRemove,
+    });
+  }
 
   const hasActiveFilters = Boolean(
-    data.query || data.paymentStatus || data.fulfillmentStatus,
+    data.query ||
+      data.paymentStatus ||
+      data.fulfillmentStatus ||
+      data.invoicedFilter ||
+      data.packingSlipFilter ||
+      data.returnFilter ||
+      data.creditNoteFilter,
   );
 
   const emptyStateMarkup = hasActiveFilters ? (
@@ -2691,21 +2871,17 @@ export default function SalesOrderPage() {
         case "total":
           return (
             <IndexTable.Cell key={col.id}>
-              <div style={{ paddingInlineEnd: 28 }}>
-                <Text as="span" variant="bodyMd" alignment="end" numeric>
-                  {order.total}
-                </Text>
-              </div>
+              <Text as="span" variant="bodyMd" alignment="end" numeric>
+                {order.total}
+              </Text>
             </IndexTable.Cell>
           );
         case "balanceDue":
           return (
             <IndexTable.Cell key={col.id}>
-              <div style={{ paddingInlineEnd: 28 }}>
-                <Text as="span" variant="bodyMd" alignment="end" numeric>
-                  {order.balanceDue}
-                </Text>
-              </div>
+              <Text as="span" variant="bodyMd" alignment="end" numeric>
+                {order.balanceDue}
+              </Text>
             </IndexTable.Cell>
           );
         case "paymentStatus":
@@ -2821,6 +2997,32 @@ export default function SalesOrderPage() {
             </IndexTable.Cell>
           );
         }
+        case "returnSlip":
+          return (
+            <IndexTable.Cell key={col.id}>
+              <InlineStack align="center" blockAlign="center">
+                <Tooltip
+                  content={
+                    order.returnSlip
+                      ? `Return created${order.returnNumber ? ` (${order.returnNumber})` : ""}`
+                      : "No return"
+                  }
+                >
+                  <span>
+                    <Icon
+                      source={
+                        order.returnSlip ? CheckCircleIcon : MinusCircleIcon
+                      }
+                      tone={order.returnSlip ? "success" : "subdued"}
+                      accessibilityLabel={
+                        order.returnSlip ? "Return created" : "No return"
+                      }
+                    />
+                  </span>
+                </Tooltip>
+              </InlineStack>
+            </IndexTable.Cell>
+          );
         case "reason": {
           const reason = order.creditNoteReason?.trim() || "";
           return (
@@ -2881,14 +3083,21 @@ export default function SalesOrderPage() {
                       }}
                     />
                   </Tooltip>
-                  <Tooltip content="Send email">
-                    <Button
-                      icon={EmailIcon}
-                      variant="tertiary"
-                      accessibilityLabel={`Send ${docLabel}`}
-                      disabled={isBusy}
-                      onClick={() => runQuickSend(order)}
-                    />
+                  <Tooltip content={order.emailed ? "Email sent" : "Send email"}>
+                    <span
+                      className={
+                        order.emailed ? "sales-orders-action-done" : undefined
+                      }
+                    >
+                      <Button
+                        icon={EmailIcon}
+                        variant="tertiary"
+                        tone={order.emailed ? "success" : undefined}
+                        accessibilityLabel={`Send ${docLabel}`}
+                        disabled={isBusy}
+                        onClick={() => runQuickSend(order)}
+                      />
+                    </span>
                   </Tooltip>
                 </InlineStack>
               </div>
@@ -2921,17 +3130,63 @@ export default function SalesOrderPage() {
         )
       : null;
 
+  const activeSortKey = data.sortSelected.replace(/ (asc|desc)$/, "");
+  const sortDirection = data.sortSelected.endsWith(" asc")
+    ? ("ascending" as const)
+    : ("descending" as const);
+
+  const handleHeadingSortClick = useCallback(
+    (columnId: string) => {
+      const sortKey = headingSortKey(columnId);
+      if (!sortKey) return;
+      const currentKey = data.sortSelected.replace(/ (asc|desc)$/, "");
+      const currentDir = data.sortSelected.endsWith(" asc") ? "asc" : "desc";
+      if (currentKey === sortKey) {
+        updateParams({
+          sort: `${sortKey} ${currentDir === "asc" ? "desc" : "asc"}`,
+        });
+        return;
+      }
+      const fallback =
+        COLUMN_DEFAULT_DIRECTION[columnId] === "ascending" ? "asc" : "desc";
+      updateParams({ sort: `${sortKey} ${fallback}` });
+    },
+    [data.sortSelected, updateParams],
+  );
+
   const tableHeadings = visibleColumns.map((col) => {
+    const sortable = SORTABLE_COLUMN_IDS.has(col.id);
+    const title = sortable ? (
+      <button
+        type="button"
+        className="sales-orders-sort-heading"
+        onClick={() => handleHeadingSortClick(col.id)}
+      >
+        {col.label}
+        <span className="sales-orders-sort-caret" aria-hidden>
+          <Icon
+            source={
+              (headingSortKey(col.id) === activeSortKey
+                ? sortDirection
+                : COLUMN_DEFAULT_DIRECTION[col.id] ?? "descending") ===
+              "ascending"
+                ? CaretUpIcon
+                : CaretDownIcon
+            }
+            tone="subdued"
+          />
+        </span>
+      </button>
+    ) : (
+      col.label
+    );
+
     switch (col.id) {
       case "total":
       case "balanceDue":
         return {
           id: col.id,
-          title: (
-            <span style={{ display: "inline-block", paddingInlineEnd: 28 }}>
-              {col.label}
-            </span>
-          ),
+          title,
           alignment: "end" as const,
         };
       case "paymentStatus":
@@ -2946,11 +3201,14 @@ export default function SalesOrderPage() {
       case "invoiced":
       case "packingSlip":
       case "creditNote":
+      case "returnSlip":
       case "reason":
       case "actions":
         return { title: col.label, alignment: "center" as const };
       default:
-        return { title: col.label };
+        return sortable
+          ? { id: col.id, title }
+          : { title: col.label };
     }
   });
 
@@ -3023,7 +3281,10 @@ export default function SalesOrderPage() {
           }}
           secondaryActions={[
             {
-              content: "Cancel",
+              content:
+                confirmAction === "invoice" || confirmAction === "finalize-draft"
+                  ? "No"
+                  : "Cancel",
               onAction: () => {
                 setConfirmAction(null);
                 setCreditReason("");
@@ -3051,8 +3312,6 @@ export default function SalesOrderPage() {
         </Modal>
         <Card padding="0">
           <IndexFilters
-            sortOptions={SORT_UI_OPTIONS}
-            sortSelected={[data.sortSelected]}
             queryValue={queryValue}
             queryPlaceholder={
               isCreditNoteList
@@ -3069,9 +3328,6 @@ export default function SalesOrderPage() {
             }
             onQueryChange={setQueryValue}
             onQueryClear={handleQueryValueRemove}
-            onSort={(value) =>
-              updateParams({ sort: value[0] ?? "date desc" })
-            }
             cancelAction={{
               onAction: handleFiltersCancel,
               disabled: false,

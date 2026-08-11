@@ -423,12 +423,8 @@ export function buildEmailHtml(options: {
     "documentType" | "documentNumber" | "total" | "currency" | "orderName"
   > | null;
 }): string {
-  const { design, bodyText, storeName, logoDataUrl, vars } = options;
+  const { design, bodyText, storeName, vars } = options;
   const bodyHtml = bodyContentToHtml(bodyText);
-  const logoBlock =
-    design.includeLogo && logoDataUrl
-      ? `<img src="${logoDataUrl}" alt="${escapeHtml(storeName)}" width="140" style="max-height:40px;max-width:140px;display:block;margin:0 0 12px 0;border:0;" />`
-      : "";
 
   const metaRow =
     vars?.documentType || vars?.documentNumber
@@ -467,7 +463,6 @@ export function buildEmailHtml(options: {
   const headerBlock = design.includeLogo
     ? `<tr>
             <td style="background:${design.headerColor};padding:28px 32px;">
-              ${logoBlock}
               <div style="font-family:Inter,Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;line-height:1.25;color:#ffffff;letter-spacing:-0.02em;">${escapeHtml(storeName)}</div>
               <div style="margin-top:6px;height:3px;width:40px;background:${design.accentColor};border-radius:2px;"></div>
             </td>

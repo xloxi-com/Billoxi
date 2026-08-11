@@ -72,6 +72,8 @@ s-page:has(.sales-order-document-page) > * {
   display: grid !important;
   grid-template-rows: minmax(0, 1fr) !important;
   box-shadow: none !important;
+  border: var(--p-border-width-025, 1px) solid var(--p-color-border, #c9cccf);
+  overflow: hidden;
 }
 
 .sales-order-document-sidebar__card > .Polaris-ShadowBevel::before,

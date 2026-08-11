@@ -23,6 +23,7 @@ import {
   loadStoreDetailsForShop,
 } from "./shop-settings.server";
 import { incrementShopMonthlyUsage } from "./shop-monthly-usage.server";
+import { recordDocumentEvent } from "./document-event-log.server";
 
 export type SendDocumentEmailResult =
   | {
@@ -194,7 +195,6 @@ export async function sendDocumentEmail(args: {
     design: emailTemplates.design,
     bodyText: bodyContent,
     storeName: storeDetails.name || vars.storeName,
-    logoDataUrl: storeDetails.logoDataUrl || null,
     vars: {
       documentType: vars.documentType,
       documentNumber: vars.documentNumber,
@@ -227,14 +227,26 @@ export async function sendDocumentEmail(args: {
     };
   }
 
+  const orderGid = args.orderId.includes("gid://")
+    ? args.orderId
+    : `gid://shopify/Order/${args.orderId}`;
+
+  await recordDocumentEvent({
+    shop: args.shop,
+    action: "sent",
+    documentKind: args.documentKind,
+    documentNumber: args.documentNumber || null,
+    orderGid,
+    orderName: args.orderName || null,
+    processType: "manual",
+  });
   void incrementShopMonthlyUsage(args.shop, "sent", 1, {
     documentKind: args.documentKind,
     documentNumber: args.documentNumber || null,
-    orderGid: args.orderId.includes("gid://")
-      ? args.orderId
-      : `gid://shopify/Order/${args.orderId}`,
+    orderGid,
     orderName: args.orderName || null,
     processType: "manual",
+    skipEventLog: true,
   });
 
   return {

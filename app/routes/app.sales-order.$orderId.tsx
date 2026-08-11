@@ -1117,6 +1117,7 @@ export default function SalesOrderDocumentPage() {
 
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
   const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
+  const [convertInvoiceOpen, setConvertInvoiceOpen] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [prefetchOrderHref, setPrefetchOrderHref] = useState<string | null>(
     null,
@@ -1919,6 +1920,11 @@ export default function SalesOrderDocumentPage() {
 
   const handleConvertToInvoice = useCallback(() => {
     if (isConverting || isCancelledOrder) return;
+    setConvertInvoiceOpen(true);
+  }, [isCancelledOrder, isConverting]);
+
+  const confirmConvertToInvoice = useCallback(() => {
+    if (isConverting || isCancelledOrder) return;
     convertFetcher.submit(
       { intent: isDraft ? "finalize-draft" : "convert-to-invoice" },
       { method: "post" },
@@ -2090,6 +2096,7 @@ export default function SalesOrderDocumentPage() {
         result.document === "finalize-draft" ||
         (result.document === "invoice" && isDraft)
       ) {
+        setConvertInvoiceOpen(false);
         shopify.toast.show("Converted to invoice");
         const numericId = data.order.id.includes("/")
           ? data.order.id.split("/").pop() || data.order.id
@@ -2099,6 +2106,7 @@ export default function SalesOrderDocumentPage() {
         );
         return;
       } else if (result.document === "invoice") {
+        setConvertInvoiceOpen(false);
         shopify.toast.show("Converted to invoice");
       }
     }
@@ -2569,6 +2577,37 @@ export default function SalesOrderDocumentPage() {
         </div>
       </div>
       <AppProvider i18n={enTranslations}>
+        <Modal
+          open={convertInvoiceOpen}
+          onClose={() => {
+            if (isConverting) return;
+            setConvertInvoiceOpen(false);
+          }}
+          title="Convert to invoice?"
+          primaryAction={{
+            content: "Yes",
+            onAction: confirmConvertToInvoice,
+            loading:
+              isConverting &&
+              (convertFetcher.formData?.get("intent") === "convert-to-invoice" ||
+                convertFetcher.formData?.get("intent") === "finalize-draft"),
+          }}
+          secondaryActions={[
+            {
+              content: "No",
+              disabled: isConverting,
+              onAction: () => setConvertInvoiceOpen(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <Text as="p">
+              {isDraft
+                ? "Are you sure you want to convert this draft to an invoice? The draft will be replaced by the invoice."
+                : "Are you sure you want to convert this sales order to an invoice?"}
+            </Text>
+          </Modal.Section>
+        </Modal>
         <Modal
           open={deleteInvoiceOpen}
           onClose={() => setDeleteInvoiceOpen(false)}

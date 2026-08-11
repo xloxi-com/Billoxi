@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { Prisma } from "@prisma/client";
 
 import prisma from "./db.server";
 import {
@@ -314,4 +315,70 @@ export async function loadRecentDocumentEvents(
     console.error("[document-event-log] load failed", shop, error);
     return [];
   }
+}
+
+export type DocumentActionFlags = {
+  printed: boolean;
+  downloaded: boolean;
+  sent: boolean;
+};
+
+function orderGidLookupKeys(gid: string): string[] {
+  const raw = gid.trim();
+  if (!raw) return [];
+  const keys = new Set<string>([raw]);
+  const last = raw.includes("/") ? raw.split("/").pop() || raw : raw;
+  if (/^\d+$/.test(last)) {
+    keys.add(last);
+    keys.add(`gid://shopify/Order/${last}`);
+  }
+  return [...keys];
+}
+
+/** Whether this order has been printed / downloaded / emailed. */
+export async function getDocumentActionFlagsByOrderGids(
+  shop: string,
+  orderGids: string[],
+  _documentKind?: string | null,
+): Promise<Map<string, DocumentActionFlags>> {
+  const flags = new Map<string, DocumentActionFlags>();
+  if (!shop || orderGids.length === 0) return flags;
+
+  const lookupKeys = [...new Set(orderGids.flatMap(orderGidLookupKeys))];
+  const listIdByKey = new Map<string, string>();
+  for (const gid of orderGids) {
+    for (const key of orderGidLookupKeys(gid)) {
+      listIdByKey.set(key, gid);
+    }
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ orderGid: string | null; action: string }>
+    >`
+      SELECT "orderGid", action
+      FROM "DocumentEventLog"
+      WHERE shop = ${shop}
+        AND action IN ('printed', 'downloaded', 'sent')
+        AND "orderGid" IN (${Prisma.join(lookupKeys)})
+    `;
+    for (const row of rows) {
+      if (!row.orderGid) continue;
+      const listId = listIdByKey.get(row.orderGid);
+      if (!listId) continue;
+      const current = flags.get(listId) ?? {
+        printed: false,
+        downloaded: false,
+        sent: false,
+      };
+      if (row.action === "printed") current.printed = true;
+      if (row.action === "downloaded") current.downloaded = true;
+      if (row.action === "sent") current.sent = true;
+      flags.set(listId, current);
+    }
+  } catch (error) {
+    console.error("[document-event-log] action flags failed", shop, error);
+  }
+
+  return flags;
 }

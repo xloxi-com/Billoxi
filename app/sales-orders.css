@@ -97,6 +97,48 @@
   white-space: nowrap;
 }
 
+/* Shopify Admin Orders: single caret beside the heading, always visible */
+.sales-orders-sort-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--p-font-weight-medium, 550);
+  line-height: inherit;
+  white-space: nowrap;
+}
+
+.sales-orders-sort-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.sales-orders-sort-caret .Polaris-Icon {
+  display: block;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: 0;
+}
+
+.sales-orders-sort-caret .Polaris-Icon svg {
+  fill: currentColor;
+}
+
+.sales-orders-action-done .Polaris-Icon svg,
+.sales-orders-action-done .Polaris-Button svg {
+  fill: var(--p-color-icon-success);
+}
+
 /* Remove blue focus ring on row / link click (mouse); keep keyboard focus where useful */
 .sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus,
 .sales-orders-page .Polaris-IndexTable__TableRow .Polaris-Link:focus-visible,
