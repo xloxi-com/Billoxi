@@ -2576,7 +2576,7 @@ export default function SalesOrderPage() {
 
   const rowMarkup = orders.map((order, index) => {
     const invoiceStatus =
-      isInvoiceList || isCreditNoteList || isDraftList
+      isInvoiceList || isCreditNoteList
         ? documentStatusDisplay(
             order,
             isCreditNoteList ? "credit-note" : "invoice",
