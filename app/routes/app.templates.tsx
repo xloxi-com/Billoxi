@@ -1,5 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type {
+  ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
+  LoaderFunctionArgs,
+} from "react-router";
 import {
   Outlet,
   PrefetchPageLinks,
@@ -272,7 +276,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
 
   try {
-    await reupdateAllShopTemplatesIfNeeded(session.shop);
+    const reupdatePromise = reupdateAllShopTemplatesIfNeeded(session.shop);
 
     const [selectedTemplates, storeDetails, numberSeries, customizations, shopCurrencyCode] =
       await Promise.all([
@@ -308,6 +312,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           }
         })(),
         fetchShopCurrencyCode(admin, session.shop),
+        reupdatePromise,
       ]);
 
     const customizationByKey: Record<string, unknown> = {};
@@ -328,14 +333,43 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
+const TEMPLATES_CLIENT_TTL_MS = 120_000;
+const templatesClientCache = new Map<string, { expires: number; data: unknown }>();
+
+function bustTemplatesClientCache() {
+  templatesClientCache.clear();
+}
+
 export function shouldRevalidate({
   formMethod,
 }: {
   formMethod?: string | null;
 }) {
   // Gallery only needs to refetch after select-template / reset-all actions.
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    bustTemplatesClientCache();
+    return true;
+  }
   return false;
+}
+
+export async function clientLoader({
+  request,
+  serverLoader,
+}: ClientLoaderFunctionArgs) {
+  const url = new URL(request.url);
+  if (url.pathname.includes("/templates/edit/")) {
+    return serverLoader();
+  }
+  const key = url.pathname;
+  const hit = templatesClientCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.data;
+  const data = await serverLoader();
+  templatesClientCache.set(key, {
+    expires: Date.now() + TEMPLATES_CLIENT_TTL_MS,
+    data,
+  });
+  return data;
 }
 
 export async function action({ request }: ActionFunctionArgs) {

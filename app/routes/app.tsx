@@ -2,7 +2,13 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import {
+  Outlet,
+  PrefetchPageLinks,
+  useLoaderData,
+  useNavigation,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -22,11 +28,50 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const shouldRevalidate = () => false;
 
+function isHeavyAppPage(pathname: string) {
+  return (
+    pathname === "/app/templates" ||
+    pathname.startsWith("/app/templates/") ||
+    pathname === "/app/settings" ||
+    pathname.startsWith("/app/settings/")
+  );
+}
+
+function AppNavLoader() {
+  const navigation = useNavigation();
+  const to = navigation.location?.pathname || "";
+  const showLoader =
+    navigation.state === "loading" &&
+    !navigation.formMethod &&
+    isHeavyAppPage(to);
+  if (!showLoader) return null;
+
+  return (
+    <div
+      aria-busy="true"
+      className="billoxi-nav-loader"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 40,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "color-mix(in srgb, #f6f6f7 78%, transparent)",
+      }}
+    >
+      <s-spinner accessibilityLabel="Loading page" />
+    </div>
+  );
+}
+
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
+      <PrefetchPageLinks page="/app/templates" />
+      <PrefetchPageLinks page="/app/settings" />
       <s-app-nav>
         <s-link href="/app" rel="home">
           Home
@@ -40,6 +85,7 @@ export default function App() {
         <s-link href="/app/templates">Templates</s-link>
         <s-link href="/app/settings">Settings</s-link>
       </s-app-nav>
+      <AppNavLoader />
       <Outlet />
     </AppProvider>
   );

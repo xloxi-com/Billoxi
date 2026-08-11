@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type {
   ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
@@ -441,13 +442,39 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
+const SETTINGS_CLIENT_TTL_MS = 120_000;
+const settingsClientCache = new Map<string, { expires: number; data: unknown }>();
+
+function bustSettingsClientCache() {
+  settingsClientCache.clear();
+}
+
 export function shouldRevalidate({
   formMethod,
 }: {
   formMethod?: string | null;
 }) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    bustSettingsClientCache();
+    return true;
+  }
   return false;
+}
+
+export async function clientLoader({
+  request,
+  serverLoader,
+}: ClientLoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const key = url.pathname;
+  const hit = settingsClientCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.data;
+  const data = await serverLoader();
+  settingsClientCache.set(key, {
+    expires: Date.now() + SETTINGS_CLIENT_TTL_MS,
+    data,
+  });
+  return data;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
