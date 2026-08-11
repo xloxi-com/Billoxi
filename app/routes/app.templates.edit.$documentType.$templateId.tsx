@@ -1407,7 +1407,13 @@ function mergeSettings(
                 next = {
                   ...next,
                   showBelowItem: next.showBelowItem === true,
-                  width: next.width === 11 ? 12 : next.width,
+                  width:
+                    next.width === 10 ||
+                    next.width === 11 ||
+                    next.width === 14 ||
+                    next.width === 16
+                      ? 12
+                      : next.width,
                 };
               }
               if (next.key === "rate") {

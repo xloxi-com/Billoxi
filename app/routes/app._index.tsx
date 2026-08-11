@@ -54,11 +54,8 @@ import {
   formatOrderIdLabel,
   orderIdHref,
 } from "../document-event-log";
-import { hasSalesOrderNumbersSynced } from "../sales-order-number-sync.server";
-import { hasInvoiceOrderNumbersSynced } from "../invoice-order-number-sync.server";
-import { hasDraftOrderNumbersSynced } from "../draft-order-number-sync.server";
-import { hasReturnOrderNumbersSynced } from "../return-order-number-sync.server";
 import {
+  loadNumberSyncFlagsForShop,
   loadSmtpSettingsForShop,
 } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
@@ -306,10 +303,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     usageSeries,
     installedAt,
     rawEventLogs,
-    salesOrderSynced,
-    invoiceSynced,
-    draftSynced,
-    returnSynced,
+    syncFlags,
     smtpSettings,
     setupProgress,
   ] = await Promise.all([
@@ -317,13 +311,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     loadDailyUsageSeries(shop, 14),
     loadShopInstalledAt(shop),
     loadRecentDocumentEvents(shop, 15),
-    hasSalesOrderNumbersSynced(shop),
-    hasInvoiceOrderNumbersSynced(shop),
-    hasDraftOrderNumbersSynced(shop),
-    hasReturnOrderNumbersSynced(shop),
+    loadNumberSyncFlagsForShop(shop),
     loadSmtpSettingsForShop(shop),
     loadSetupGuideProgress(shop),
   ]);
+  const salesOrderSynced = syncFlags.salesOrder;
+  const invoiceSynced = syncFlags.invoice;
+  const draftSynced = syncFlags.draft;
+  const returnSynced = syncFlags.return;
 
   const eventLogs = await enrichDocumentEventsWithOrderNames(
     admin,

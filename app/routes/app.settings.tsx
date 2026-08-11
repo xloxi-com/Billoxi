@@ -393,6 +393,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     creditNoteSettings,
     invoiceSettings,
     multiCurrencySettings,
+    lastAllocatedSequence,
+    lastInvoiceSequence,
+    lastDraftSequence,
+    lastReturnSequence,
+    invoiceDigitWidth,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
@@ -402,23 +407,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     loadCreditNoteSettingsForShop(session.shop),
     loadInvoiceSettingsForShop(session.shop),
     loadMultiCurrencySettingsForShop(session.shop),
-  ]);
-  const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
-    selectedSalesOrderTemplateIdRaw,
-  );
-  const [
-    lastAllocatedSequence,
-    lastInvoiceSequence,
-    lastDraftSequence,
-    lastReturnSequence,
-    invoiceDigitWidth,
-  ] = await Promise.all([
     getLastAllocatedSequence(session.shop),
     getLastInvoiceAllocatedSequence(session.shop),
     getLastDraftAllocatedSequence(session.shop),
     getLastReturnAllocatedSequence(session.shop),
     getInvoiceNumberDigitWidth(session.shop),
   ]);
+  const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
+    selectedSalesOrderTemplateIdRaw,
+  );
   const lastAllocatedByModule: Record<NumberSeriesModuleId, number | null> = {
     "sales-order": lastAllocatedSequence,
     invoice: lastInvoiceSequence,

@@ -175,6 +175,27 @@ s-page:has(.sales-order-document-page) > * {
   border-radius: var(--p-border-radius-200, 8px);
 }
 
+.sales-order-document-stage__loader {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(
+    in srgb,
+    var(--p-color-bg-surface-secondary, #f6f6f7) 78%,
+    transparent
+  );
+  backdrop-filter: blur(1px);
+}
+
+.sales-order-document-stage.is-preview-loading
+  .sales-order-document-stage__scroll {
+  pointer-events: none;
+  opacity: 0.35;
+}
+
 /* PDF preview is the only pane that scrolls (Polaris thin bar). */
 .sales-order-document-stage__scroll.Polaris-Scrollable {
   flex: 1 1 auto;
@@ -615,6 +636,7 @@ s-page:has(.sales-order-document-page) > * {
   [slot="secondary-actions"],
   [slot="breadcrumb-actions"],
   [slot="accessory"],
+  .sales-order-document-stage__loader,
   .sales-order-document-sidebar {
     display: none !important;
   }

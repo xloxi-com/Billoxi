@@ -30,6 +30,19 @@ function normalizeSetupGuide(value: unknown): SetupGuideProgress {
   return next;
 }
 
+/** Fill cache from a ShopSettings row already loaded elsewhere. */
+export function rememberSetupGuideProgress(
+  shop: string,
+  raw: unknown,
+): SetupGuideProgress {
+  const value = normalizeSetupGuide(raw);
+  setupGuideCache.set(shop, {
+    expires: Date.now() + SETUP_GUIDE_TTL_MS,
+    value,
+  });
+  return value;
+}
+
 export async function loadSetupGuideProgress(
   shop: string,
 ): Promise<SetupGuideProgress> {

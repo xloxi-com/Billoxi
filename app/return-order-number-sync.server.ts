@@ -10,6 +10,7 @@ import {
 } from "./number-series";
 import {
   loadNumberSeriesForShop,
+  loadNumberSyncFlagsForShop,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
 import { getLastReturnAllocatedSequence } from "./order-return-status.server";
@@ -51,15 +52,7 @@ export async function hasReturnOrderNumbersSynced(
 ): Promise<boolean> {
   if (syncedShops.has(shop)) return true;
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ returnOrderNumbersSyncedAt: Date | null }>
-    >`
-      SELECT "returnOrderNumbersSyncedAt"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
-    const synced = Boolean(rows[0]?.returnOrderNumbersSyncedAt);
+    const synced = (await loadNumberSyncFlagsForShop(shop)).return;
     if (synced) syncedShops.add(shop);
     else syncedShops.delete(shop);
     return synced;

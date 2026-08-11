@@ -227,6 +227,31 @@ export async function getInvoicedMetaByOrderGids(
   return invoiced;
 }
 
+/** All invoiced meta for this shop (newest created first). */
+export async function getAllInvoicedMeta(
+  shop: string,
+): Promise<Map<string, InvoicedOrderMeta>> {
+  const invoiced = new Map<string, InvoicedOrderMeta>();
+  const rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
+    SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
+    FROM "OrderInvoiceStatus"
+    WHERE shop = ${shop}
+    ORDER BY "createdAt" DESC
+  `;
+  for (const row of rows) {
+    invoiced.set(row.orderGid, {
+      invoicedAt: row.invoicedAt,
+      createdAt: row.createdAt ?? row.invoicedAt,
+      updatedAt: row.updatedAt ?? row.invoicedAt,
+      documentNumber: row.documentNumber,
+      sequence: row.sequence,
+      customerNote: row.customerNote,
+      terms: row.terms,
+    });
+  }
+  return invoiced;
+}
+
 /** All order GIDs marked invoiced for this shop (newest created first). */
 export async function getAllInvoicedOrderGids(
   shop: string,

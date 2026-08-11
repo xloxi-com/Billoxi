@@ -10,6 +10,7 @@ import {
 import {
   loadNumberSeriesEntryForShop,
   loadNumberSeriesForShop,
+  loadNumberSyncFlagsForShop,
   saveNumberSeriesEntryMode,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
@@ -61,15 +62,8 @@ export async function hasCompletedSalesOrderNumberSync(
   if (completedSalesOrderSyncShops.has(shop)) return true;
 
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ salesOrderNumbersSyncedAt: Date | null }>
-    >`
-      SELECT "salesOrderNumbersSyncedAt"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
-    if (rows[0]?.salesOrderNumbersSyncedAt) {
+    const flags = await loadNumberSyncFlagsForShop(shop);
+    if (flags.salesOrder) {
       completedSalesOrderSyncShops.add(shop);
       return true;
     }

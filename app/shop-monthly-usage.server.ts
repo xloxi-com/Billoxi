@@ -241,6 +241,16 @@ export async function incrementShopMonthlyUsage(
         processType: options?.processType ?? "manual",
       });
     }
+    if (
+      metric === "printed" ||
+      metric === "downloaded" ||
+      metric === "sent"
+    ) {
+      const { invalidateSalesOrdersCache } = await import(
+        "./sales-orders.server"
+      );
+      invalidateSalesOrdersCache(shop);
+    }
   } catch (error) {
     console.error("[shop-monthly-usage] increment failed", shop, metric, error);
   }

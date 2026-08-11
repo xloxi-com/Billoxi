@@ -28,7 +28,7 @@ import {
 
 const PAGE_SIZE = 25;
 
-const DRAFT_DOCUMENT_TTL_MS = 20_000;
+const DRAFT_DOCUMENT_TTL_MS = 120_000;
 const draftDocumentCache = new Map<
   string,
   { expires: number; value: SalesOrderDocumentData }

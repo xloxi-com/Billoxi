@@ -10,6 +10,7 @@ import {
 } from "./number-series";
 import {
   loadNumberSeriesForShop,
+  loadNumberSyncFlagsForShop,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
 import { getLastDraftAllocatedSequence } from "./order-invoice-draft-status.server";
@@ -48,15 +49,7 @@ export async function hasDraftOrderNumbersSynced(
 ): Promise<boolean> {
   if (syncedShops.has(shop)) return true;
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ draftOrderNumbersSyncedAt: Date | null }>
-    >`
-      SELECT "draftOrderNumbersSyncedAt"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
-    const synced = Boolean(rows[0]?.draftOrderNumbersSyncedAt);
+    const synced = (await loadNumberSyncFlagsForShop(shop)).draft;
     if (synced) syncedShops.add(shop);
     else syncedShops.delete(shop);
     return synced;

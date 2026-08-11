@@ -5,13 +5,15 @@ import {
 } from "./sales-order-number.server";
 import { syncSalesOrderNumbersForShop } from "./sales-order-number-sync.server";
 import {
+  getAllInvoicedMeta,
   getAllInvoicedOrderGids,
   getInvoicedMetaByOrderGids,
   getInvoicedOrderGids,
 } from "./order-invoice-status.server";
-import { getPackingSlipOrderGids, getAllPackingSlipOrderGids, getPackingSlipMetaByOrderGids, ensurePackingSlipDocumentNumbers, type PackingSlipOrderMeta } from "./order-packing-slip-status.server";
+import { getPackingSlipOrderGids, getAllPackingSlipOrderGids, getAllPackingSlipMeta, getPackingSlipMetaByOrderGids, ensurePackingSlipDocumentNumbers, type PackingSlipOrderMeta } from "./order-packing-slip-status.server";
 import {
   ensureReturnDocumentNumbers,
+  getAllReturnMeta,
   getAllReturnOrderGids,
   getReturnMetaByOrderGids,
   getReturnOrderGids,
@@ -27,13 +29,14 @@ import {
 } from "./invoice-order-number-sync.server";
 import {
   ensureDraftDocumentNumbers,
-  getAllDraftOrderGids,
+  getAllDraftMeta,
   getDraftMetaByOrderGids,
   getDraftOrderGids,
   type DraftOrderMeta,
 } from "./order-invoice-draft-status.server";
 import {
   ensureCreditNoteDocumentNumbers,
+  getAllCreditNoteMeta,
   getAllCreditNoteOrderGids,
   getCreditNoteMetaByOrderGids,
   getCreditNoteOrderGids,
@@ -1159,38 +1162,60 @@ export async function loadSalesOrdersPage(
                 expires: now + CACHE_TTL_MS,
                 data,
               });
-              return withActionFlags(
-                shop,
-                { ...data, selectedView, availableViews },
-                listDocumentKind({
-                  invoiced: isInvoicedView,
-                  creditNote: isCreditNoteView,
-                  packingSlip: isPackingSlipView,
-                  draft: isDraftView,
-                  returnSlip: isReturnView,
-                }),
-              );
+              return { ...data, selectedView, availableViews };
             }
           }
         }
       }
 
-      return withActionFlags(
-        shop,
-        { ...cached.data, selectedView, availableViews },
-        listDocumentKind({
-          invoiced: isInvoicedView,
-          creditNote: isCreditNoteView,
-          packingSlip: isPackingSlipView,
-          draft: isDraftView,
-          returnSlip: isReturnView,
-        }),
-      );
+      // Flags are stored on the cached page. Print/download/email bust this cache.
+      return { ...cached.data, selectedView, availableViews };
     }
+  }
+
+  const hasDocumentFlagFilter = Boolean(
+    params.invoicedFilter ||
+      params.packingSlipFilter ||
+      params.returnFilter ||
+      params.creditNoteFilter,
+  );
+
+  const isPreviousPage = Boolean(params.before);
+  let salesOrdersGraphqlPromise: Promise<Response> | null = null;
+  if (
+    !isInvoicedView &&
+    !isCreditNoteView &&
+    !isPackingSlipView &&
+    !isReturnView &&
+    !isDraftView &&
+    !hasDocumentFlagFilter &&
+    !params.query.trim()
+  ) {
+    const prefetchQuery = [
+      viewQuery,
+      params.paymentStatus ? `financial_status:${params.paymentStatus}` : "",
+      params.fulfillmentStatus
+        ? `fulfillment_status:${params.fulfillmentStatus}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    salesOrdersGraphqlPromise = admin.graphql(SALES_ORDERS_QUERY, {
+      variables: {
+        first: isPreviousPage ? undefined : PAGE_SIZE,
+        after: isPreviousPage ? undefined : params.after,
+        last: isPreviousPage ? PAGE_SIZE : undefined,
+        before: isPreviousPage ? params.before : undefined,
+        query: prefetchQuery || undefined,
+        sortKey: sortConfig.sortKey,
+        reverse: sortConfig.reverse,
+      },
+    });
   }
 
   // After DB reset / install: assign numbers on first list open (idempotent).
   // Runs only on cache miss so warm polls/navigations skip the sync-flag queries.
+  // Overlaps Shopify GraphQL (kicked off above) with these DB flag checks.
   try {
     if (
       !isInvoicedView &&
@@ -1642,8 +1667,8 @@ export async function loadSalesOrdersPage(
 
   // Credit note list: fetch by GID via nodes().
   if (isCreditNoteView) {
-    const creditNoteGids = await getAllCreditNoteOrderGids(shop);
-    const meta = await getCreditNoteMetaByOrderGids(shop, creditNoteGids);
+    const meta = await getAllCreditNoteMeta(shop);
+    const creditNoteGids = [...meta.keys()];
     const metaForSort = new Map<
       string,
       { sortAt: number; searchNumber?: string }
@@ -1664,8 +1689,8 @@ export async function loadSalesOrdersPage(
 
   // Packing slip list: fetch by GID via nodes().
   if (isPackingSlipView) {
-    const packingGids = await getAllPackingSlipOrderGids(shop);
-    const meta = await getPackingSlipMetaByOrderGids(shop, packingGids);
+    const meta = await getAllPackingSlipMeta(shop);
+    const packingGids = [...meta.keys()];
     const metaForSort = new Map<
       string,
       { sortAt: number; searchNumber?: string }
@@ -1687,8 +1712,8 @@ export async function loadSalesOrdersPage(
 
   // Return list: fetch by GID via nodes().
   if (isReturnView) {
-    const returnOrderGids = await getAllReturnOrderGids(shop);
-    const meta = await getReturnMetaByOrderGids(shop, returnOrderGids);
+    const meta = await getAllReturnMeta(shop);
+    const returnOrderGids = [...meta.keys()];
     const metaForSort = new Map<
       string,
       { sortAt: number; searchNumber?: string }
@@ -1712,8 +1737,8 @@ export async function loadSalesOrdersPage(
 
   // Draft invoice list: fetch by GID via nodes().
   if (isDraftView) {
-    const draftGids = await getAllDraftOrderGids(shop);
-    const meta = await getDraftMetaByOrderGids(shop, draftGids);
+    const meta = await getAllDraftMeta(shop);
+    const draftGids = [...meta.keys()];
     const metaForSort = new Map<
       string,
       { sortAt: number; searchNumber?: string }
@@ -1736,8 +1761,8 @@ export async function loadSalesOrdersPage(
 
   // Invoice list: fetch by GID via nodes() — Shopify search `id: OR id:` drops rows.
   if (isInvoicedView) {
-    const invoicedGids = await getAllInvoicedOrderGids(shop);
-    const metaForSortRaw = await getInvoicedMetaByOrderGids(shop, invoicedGids);
+    const metaForSortRaw = await getAllInvoicedMeta(shop);
+    const invoicedGids = [...metaForSortRaw.keys()];
     const metaForSort = new Map<
       string,
       { sortAt: number; searchNumber?: string }
@@ -1755,13 +1780,6 @@ export async function loadSalesOrdersPage(
       false,
     );
   }
-
-  const hasDocumentFlagFilter = Boolean(
-    params.invoicedFilter ||
-      params.packingSlipFilter ||
-      params.returnFilter ||
-      params.creditNoteFilter,
-  );
 
   if (hasDocumentFlagFilter) {
     const [invoicedGids, packingGids, returnGids, creditGids] =
@@ -1876,18 +1894,18 @@ export async function loadSalesOrdersPage(
     .filter(Boolean)
     .join(" ");
 
-  const isPreviousPage = Boolean(params.before);
-  const response = await admin.graphql(SALES_ORDERS_QUERY, {
-    variables: {
-      first: isPreviousPage ? undefined : PAGE_SIZE,
-      after: isPreviousPage ? undefined : params.after,
-      last: isPreviousPage ? PAGE_SIZE : undefined,
-      before: isPreviousPage ? params.before : undefined,
-      query: orderQuery || undefined,
-      sortKey: sortConfig.sortKey,
-      reverse: sortConfig.reverse,
-    },
-  });
+  const response = await (salesOrdersGraphqlPromise ??
+    admin.graphql(SALES_ORDERS_QUERY, {
+      variables: {
+        first: isPreviousPage ? undefined : PAGE_SIZE,
+        after: isPreviousPage ? undefined : params.after,
+        last: isPreviousPage ? PAGE_SIZE : undefined,
+        before: isPreviousPage ? params.before : undefined,
+        query: orderQuery || undefined,
+        sortKey: sortConfig.sortKey,
+        reverse: sortConfig.reverse,
+      },
+    }));
 
   const result = (await response.json()) as OrdersResponse;
 

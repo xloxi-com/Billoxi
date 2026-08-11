@@ -217,6 +217,52 @@ export async function getDraftMetaByOrderGids(
   return map;
 }
 
+/** All draft meta for this shop (newest drafted first). */
+export async function getAllDraftMeta(
+  shop: string,
+): Promise<Map<string, DraftOrderMeta>> {
+  const map = new Map<string, DraftOrderMeta>();
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        orderGid: string;
+        draftedAt: Date;
+        createdAt: Date;
+        documentNumber: string | null;
+        sequence: number | null;
+        customerNote: string | null;
+        terms: string | null;
+      }>
+    >`
+      SELECT
+        "orderGid",
+        "draftedAt",
+        "createdAt",
+        "documentNumber",
+        sequence,
+        "customerNote",
+        terms
+      FROM "OrderInvoiceDraftStatus"
+      WHERE shop = ${shop}
+      ORDER BY "draftedAt" DESC
+    `;
+    for (const row of rows) {
+      map.set(row.orderGid, {
+        orderGid: row.orderGid,
+        draftedAt: row.draftedAt,
+        createdAt: row.createdAt,
+        documentNumber: row.documentNumber,
+        sequence: row.sequence,
+        customerNote: row.customerNote,
+        terms: row.terms,
+      });
+    }
+  } catch {
+    // ignore
+  }
+  return map;
+}
+
 /** Batch lookup: which order GIDs have a draft for this shop. */
 export async function getDraftOrderGids(
   shop: string,

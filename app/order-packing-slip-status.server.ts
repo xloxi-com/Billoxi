@@ -223,6 +223,41 @@ export async function getPackingSlipMetaByOrderGids(
   return map;
 }
 
+/** All packing-slip meta for this shop (newest converted first). */
+export async function getAllPackingSlipMeta(
+  shop: string,
+): Promise<Map<string, PackingSlipOrderMeta>> {
+  const map = new Map<string, PackingSlipOrderMeta>();
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        orderGid: string;
+        convertedAt: Date;
+        createdAt: Date;
+        documentNumber: string | null;
+        sequence: number | null;
+      }>
+    >`
+      SELECT "orderGid", "convertedAt", "createdAt", "documentNumber", sequence
+      FROM "OrderPackingSlipStatus"
+      WHERE shop = ${shop}
+      ORDER BY "convertedAt" DESC
+    `;
+    for (const row of rows) {
+      map.set(row.orderGid, {
+        orderGid: row.orderGid,
+        convertedAt: row.convertedAt,
+        createdAt: row.createdAt,
+        documentNumber: row.documentNumber,
+        sequence: row.sequence,
+      });
+    }
+  } catch {
+    // Schema without documentNumber yet.
+  }
+  return map;
+}
+
 /** Batch lookup: which order GIDs have a packing slip for this shop. */
 export async function getPackingSlipOrderGids(
   shop: string,

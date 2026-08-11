@@ -64,29 +64,41 @@ export async function loader({ request }: LoaderFunctionArgs) {
   );
 
   let scopeError: string | null = null;
-  if (!hasScope) {
-    scopeError =
-      "Missing read_returns permission. Update app scopes, then reopen Return.";
-  } else {
-    try {
-      const sync = await syncShopifyReturnsForShop(admin, session.shop);
-      if (sync.scopeError) scopeError = sync.scopeError;
-    } catch (error) {
-      console.error("Return list Shopify sync failed:", error);
-      scopeError =
-        error instanceof Error
-          ? error.message
-          : "Could not sync Shopify returns.";
-    }
-  }
+  const syncPromise = hasScope
+    ? syncShopifyReturnsForShop(admin, session.shop).catch((error) => {
+        console.error("Return list Shopify sync failed:", error);
+        return {
+          marked: 0,
+          scopeError:
+            error instanceof Error
+              ? error.message
+              : "Could not sync Shopify returns.",
+        };
+      })
+    : Promise.resolve({
+        marked: 0,
+        scopeError:
+          "Missing read_returns permission. Update app scopes, then reopen Return.",
+      });
 
-  const page = await loadSalesOrdersPage(
+  let page = await loadSalesOrdersPage(
     admin,
     session.shop,
     params,
     selectedTemplateId,
     { listFilter: "return" },
   );
+  const sync = await syncPromise;
+  if (sync.scopeError) scopeError = sync.scopeError;
+  if (sync.marked > 0) {
+    page = await loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      selectedTemplateId,
+      { listFilter: "return" },
+    );
+  }
 
   return {
     ...page,

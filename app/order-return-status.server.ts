@@ -246,6 +246,41 @@ export async function getReturnMetaByOrderGids(
   return map;
 }
 
+/** All return meta for this shop (newest converted first). */
+export async function getAllReturnMeta(
+  shop: string,
+): Promise<Map<string, ReturnOrderMeta>> {
+  const map = new Map<string, ReturnOrderMeta>();
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        orderGid: string;
+        convertedAt: Date;
+        createdAt: Date;
+        documentNumber: string | null;
+        sequence: number | null;
+      }>
+    >`
+      SELECT "orderGid", "convertedAt", "createdAt", "documentNumber", sequence
+      FROM "OrderReturnStatus"
+      WHERE shop = ${shop}
+      ORDER BY "convertedAt" DESC
+    `;
+    for (const row of rows) {
+      map.set(row.orderGid, {
+        orderGid: row.orderGid,
+        convertedAt: row.convertedAt,
+        createdAt: row.createdAt,
+        documentNumber: row.documentNumber,
+        sequence: row.sequence,
+      });
+    }
+  } catch {
+    // Schema without documentNumber yet.
+  }
+  return map;
+}
+
 /** Batch lookup: which order GIDs have a return for this shop. */
 export async function getReturnOrderGids(
   shop: string,

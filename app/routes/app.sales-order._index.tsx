@@ -769,6 +769,80 @@ function mergeInvoiceOrders(
   return extras.length === 0 ? loaded : [...extras, ...loaded];
 }
 
+function ListPerfHelpers({
+  listMode,
+  busy,
+  onChanged,
+  resolvePath,
+}: {
+  listMode: string;
+  busy: boolean;
+  onChanged: () => void;
+  resolvePath: (orderGid: string) => string;
+}) {
+  const pollFetcher = useFetcher<typeof action>();
+  const prefetchFetcher = useFetcher();
+  const handledPollDataRef = useRef<unknown>(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const submitRef = useRef(pollFetcher.submit);
+  submitRef.current = pollFetcher.submit;
+  const prefetchStateRef = useRef(prefetchFetcher.state);
+  prefetchStateRef.current = prefetchFetcher.state;
+  const loadRef = useRef(prefetchFetcher.load);
+  loadRef.current = prefetchFetcher.load;
+  const lastPrefetchPathRef = useRef("");
+  const resolvePathRef = useRef(resolvePath);
+  resolvePathRef.current = resolvePath;
+
+  useEffect(() => {
+    if (listMode !== "sales-order") return;
+
+    const POLL_MS = 20_000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (busyRef.current) return;
+      const formData = new FormData();
+      formData.set("intent", "reload-list");
+      submitRef.current(formData, { method: "post" });
+    }, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [listMode]);
+
+  useEffect(() => {
+    if (pollFetcher.state !== "idle" || !pollFetcher.data) return;
+    if (handledPollDataRef.current === pollFetcher.data) return;
+    handledPollDataRef.current = pollFetcher.data;
+    const result = pollFetcher.data as {
+      ok?: boolean;
+      document?: string;
+      changed?: boolean;
+    };
+    if (result.ok && result.document === "reload" && result.changed !== false) {
+      onChanged();
+    }
+  }, [pollFetcher.data, pollFetcher.state, onChanged]);
+
+  useEffect(() => {
+    const root = document.querySelector(".sales-orders-page");
+    if (!root) return;
+    const onOver = (event: Event) => {
+      const row = (event.target as HTMLElement | null)?.closest?.("tr[id]");
+      const orderId = row?.getAttribute("id");
+      if (!orderId) return;
+      const path = resolvePathRef.current(orderId);
+      if (!path || lastPrefetchPathRef.current === path) return;
+      if (prefetchStateRef.current !== "idle") return;
+      lastPrefetchPathRef.current = path;
+      loadRef.current(path);
+    };
+    root.addEventListener("pointerover", onOver);
+    return () => root.removeEventListener("pointerover", onOver);
+  }, []);
+
+  return null;
+}
+
 export default function SalesOrderPage() {
   const data = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
@@ -957,7 +1031,6 @@ export default function SalesOrderPage() {
   );
 
   const convertFetcher = useFetcher<typeof action>();
-  const pollFetcher = useFetcher<typeof action>();
   const sendFetcher = useFetcher<{
     ok: boolean;
     error?: string;
@@ -968,7 +1041,6 @@ export default function SalesOrderPage() {
   const isSendingEmail = sendFetcher.state !== "idle";
   const handledConvertDataRef = useRef<unknown>(null);
   const handledSendDataRef = useRef<unknown>(null);
-  const handledPollDataRef = useRef<unknown>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [quickActionOrderId, setQuickActionOrderId] = useState<string | null>(
     null,
@@ -984,47 +1056,9 @@ export default function SalesOrderPage() {
     isSendingEmail ||
     Boolean(quickActionOrderId);
 
-  // Keep Sales Orders list live: bust cache + revalidate while the page is open.
-  useEffect(() => {
-    if (data.listMode !== "sales-order") return;
-
-    const POLL_MS = 12_000;
-    const tick = () => {
-      if (document.visibilityState !== "visible") return;
-      if (revalidator.state !== "idle") return;
-      if (pollFetcher.state !== "idle") return;
-      if (convertFetcher.state !== "idle") return;
-      if (isDownloadingZip || isSendingEmail || quickActionOrderId) return;
-      const formData = new FormData();
-      formData.set("intent", "reload-list");
-      pollFetcher.submit(formData, { method: "post" });
-    };
-
-    const id = window.setInterval(tick, POLL_MS);
-    return () => window.clearInterval(id);
-  }, [
-    convertFetcher.state,
-    data.listMode,
-    isDownloadingZip,
-    isSendingEmail,
-    pollFetcher,
-    quickActionOrderId,
-    revalidator.state,
-  ]);
-
-  useEffect(() => {
-    if (pollFetcher.state !== "idle" || !pollFetcher.data) return;
-    if (handledPollDataRef.current === pollFetcher.data) return;
-    handledPollDataRef.current = pollFetcher.data;
-    const result = pollFetcher.data as {
-      ok?: boolean;
-      document?: string;
-      changed?: boolean;
-    };
-    if (result.ok && result.document === "reload" && result.changed !== false) {
-      revalidator.revalidate();
-    }
-  }, [pollFetcher.data, pollFetcher.state, revalidator]);
+  const handleListChanged = useCallback(() => {
+    revalidator.revalidate();
+  }, [revalidator]);
 
   const resolveOrderPath = useCallback((orderGid: string) => {
     const numericId = orderGid.includes("/")
@@ -3214,6 +3248,12 @@ export default function SalesOrderPage() {
 
   return (
     <AppProvider i18n={enTranslations}>
+      <ListPerfHelpers
+        listMode={data.listMode}
+        busy={isBusy || revalidator.state !== "idle"}
+        onChanged={handleListChanged}
+        resolvePath={resolveOrderPath}
+      />
       <s-page heading={data.pageHeading} inlineSize="large">
         <s-button
           slot="secondary-actions"

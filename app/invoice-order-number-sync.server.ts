@@ -10,6 +10,7 @@ import {
 } from "./number-series";
 import {
   loadNumberSeriesForShop,
+  loadNumberSyncFlagsForShop,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
 import { getLastInvoiceAllocatedSequence } from "./order-invoice-status.server";
@@ -52,15 +53,7 @@ export async function hasInvoiceOrderNumbersSynced(
   if (syncedShops.has(shop)) return true;
   // Always read DB until confirmed — then trust process set (reset clears it).
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ invoiceOrderNumbersSyncedAt: Date | null }>
-    >`
-      SELECT "invoiceOrderNumbersSyncedAt"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
-    const synced = Boolean(rows[0]?.invoiceOrderNumbersSyncedAt);
+    const synced = (await loadNumberSyncFlagsForShop(shop)).invoice;
     if (synced) syncedShops.add(shop);
     else syncedShops.delete(shop);
     return synced;

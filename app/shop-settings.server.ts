@@ -33,6 +33,7 @@ import {
   type StoreDetails,
 } from "./store-details";
 import { fetchShopStoreDefaults } from "./store-details.server";
+import { rememberSetupGuideProgress } from "./setup-guide.server";
 import { randomUUID } from "node:crypto";
 
 type ShopSettingsRow = {
@@ -46,6 +47,11 @@ type ShopSettingsRow = {
   multiCurrencySettings?: unknown;
   selectedTemplates?: unknown;
   numberSeries?: unknown;
+  setupGuide?: unknown;
+  salesOrderNumbersSyncedAt?: Date | null;
+  draftOrderNumbersSyncedAt?: Date | null;
+  returnOrderNumbersSyncedAt?: Date | null;
+  invoiceOrderNumbersSyncedAt?: Date | null;
 };
 
 export type SelectedTemplatesMap = Record<string, string>;
@@ -104,6 +110,96 @@ function invalidateStoreDetailsCache(shop: string) {
   }
 }
 
+/** In-flight ShopSettings row — parallel loaders share one Postgres round-trip. */
+const shopSettingsRowInflight = new Map<
+  string,
+  Promise<ShopSettingsRow | null>
+>();
+
+async function loadShopSettingsRow(shop: string): Promise<ShopSettingsRow | null> {
+  let pending = shopSettingsRowInflight.get(shop);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
+          SELECT
+            id,
+            shop,
+            "storeDetails",
+            "smtpSettings",
+            "emailTemplates",
+            "creditNoteSettings",
+            "invoiceSettings",
+            "multiCurrencySettings",
+            "selectedTemplates",
+            "numberSeries",
+            "setupGuide",
+            "salesOrderNumbersSyncedAt",
+            "draftOrderNumbersSyncedAt",
+            "returnOrderNumbersSyncedAt",
+            "invoiceOrderNumbersSyncedAt"
+          FROM "ShopSettings"
+          WHERE shop = ${shop}
+          LIMIT 1
+        `;
+        const row = rows[0] ?? null;
+        if (row) hydrateCachesFromRow(shop, row);
+        return row;
+      } catch {
+        return null;
+      } finally {
+        shopSettingsRowInflight.delete(shop);
+      }
+    })();
+    shopSettingsRowInflight.set(shop, pending);
+  }
+  return pending;
+}
+
+function hydrateCachesFromRow(shop: string, row: ShopSettingsRow) {
+  const now = Date.now();
+  smtpSettingsCache.set(shop, {
+    expires: now + SMTP_SETTINGS_TTL_MS,
+    value: normalizeSmtpSettings(row.smtpSettings),
+  });
+  creditNoteSettingsCache.set(shop, {
+    expires: now + CREDIT_NOTE_SETTINGS_TTL_MS,
+    value: normalizeCreditNoteSettings(row.creditNoteSettings),
+  });
+  invoiceSettingsCache.set(shop, {
+    expires: now + INVOICE_SETTINGS_TTL_MS,
+    value: normalizeInvoiceSettings(row.invoiceSettings),
+  });
+  multiCurrencySettingsCache.set(shop, {
+    expires: now + MULTI_CURRENCY_SETTINGS_TTL_MS,
+    value: normalizeMultiCurrencySettings(row.multiCurrencySettings),
+  });
+  selectedTemplatesCache.set(shop, {
+    expires: now + SELECTED_TEMPLATES_TTL_MS,
+    value: normalizeSelectedTemplates(row.selectedTemplates),
+  });
+  rememberSetupGuideProgress(shop, row.setupGuide);
+}
+
+export type NumberSyncFlags = {
+  salesOrder: boolean;
+  invoice: boolean;
+  draft: boolean;
+  return: boolean;
+};
+
+export async function loadNumberSyncFlagsForShop(
+  shop: string,
+): Promise<NumberSyncFlags> {
+  const row = await loadShopSettingsRow(shop);
+  return {
+    salesOrder: Boolean(row?.salesOrderNumbersSyncedAt),
+    invoice: Boolean(row?.invoiceOrderNumbersSyncedAt),
+    draft: Boolean(row?.draftOrderNumbersSyncedAt),
+    return: Boolean(row?.returnOrderNumbersSyncedAt),
+  };
+}
+
 function parseJsonObject(value: unknown): Record<string, unknown> {
   const raw =
     typeof value === "string"
@@ -135,6 +231,12 @@ export async function loadSmtpSettingsForShop(shop: string): Promise<SmtpSetting
   const cached = smtpSettingsCache.get(shop);
   if (cached && cached.expires > Date.now()) return cached.value;
 
+  const row = await loadShopSettingsRow(shop);
+  if (row) {
+    const cachedAfter = smtpSettingsCache.get(shop);
+    if (cachedAfter && cachedAfter.expires > Date.now()) return cachedAfter.value;
+  }
+
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT id, shop, "smtpSettings"
     FROM "ShopSettings"
@@ -157,6 +259,13 @@ export async function loadCreditNoteSettingsForShop(
   if (cached && cached.expires > Date.now()) return cached.value;
 
   try {
+    const row = await loadShopSettingsRow(shop);
+    if (row) {
+      const cachedAfter = creditNoteSettingsCache.get(shop);
+      if (cachedAfter && cachedAfter.expires > Date.now()) {
+        return cachedAfter.value;
+      }
+    }
     const rows = await prisma.$queryRaw<
       Array<{ creditNoteSettings: unknown }>
     >`
@@ -224,6 +333,13 @@ export async function loadInvoiceSettingsForShop(
   if (cached && cached.expires > Date.now()) return cached.value;
 
   try {
+    const row = await loadShopSettingsRow(shop);
+    if (row) {
+      const cachedAfter = invoiceSettingsCache.get(shop);
+      if (cachedAfter && cachedAfter.expires > Date.now()) {
+        return cachedAfter.value;
+      }
+    }
     const rows = await prisma.$queryRaw<
       Array<{ invoiceSettings: unknown }>
     >`
@@ -292,6 +408,13 @@ export async function loadMultiCurrencySettingsForShop(
   if (cached && cached.expires > Date.now()) return cached.value;
 
   try {
+    const row = await loadShopSettingsRow(shop);
+    if (row) {
+      const cachedAfter = multiCurrencySettingsCache.get(shop);
+      if (cachedAfter && cachedAfter.expires > Date.now()) {
+        return cachedAfter.value;
+      }
+    }
     const rows = await prisma.$queryRaw<
       Array<{ multiCurrencySettings: unknown }>
     >`
@@ -411,12 +534,15 @@ export async function loadEmailTemplatesForShop(
   if (cached && cached.expires > Date.now()) return cached.value;
 
   try {
-    const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
-      SELECT id, shop, "emailTemplates"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
+    const shared = await loadShopSettingsRow(shop);
+    const rows = shared
+      ? [shared]
+      : await prisma.$queryRaw<ShopSettingsRow[]>`
+          SELECT id, shop, "emailTemplates"
+          FROM "ShopSettings"
+          WHERE shop = ${shop}
+          LIMIT 1
+        `;
     const raw = rows[0]?.emailTemplates;
     const normalized = normalizeEmailTemplatesSettings(raw);
     // Persist built-in ready templates for all 4 document types so Send uses them.
@@ -496,12 +622,15 @@ export async function loadStoreDetailsForShop(
     return cached.value;
   }
 
-  const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
-    SELECT "storeDetails"
-    FROM "ShopSettings"
-    WHERE shop = ${shop}
-    LIMIT 1
-  `;
+  const shared = await loadShopSettingsRow(shop);
+  const rows = shared
+    ? [shared]
+    : await prisma.$queryRaw<ShopSettingsRow[]>`
+        SELECT "storeDetails"
+        FROM "ShopSettings"
+        WHERE shop = ${shop}
+        LIMIT 1
+      `;
 
   const raw = parseStoreDetailsJson(rows[0]?.storeDetails);
 
@@ -646,6 +775,12 @@ export async function loadSelectedTemplatesForShop(
 ): Promise<SelectedTemplatesMap> {
   const cached = selectedTemplatesCache.get(shop);
   if (cached && cached.expires > Date.now()) return cached.value;
+
+  const row = await loadShopSettingsRow(shop);
+  if (row) {
+    const cachedAfter = selectedTemplatesCache.get(shop);
+    if (cachedAfter && cachedAfter.expires > Date.now()) return cachedAfter.value;
+  }
 
   const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
     SELECT "selectedTemplates"
@@ -795,12 +930,15 @@ export async function loadNumberSeriesForShop(
     return cached.value;
   }
 
-  const rows = await prisma.$queryRaw<ShopSettingsRow[]>`
-    SELECT id, shop, "numberSeries"
-    FROM "ShopSettings"
-    WHERE shop = ${shop}
-    LIMIT 1
-  `;
+  const shared = await loadShopSettingsRow(shop);
+  const rows = shared
+    ? [shared]
+    : await prisma.$queryRaw<ShopSettingsRow[]>`
+        SELECT id, shop, "numberSeries"
+        FROM "ShopSettings"
+        WHERE shop = ${shop}
+        LIMIT 1
+      `;
 
   const raw = rows[0]?.numberSeries;
   const normalized = normalizeNumberSeries(raw);

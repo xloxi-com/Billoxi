@@ -40,7 +40,7 @@ import { getInvoicedOrderGids } from "./order-invoice-status.server";
 import type { StoreDetails } from "./store-details";
 import type { Prisma } from "@prisma/client";
 
-const ORDER_DOCUMENT_TTL_MS = 20_000;
+const ORDER_DOCUMENT_TTL_MS = 120_000;
 const orderDocumentCache = new Map<
   string,
   { expires: number; value: SalesOrderDocumentData }

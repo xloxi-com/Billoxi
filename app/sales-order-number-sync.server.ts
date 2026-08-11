@@ -4,6 +4,7 @@ import { resolveSalesOrderTemplateId } from "./sales-order-ids";
 import { numberingFromSeries } from "./number-series";
 import {
   loadNumberSeriesForShop,
+  loadNumberSyncFlagsForShop,
   loadSelectedTemplateForShop,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
@@ -41,15 +42,7 @@ async function listAssignedSalesOrderGids(shop: string): Promise<{
 export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
   if (syncedShops.has(shop)) return true;
   try {
-    const rows = await prisma.$queryRaw<
-      Array<{ salesOrderNumbersSyncedAt: Date | null }>
-    >`
-      SELECT "salesOrderNumbersSyncedAt"
-      FROM "ShopSettings"
-      WHERE shop = ${shop}
-      LIMIT 1
-    `;
-    const synced = Boolean(rows[0]?.salesOrderNumbersSyncedAt);
+    const synced = (await loadNumberSyncFlagsForShop(shop)).salesOrder;
     if (synced) syncedShops.add(shop);
     else syncedShops.delete(shop);
     return synced;

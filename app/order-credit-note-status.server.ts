@@ -223,6 +223,57 @@ export async function getCreditNoteMetaByOrderGids(
   return marked;
 }
 
+/** All credit-note meta for this shop (newest created first). */
+export async function getAllCreditNoteMeta(
+  shop: string,
+): Promise<Map<string, CreditNoteOrderMeta>> {
+  const marked = new Map<string, CreditNoteOrderMeta>();
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        orderGid: string;
+        convertedAt: Date;
+        createdAt: Date;
+        documentNumber: string | null;
+        sequence: number | null;
+        reason: string | null;
+        customerNote: string | null;
+        terms: string | null;
+        voidedAt: Date | null;
+      }>
+    >`
+      SELECT
+        "orderGid",
+        "convertedAt",
+        "createdAt",
+        "documentNumber",
+        sequence,
+        reason,
+        "customerNote",
+        terms,
+        "voidedAt"
+      FROM "OrderCreditNoteStatus"
+      WHERE shop = ${shop}
+      ORDER BY "createdAt" DESC
+    `;
+    for (const row of rows) {
+      marked.set(row.orderGid, {
+        convertedAt: row.convertedAt,
+        createdAt: row.createdAt ?? row.convertedAt,
+        documentNumber: row.documentNumber,
+        sequence: row.sequence,
+        reason: row.reason ?? null,
+        customerNote: row.customerNote ?? null,
+        terms: row.terms ?? null,
+        voidedAt: row.voidedAt ?? null,
+      });
+    }
+  } catch {
+    // Table missing until migrate.
+  }
+  return marked;
+}
+
 /**
  * Ensure every credit-note row has a CN- document number.
  * Allocates missing numbers in convertedAt order (stable backfill).

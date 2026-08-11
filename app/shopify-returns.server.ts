@@ -127,11 +127,43 @@ export async function fetchOrderGidForReturn(
   return payload.data?.return?.order?.id ?? null;
 }
 
+const RETURN_SYNC_TTL_MS = 180_000;
+const lastReturnSyncAt = new Map<string, number>();
+const returnSyncInFlight = new Map<
+  string,
+  Promise<{ marked: number; scopeError?: string }>
+>();
+
 /**
  * Create/refresh Billoxi Return docs for every Shopify order that has a return.
  * Called from Return list load (backfill) and after webhooks.
  */
 export async function syncShopifyReturnsForShop(
+  admin: AdminGraphql,
+  shop: string,
+): Promise<{ marked: number; scopeError?: string }> {
+  const key = shop.trim().toLowerCase();
+  const lastAt = lastReturnSyncAt.get(key);
+  if (lastAt && Date.now() - lastAt < RETURN_SYNC_TTL_MS) {
+    return { marked: 0 };
+  }
+  const inFlight = returnSyncInFlight.get(key);
+  if (inFlight) return inFlight;
+
+  const run = syncShopifyReturnsForShopUncached(admin, shop);
+  returnSyncInFlight.set(key, run);
+  try {
+    const result = await run;
+    if (!result.scopeError) {
+      lastReturnSyncAt.set(key, Date.now());
+    }
+    return result;
+  } finally {
+    returnSyncInFlight.delete(key);
+  }
+}
+
+async function syncShopifyReturnsForShopUncached(
   admin: AdminGraphql,
   shop: string,
 ): Promise<{ marked: number; scopeError?: string }> {

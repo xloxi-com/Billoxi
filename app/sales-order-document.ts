@@ -2946,7 +2946,7 @@ export function defaultColumnsForPreset(
     {
       key: "sku",
       enabled: true,
-      width: showImage ? (isPackingSlip ? 14 : 10) : isPackingSlip ? 16 : 12,
+      width: 12,
       label: "SKU",
     },
     {
@@ -4552,8 +4552,14 @@ export function mergeTemplateSettings(
               next = {
                 ...next,
                 showBelowItem: next.showBelowItem === true,
-                // Legacy default was 11 — bump to current default 12.
-                width: next.width === 11 ? 12 : next.width,
+                // Legacy defaults (10 / 11 / 14 / 16) → current default 12.
+                width:
+                  next.width === 10 ||
+                  next.width === 11 ||
+                  next.width === 14 ||
+                  next.width === 16
+                    ? 12
+                    : next.width,
               };
             }
             if (next.key === "rate") {

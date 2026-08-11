@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
@@ -9,7 +10,9 @@ import {
   PrefetchPageLinks,
   useFetcher,
   useLoaderData,
+  useLocation,
   useNavigate,
+  useNavigation,
   useRevalidator,
   useRouteError,
   useSearchParams,
@@ -30,6 +33,7 @@ import {
   ResourceItem,
   ResourceList,
   Scrollable,
+  Spinner,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -291,24 +295,68 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     ? resolveSalesOrderTemplateId(shopSelectedSalesOrderTemplateId)
     : templateId;
 
+  const templatePromise = isIssuedDocument
+    ? loadDocumentTemplateSettings(
+        session.shop,
+        isCreditNote
+          ? "credit-note"
+          : isDraft
+            ? "draft"
+            : isInvoice
+              ? "invoice"
+              : isReturn
+                ? "return"
+                : "packing-slip",
+        templateId,
+        admin,
+      )
+    : loadSalesOrderTemplateSettings(session.shop, templateId, admin);
+
+  const metaGids = [orderGid];
+  const creditNoteMetaPromise = isCreditNote
+    ? getCreditNoteMetaByOrderGids(session.shop, metaGids)
+    : null;
+  const invoiceMetaPromise =
+    isCreditNote || isInvoice
+      ? getInvoicedMetaByOrderGids(session.shop, metaGids)
+      : null;
+  const creditNoteGidsPromise = isInvoice
+    ? getCreditNoteOrderGids(session.shop, metaGids)
+    : null;
+  const salesOrderNumbersPromise =
+    isInvoice || isPackingSlip || isReturn
+      ? getSalesOrderDocumentNumbersByOrderGids(
+          session.shop,
+          salesOrderTemplateId,
+          metaGids,
+        )
+      : null;
+  const draftMetaPromise = isDraft
+    ? getDraftMetaByOrderGids(session.shop, metaGids)
+    : null;
+  const packingMetaPromise = isPackingSlip
+    ? getPackingSlipMetaByOrderGids(session.shop, metaGids)
+    : null;
+  const returnMetaPromise = isReturn
+    ? getReturnMetaByOrderGids(session.shop, metaGids)
+    : null;
+  const salesOrderFlagsPromise = !isIssuedDocument
+    ? Promise.all([
+        getSalesOrderDocumentDetails(
+          session.shop,
+          salesOrderTemplateId,
+          orderGid,
+        ),
+        getInvoicedOrderGids(session.shop, metaGids),
+        getPackingSlipOrderGids(session.shop, metaGids),
+        getReturnOrderGids(session.shop, metaGids),
+        getDraftOrderGids(session.shop, metaGids),
+      ])
+    : null;
+
   const [order, template] = await Promise.all([
     orderPromise,
-    isIssuedDocument
-      ? loadDocumentTemplateSettings(
-          session.shop,
-          isCreditNote
-            ? "credit-note"
-            : isDraft
-              ? "draft"
-              : isInvoice
-                ? "invoice"
-                : isReturn
-                  ? "return"
-                  : "packing-slip",
-          templateId,
-          admin,
-        )
-      : loadSalesOrderTemplateSettings(session.shop, templateId, admin),
+    templatePromise,
   ]);
 
   if (!order) {
@@ -330,11 +378,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (isCreditNote) {
     const [creditMeta, invoiceMeta] = await Promise.all([
-      getCreditNoteMetaByOrderGids(session.shop, [order.id]),
-      getInvoicedMetaByOrderGids(session.shop, [order.id]),
+      creditNoteMetaPromise!,
+      invoiceMetaPromise!,
     ]);
-    const currentMeta = creditMeta.get(order.id);
-    const currentInvoice = invoiceMeta.get(order.id);
+    const currentMeta = creditMeta.get(order.id) ?? creditMeta.get(orderGid);
+    const currentInvoice = invoiceMeta.get(order.id) ?? invoiceMeta.get(orderGid);
 
     // Credit Note# must be CN-… — never fall back to invoice number.
     let creditNoteNumber = currentMeta?.documentNumber?.trim() || "";
@@ -365,16 +413,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     referenceNumber = invoiceRef || undefined;
   } else if (isInvoice) {
     const [invoiceMeta, creditNoteGids, soNumbers] = await Promise.all([
-      getInvoicedMetaByOrderGids(session.shop, [order.id]),
-      getCreditNoteOrderGids(session.shop, [order.id]),
-      getSalesOrderDocumentNumbersByOrderGids(
-        session.shop,
-        salesOrderTemplateId,
-        [order.id],
-      ),
+      invoiceMetaPromise!,
+      creditNoteGidsPromise!,
+      salesOrderNumbersPromise!,
     ]);
-    const currentMeta = invoiceMeta.get(order.id);
-    hasCreditNote = creditNoteGids.has(order.id);
+    const currentMeta = invoiceMeta.get(order.id) ?? invoiceMeta.get(orderGid);
+    hasCreditNote = creditNoteGids.has(order.id) || creditNoteGids.has(orderGid);
     orderInvoiced = Boolean(currentMeta);
     const ensured =
       currentMeta && !currentMeta.documentNumber
@@ -388,13 +432,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       currentMeta?.invoicedAt?.toISOString() || order.createdAt;
     invoiceCustomerNote = currentMeta?.customerNote ?? null;
     invoiceTerms = currentMeta?.terms ?? null;
-    referenceNumber = soNumbers.get(order.id) || undefined;
+    referenceNumber =
+      soNumbers.get(order.id) || soNumbers.get(orderGid) || undefined;
   } else if (isDraft) {
     // Shopify DraftOrder — Billoxi DFT- from Settings series; keep #D… as reference.
     orderDraft = true;
     let draftNumber = "";
-    const draftMeta = await getDraftMetaByOrderGids(session.shop, [order.id]);
-    const currentMeta = draftMeta.get(order.id);
+    const draftMeta = await draftMetaPromise!;
+    const currentMeta = draftMeta.get(order.id) ?? draftMeta.get(orderGid);
     draftNumber = currentMeta?.documentNumber?.trim() || "";
     if (!draftNumber) {
       draftNumber = (await markOrderDraft(session.shop, order.id))?.trim() || "";
@@ -407,19 +452,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     invoiceTerms = currentMeta?.terms ?? null;
   } else if (isPackingSlip) {
     const [packingMeta, soNumbers] = await Promise.all([
-      getPackingSlipMetaByOrderGids(session.shop, [order.id]),
-      getSalesOrderDocumentNumbersByOrderGids(
-        session.shop,
-        salesOrderTemplateId,
-        [order.id],
-      ),
+      packingMetaPromise!,
+      salesOrderNumbersPromise!,
     ]);
-    const currentMeta = packingMeta.get(order.id);
+    const currentMeta = packingMeta.get(order.id) ?? packingMeta.get(orderGid);
     const ensured =
       currentMeta && !currentMeta.documentNumber
         ? await ensurePackingSlipDocumentNumbers(session.shop, [order.id])
         : new Map<string, string>();
-    const existingSalesOrderNumber = soNumbers.get(order.id);
+    const existingSalesOrderNumber =
+      soNumbers.get(order.id) || soNumbers.get(orderGid);
     documentNumber =
       currentMeta?.documentNumber ||
       ensured.get(order.id) ||
@@ -430,19 +472,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     referenceNumber = existingSalesOrderNumber || order.name;
   } else if (isReturn) {
     const [returnMeta, soNumbers] = await Promise.all([
-      getReturnMetaByOrderGids(session.shop, [order.id]),
-      getSalesOrderDocumentNumbersByOrderGids(
-        session.shop,
-        salesOrderTemplateId,
-        [order.id],
-      ),
+      returnMetaPromise!,
+      salesOrderNumbersPromise!,
     ]);
-    const currentMeta = returnMeta.get(order.id);
+    const currentMeta = returnMeta.get(order.id) ?? returnMeta.get(orderGid);
     const ensured =
       currentMeta && !currentMeta.documentNumber
         ? await ensureReturnDocumentNumbers(session.shop, [order.id])
         : new Map<string, string>();
-    const existingSalesOrderNumber = soNumbers.get(order.id);
+    const existingSalesOrderNumber =
+      soNumbers.get(order.id) || soNumbers.get(orderGid);
     documentNumber =
       currentMeta?.documentNumber ||
       ensured.get(order.id) ||
@@ -453,21 +492,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     referenceNumber = existingSalesOrderNumber || order.name;
   } else {
     const [soDetailsInitial, invoicedGids, packingGids, returnGids, draftGids] =
-      await Promise.all([
-        getSalesOrderDocumentDetails(
-          session.shop,
-          template.templateId,
-          order.id,
-        ),
-        getInvoicedOrderGids(session.shop, [order.id]),
-        getPackingSlipOrderGids(session.shop, [order.id]),
-        getReturnOrderGids(session.shop, [order.id]),
-        getDraftOrderGids(session.shop, [order.id]),
-      ]);
-    orderInvoiced = invoicedGids.has(order.id);
-    orderPackingSlip = packingGids.has(order.id);
-    orderReturn = returnGids.has(order.id);
-    orderDraft = draftGids.has(order.id);
+      await salesOrderFlagsPromise!;
+    orderInvoiced = invoicedGids.has(order.id) || invoicedGids.has(orderGid);
+    orderPackingSlip = packingGids.has(order.id) || packingGids.has(orderGid);
+    orderReturn = returnGids.has(order.id) || returnGids.has(orderGid);
+    orderDraft = draftGids.has(order.id) || draftGids.has(orderGid);
 
     // Paid in Shopify → self-heal invoice mark without blocking first paint.
     // Primary path is the orders/paid webhook (respects Advanced → On paid).
@@ -1028,6 +1057,44 @@ export async function action({ request, params }: ActionFunctionArgs) {
   return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
 }
 
+const PREVIEW_CLIENT_TTL_MS = 120_000;
+const PREVIEW_CLIENT_MAX = 24;
+const previewClientCache = new Map<string, { expires: number; data: unknown }>();
+
+function previewCacheKeyFromUrl(url: URL) {
+  return `${url.pathname}?template=${url.searchParams.get("template") || ""}`;
+}
+
+function previewCacheKeyFromHref(href: string) {
+  try {
+    return previewCacheKeyFromUrl(new URL(href, "https://billoxi.local"));
+  } catch {
+    return href;
+  }
+}
+
+function hasCachedDocumentPreview(href: string | null | undefined) {
+  if (!href) return false;
+  const hit = previewClientCache.get(previewCacheKeyFromHref(href));
+  return Boolean(hit && hit.expires > Date.now());
+}
+
+function bustPreviewClientCache() {
+  previewClientCache.clear();
+}
+
+function writePreviewClientCache(key: string, data: unknown) {
+  previewClientCache.set(key, {
+    expires: Date.now() + PREVIEW_CLIENT_TTL_MS,
+    data,
+  });
+  while (previewClientCache.size > PREVIEW_CLIENT_MAX) {
+    const oldest = previewClientCache.keys().next().value;
+    if (oldest === undefined) break;
+    previewClientCache.delete(oldest);
+  }
+}
+
 export function shouldRevalidate({
   formMethod,
   currentUrl,
@@ -1037,16 +1104,45 @@ export function shouldRevalidate({
   currentUrl: URL;
   nextUrl: URL;
 }) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    bustPreviewClientCache();
+    return true;
+  }
   return (
     currentUrl.pathname !== nextUrl.pathname ||
     currentUrl.search !== nextUrl.search
   );
 }
 
+/** Instant back/forward + second click: skip the server round-trip when warm. */
+export async function clientLoader({
+  request,
+  serverLoader,
+}: ClientLoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const key = previewCacheKeyFromUrl(url);
+  if (url.searchParams.get("fresh") !== "1") {
+    const hit = previewClientCache.get(key);
+    if (hit && hit.expires > Date.now()) return hit.data;
+  }
+
+  const data = await serverLoader();
+  writePreviewClientCache(key, data);
+  void Promise.resolve(
+    (data as { salesOrders?: unknown }).salesOrders,
+  )
+    .then((salesOrders) => {
+      writePreviewClientCache(key, { ...(data as object), salesOrders });
+    })
+    .catch(() => undefined);
+  return data;
+}
+
 export default function SalesOrderDocumentPage() {
   const data = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigation = useNavigation();
   const revalidator = useRevalidator();
   const convertFetcher = useFetcher<{
     ok: boolean;
@@ -1120,6 +1216,9 @@ export default function SalesOrderDocumentPage() {
   const [convertInvoiceOpen, setConvertInvoiceOpen] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [prefetchOrderHref, setPrefetchOrderHref] = useState<string | null>(
+    null,
+  );
+  const [pendingPreviewHref, setPendingPreviewHref] = useState<string | null>(
     null,
   );
   const [numberMode, setNumberMode] = useState<"continue" | "manual">(
@@ -1473,12 +1572,29 @@ export default function SalesOrderDocumentPage() {
       const numericId = orderGid.includes("/")
         ? orderGid.split("/").pop() || orderGid
         : orderGid;
-      navigate(
-        `${documentBasePath}/${encodeURIComponent(numericId)}${templateQuery}`,
-      );
+      const href = `${documentBasePath}/${encodeURIComponent(numericId)}${templateQuery}`;
+      setPendingPreviewHref(hasCachedDocumentPreview(href) ? null : href);
+      setPrefetchOrderHref(href);
+      navigate(href, { preventScrollReset: true });
     },
     [documentBasePath, navigate, templateQuery],
   );
+
+  useEffect(() => {
+    setPendingPreviewHref(null);
+  }, [data.order.id]);
+
+  const navigatingHref =
+    navigation.state === "loading" &&
+    !navigation.formMethod &&
+    navigation.location &&
+    navigation.location.pathname !== location.pathname &&
+    navigation.location.pathname.startsWith(`${documentBasePath}/`)
+      ? `${navigation.location.pathname}${navigation.location.search}`
+      : null;
+  const pendingHref = pendingPreviewHref || navigatingHref;
+  const isPreviewLoading =
+    Boolean(pendingHref) && !hasCachedDocumentPreview(pendingHref);
 
   const orderHref = useCallback(
     (orderGid: string) => {
@@ -2144,6 +2260,9 @@ export default function SalesOrderDocumentPage() {
       inlineSize="large"
     >
       {prefetchOrderHref ? <PrefetchPageLinks page={prefetchOrderHref} /> : null}
+      {pendingPreviewHref && pendingPreviewHref !== prefetchOrderHref ? (
+        <PrefetchPageLinks page={pendingPreviewHref} />
+      ) : null}
       <s-link slot="breadcrumb-actions" href={listPath}>
         {isCreditNote
           ? "Credit Note"
@@ -2387,7 +2506,24 @@ export default function SalesOrderDocumentPage() {
                               })
                             : salesOrders;
 
+                          const currentIndex = filteredOrders.findIndex(
+                            (item) => item.id === data.order.id,
+                          );
+                          const nearbyHrefs = [
+                            filteredOrders[currentIndex + 1],
+                            filteredOrders[currentIndex + 2],
+                          ]
+                            .filter(Boolean)
+                            .map((item) => orderHref(item.id));
+
                           return (
+                    <>
+                    {nearbyHrefs.map((href) =>
+                      href !== prefetchOrderHref &&
+                      href !== pendingPreviewHref ? (
+                        <PrefetchPageLinks key={href} page={href} />
+                      ) : null,
+                    )}
                     <ResourceList
                       resourceName={
                         isCreditNote
@@ -2420,7 +2556,11 @@ export default function SalesOrderDocumentPage() {
                         ) : undefined
                       }
                       renderItem={(item) => {
-                        const isActive = item.id === data.order.id;
+                        const itemHref = orderHref(item.id);
+                        const isActive =
+                          item.id === data.order.id ||
+                          itemHref === pendingPreviewHref ||
+                          itemHref === pendingHref;
                         const salesOrderLabel =
                           item.documentNumber || item.name;
                         const itemCreditNoteVoided = Boolean(
@@ -2443,14 +2583,20 @@ export default function SalesOrderDocumentPage() {
                             id={item.id}
                             accessibilityLabel={`Open ${salesOrderLabel}`}
                             onClick={() => {
-                              if (!isActive) openOrder(item.id);
+                              if (item.id === data.order.id) return;
+                              openOrder(item.id);
                             }}
                             name={salesOrderLabel}
                             onMouseOver={() => {
-                              if (isActive) return;
-                              const href = orderHref(item.id);
+                              if (item.id === data.order.id) return;
                               setPrefetchOrderHref((current) =>
-                                current === href ? current : href,
+                                current === itemHref ? current : itemHref,
+                              );
+                            }}
+                            onFocus={() => {
+                              if (item.id === data.order.id) return;
+                              setPrefetchOrderHref((current) =>
+                                current === itemHref ? current : itemHref,
                               );
                             }}
                           >
@@ -2523,6 +2669,7 @@ export default function SalesOrderDocumentPage() {
                         );
                       }}
                     />
+                    </>
                           );
                         }}
                       </Await>
@@ -2533,7 +2680,24 @@ export default function SalesOrderDocumentPage() {
             </AppProvider>
           </aside>
 
-          <div className="sales-order-document-stage">
+          <div
+            className={
+              isPreviewLoading
+                ? "sales-order-document-stage is-preview-loading"
+                : "sales-order-document-stage"
+            }
+            aria-busy={isPreviewLoading || undefined}
+          >
+            {isPreviewLoading ? (
+              <div className="sales-order-document-stage__loader no-print">
+                <AppProvider i18n={enTranslations}>
+                  <Spinner
+                    accessibilityLabel="Loading document preview"
+                    size="large"
+                  />
+                </AppProvider>
+              </div>
+            ) : null}
             <Scrollable
               className="sales-order-document-stage__scroll"
               vertical
