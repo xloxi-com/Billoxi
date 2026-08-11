@@ -12,10 +12,15 @@ import {
 } from "react";
 import type {
   ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
+import {
+  cachedClientLoader,
+  createAppPageClientCache,
+} from "../client-page-cache";
 import {
   useFetcher,
   useLoaderData,
@@ -1653,12 +1658,21 @@ function getTemplate(documentType: string | undefined, templateId: string | unde
   return template?.documentType === documentType ? template : null;
 }
 
+const templateEditCache = createAppPageClientCache();
+
+export async function clientLoader(args: ClientLoaderFunctionArgs) {
+  return cachedClientLoader(templateEditCache, args);
+}
+
 export function shouldRevalidate({
   formMethod,
   currentParams,
   nextParams,
 }: ShouldRevalidateFunctionArgs) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    templateEditCache.bust();
+    return true;
+  }
   return (
     currentParams.documentType !== nextParams.documentType ||
     currentParams.templateId !== nextParams.templateId

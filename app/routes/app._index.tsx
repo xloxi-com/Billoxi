@@ -1,8 +1,13 @@
 import type {
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
+import {
+  cachedClientLoader,
+  createAppPageClientCache,
+} from "../client-page-cache";
 import { useEffect, useState } from "react";
 import {
   useLoaderData,
@@ -283,12 +288,21 @@ async function loadShopInstalledAt(shop: string): Promise<Date> {
   return new Date();
 }
 
+const homePageCache = createAppPageClientCache();
+
+export async function clientLoader(args: ClientLoaderFunctionArgs) {
+  return cachedClientLoader(homePageCache, args);
+}
+
 export function shouldRevalidate({
   formMethod,
   currentUrl,
   nextUrl,
 }: ShouldRevalidateFunctionArgs) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    homePageCache.bust();
+    return true;
+  }
   if (currentUrl.search !== nextUrl.search) return true;
   // Soft navigations / parent revalidations should not redo home analytics.
   return false;

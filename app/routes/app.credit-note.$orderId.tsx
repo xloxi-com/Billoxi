@@ -1,6 +1,8 @@
 export {
   loader,
   action,
+  clientLoader,
+  shouldRevalidate,
   headers,
   ErrorBoundary,
   default,

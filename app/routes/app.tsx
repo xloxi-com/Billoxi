@@ -2,10 +2,12 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useEffect, useState } from "react";
 import {
   Outlet,
   PrefetchPageLinks,
   useLoaderData,
+  useLocation,
   useNavigation,
   useRouteError,
 } from "react-router";
@@ -28,22 +30,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const shouldRevalidate = () => false;
 
-function isHeavyAppPage(pathname: string) {
-  return (
-    pathname === "/app/templates" ||
-    pathname.startsWith("/app/templates/") ||
-    pathname === "/app/settings" ||
-    pathname.startsWith("/app/settings/")
+const APP_NAV_PAGES = [
+  "/app",
+  "/app/sales-order",
+  "/app/invoice",
+  "/app/draft",
+  "/app/return",
+  "/app/credit-note",
+  "/app/packing-slip",
+  "/app/templates",
+  "/app/settings",
+] as const;
+
+function documentSectionBase(pathname: string) {
+  const match = pathname.match(
+    /^(\/app\/(?:sales-order|invoice|draft|return|credit-note|packing-slip))\/[^/]+$/,
   );
+  return match?.[1] ?? null;
 }
 
 function AppNavLoader() {
   const navigation = useNavigation();
+  const location = useLocation();
   const to = navigation.location?.pathname || "";
+  const from = location.pathname;
+  const sameDocumentSwitch =
+    Boolean(documentSectionBase(from)) &&
+    documentSectionBase(from) === documentSectionBase(to);
   const showLoader =
     navigation.state === "loading" &&
     !navigation.formMethod &&
-    isHeavyAppPage(to);
+    Boolean(to) &&
+    to !== from &&
+    !sameDocumentSwitch;
   if (!showLoader) return null;
 
   return (
@@ -65,13 +84,43 @@ function AppNavLoader() {
   );
 }
 
+function AppNavPrefetch() {
+  const location = useLocation();
+  const [pages, setPages] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    APP_NAV_PAGES.forEach((page, i) => {
+      timers.push(
+        window.setTimeout(() => {
+          if (cancelled) return;
+          setPages((prev) => (prev.includes(page) ? prev : [...prev, page]));
+        }, 700 + i * 180),
+      );
+    });
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
+  const current = location.pathname.replace(/\/$/, "") || "/app";
+  return (
+    <>
+      {pages
+        .filter((page) => page !== current)
+        .map((page) => (
+          <PrefetchPageLinks key={page} page={page} />
+        ))}
+    </>
+  );
+}
+
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <PrefetchPageLinks page="/app/templates" />
-      <PrefetchPageLinks page="/app/settings" />
+      <AppNavPrefetch />
       <s-app-nav>
         <s-link href="/app" rel="home">
           Home

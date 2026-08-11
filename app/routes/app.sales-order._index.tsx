@@ -2,10 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { createPortal } from "react-dom";
 import type {
   ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import {
+  cachedClientLoader,
+  createAppPageClientCache,
+} from "../client-page-cache";
 import {
   useFetcher,
   useLoaderData,
@@ -407,6 +412,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+const salesOrderListCache = createAppPageClientCache();
+
+export async function clientLoader(args: ClientLoaderFunctionArgs) {
+  return cachedClientLoader(salesOrderListCache, args);
+}
+
 export function shouldRevalidate({
   formMethod,
   currentUrl,
@@ -418,7 +429,10 @@ export function shouldRevalidate({
   nextUrl: URL;
   defaultShouldRevalidate: boolean;
 }) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    salesOrderListCache.bust();
+    return true;
+  }
   if (currentUrl.search !== nextUrl.search) return true;
   // Allow useRevalidator() / background poll to refresh the list.
   return defaultShouldRevalidate;

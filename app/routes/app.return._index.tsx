@@ -1,8 +1,13 @@
 import type {
+  ClientLoaderFunctionArgs,
   HeadersFunction,
   LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import {
+  cachedClientLoader,
+  createAppPageClientCache,
+} from "../client-page-cache";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
@@ -117,6 +122,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
+const returnListCache = createAppPageClientCache();
+
+export async function clientLoader(args: ClientLoaderFunctionArgs) {
+  return cachedClientLoader(returnListCache, args);
+}
+
 export function shouldRevalidate({
   formMethod,
   currentUrl,
@@ -126,7 +137,10 @@ export function shouldRevalidate({
   currentUrl: URL;
   nextUrl: URL;
 }) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
+  if (formMethod && formMethod.toUpperCase() !== "GET") {
+    returnListCache.bust();
+    return true;
+  }
   return currentUrl.search !== nextUrl.search;
 }
 
