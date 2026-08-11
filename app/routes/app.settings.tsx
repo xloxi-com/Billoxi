@@ -29,12 +29,14 @@ import {
   Icon,
   Link,
   RadioButton,
+  Tabs,
   Thumbnail,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
   ChevronDownIcon,
   ChevronUpIcon,
+  ClipboardIcon,
   CurrencyConvertIcon,
   DragHandleIcon,
   EditIcon,
@@ -136,6 +138,11 @@ import {
 } from "../sales-order-number.server";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
 import { backfillAutoCreditNotesForShop } from "../auto-credit-note.server";
+import {
+  CUSTOMER_DOWNLOAD_DOCUMENT_TYPES,
+  type CustomerDownloadDocumentType,
+} from "../customer-download-links";
+import { customerDownloadSnippetsForShop } from "../customer-download-links.server";
 import "../settings.css";
 import { RecommendedAppsSidebar } from "../components/recommended-apps";
 
@@ -192,6 +199,7 @@ type SettingsSection =
   | "number-series"
   | "credit-notes"
   | "multi-currency"
+  | "download-links"
   | "smtp"
   | "email-sales-order"
   | "email-invoice"
@@ -204,7 +212,7 @@ type SettingsMenuItem = {
   id: SettingsSection;
   label: string;
   description: string;
-  icon: "store" | "order" | "email" | "note" | "receipt" | "currency";
+  icon: "store" | "order" | "email" | "note" | "receipt" | "currency" | "clipboard";
 };
 
 type SettingsMenuGroup = {
@@ -285,6 +293,12 @@ const settingsMenu: Array<SettingsMenuItem | SettingsMenuGroup> = [
     icon: "currency",
   },
   {
+    id: "download-links",
+    label: "Download links",
+    description: "PDF links for Shopify notification emails.",
+    icon: "clipboard",
+  },
+  {
     id: "smtp",
     label: "SMTP",
     description: "Email server for sending documents.",
@@ -305,6 +319,7 @@ const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = 
   note: NoteIcon,
   receipt: ReceiptIcon,
   currency: CurrencyConvertIcon,
+  clipboard: ClipboardIcon,
 };
 
 function isEmailTemplatesSection(section: SettingsSection): boolean {
@@ -324,6 +339,7 @@ function parseSettingsSection(value: string | null): SettingsSection {
     value === "transaction-numbers" ||
     value === "credit-notes" ||
     value === "multi-currency" ||
+    value === "download-links" ||
     value === "smtp" ||
     value === "store-details" ||
     value === "email-sales-order" ||
@@ -423,6 +439,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     creditNoteSettings,
     invoiceSettings,
     multiCurrencySettings,
+    shopDomain: session.shop,
+    downloadLinkSnippets: customerDownloadSnippetsForShop(session.shop, request),
   };
 }
 
@@ -805,6 +823,9 @@ export default function SettingsPage() {
   );
   const [multiCurrencySettings, setMultiCurrencySettings] =
     useState<MultiCurrencySettings>(data.multiCurrencySettings);
+  const [downloadLinkTab, setDownloadLinkTab] = useState<
+    CustomerDownloadDocumentType | "smart"
+  >("smart");
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplatesSettings>(
     data.emailTemplates,
   );
@@ -1525,6 +1546,8 @@ export default function SettingsPage() {
           ? "Advanced"
           : activeSection === "multi-currency"
             ? "Multi Currency"
+            : activeSection === "download-links"
+              ? "Download links"
           : activeSection === "smtp"
             ? "SMTP"
             : `Email · ${activeEmailChild?.label ?? "Template"}`;
@@ -1566,7 +1589,8 @@ export default function SettingsPage() {
               className={`settings-page${
                 isEmailTemplatesSection(activeSection)
                   ? " settings-page--with-preview"
-                  : activeSection === "multi-currency"
+                  : activeSection === "multi-currency" ||
+                      activeSection === "download-links"
                     ? " settings-page--with-recommend settings-page--multi-currency"
                     : " settings-page--with-recommend"
               }`}
@@ -1828,6 +1852,132 @@ export default function SettingsPage() {
                           Unsaved changes
                         </Text>
                       ) : null}
+                    </BlockStack>
+                  ) : activeSection === "download-links" ? (
+                    <BlockStack gap="400">
+                      <BlockStack gap="200">
+                        <Text as="h2" variant="headingMd">
+                          Automated PDF download links
+                        </Text>
+                        <Text as="p" tone="subdued">
+                          Paste a link into Shopify order notification emails so
+                          customers can download the PDF directly.
+                        </Text>
+                      </BlockStack>
+
+                      <Banner tone="info" title="When can customers download?">
+                        <p>
+                          Invoice link works only after the order is converted to
+                          an invoice in Billoxi (paid orders). COD and custom
+                          payment orders should use the Sales Order link until
+                          then. If a document is not converted yet, the customer
+                          sees a notice instead of a PDF.
+                        </p>
+                      </Banner>
+
+                      <Card>
+                        <BlockStack gap="400">
+                          <Tabs
+                            tabs={[
+                              { id: "smart", content: "Recommended" },
+                              ...CUSTOMER_DOWNLOAD_DOCUMENT_TYPES.map(
+                                (item) => ({
+                                  id: item.id,
+                                  content: item.label,
+                                }),
+                              ),
+                            ]}
+                            selected={
+                              downloadLinkTab === "smart"
+                                ? 0
+                                : Math.max(
+                                    0,
+                                    CUSTOMER_DOWNLOAD_DOCUMENT_TYPES.findIndex(
+                                      (item) => item.id === downloadLinkTab,
+                                    ),
+                                  ) + 1
+                            }
+                            onSelect={(index) => {
+                              if (index <= 0) {
+                                setDownloadLinkTab("smart");
+                                return;
+                              }
+                              const next =
+                                CUSTOMER_DOWNLOAD_DOCUMENT_TYPES[index - 1]
+                                  ?.id || "sales-order";
+                              setDownloadLinkTab(next);
+                            }}
+                          />
+
+                          <Text as="p" tone="subdued">
+                            {downloadLinkTab === "smart"
+                              ? "Paid → invoice link. COD / custom / unpaid → sales order link."
+                              : downloadLinkTab === "invoice"
+                                ? "Shows only when the order is paid. Download works after invoice convert in Billoxi."
+                                : downloadLinkTab === "sales-order"
+                                  ? "Shows for unpaid orders (COD / custom). Use until invoice convert."
+                                  : "Copy and paste into your Shopify notification email."}{" "}
+                            <Link
+                              url="shopify://admin/settings/notifications"
+                              target="_top"
+                              removeUnderline
+                            >
+                              Open notification emails
+                            </Link>
+                          </Text>
+
+                          <TextField
+                            label="Liquid snippet"
+                            labelHidden
+                            value={
+                              (downloadLinkTab === "smart"
+                                ? data.downloadLinkSnippets.smart
+                                : data.downloadLinkSnippets[downloadLinkTab]) ||
+                              ""
+                            }
+                            onChange={() => undefined}
+                            multiline={6}
+                            autoComplete="off"
+                            monospaced
+                            readOnly
+                            selectTextOnFocus
+                          />
+
+                          <InlineStack gap="200">
+                            <Button
+                              variant="primary"
+                              onClick={async () => {
+                                const snippet =
+                                  (downloadLinkTab === "smart"
+                                    ? data.downloadLinkSnippets.smart
+                                    : data.downloadLinkSnippets[
+                                        downloadLinkTab
+                                      ]) || "";
+                                try {
+                                  await navigator.clipboard.writeText(snippet);
+                                  if (
+                                    typeof shopify !== "undefined" &&
+                                    shopify.toast
+                                  ) {
+                                    shopify.toast.show("Copied to clipboard");
+                                  }
+                                } catch {
+                                  if (
+                                    typeof shopify !== "undefined" &&
+                                    shopify.toast
+                                  ) {
+                                    shopify.toast.show("Couldn’t copy", {
+                                      isError: true,
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              Copy code
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      </Card>
                     </BlockStack>
                   ) : (
                   <Card>
