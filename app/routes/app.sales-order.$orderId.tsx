@@ -1856,7 +1856,6 @@ export default function SalesOrderDocumentPage() {
     paymentStatusKey.includes("CANCEL");
   const alreadyInvoiced = Boolean(data.orderInvoiced);
   const alreadyDraft = Boolean(data.orderDraft);
-  const isPaidOrder = paymentStatusKey === "PAID";
 
   const documentStatusRibbon = (() => {
     if (!data.isAdmin) return null;
@@ -1912,10 +1911,7 @@ export default function SalesOrderDocumentPage() {
     if (alreadyDraft) {
       return { label: "Draft", variant: "pending" as const };
     }
-    if (isPaidOrder) {
-      return { label: "Not Invoiced", variant: "not-invoiced" as const };
-    }
-    return null;
+    return { label: "Not invoiced", variant: "not-invoiced" as const };
   })();
 
   const handleConvertToInvoice = useCallback(() => {
