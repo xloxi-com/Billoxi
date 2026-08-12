@@ -8,6 +8,8 @@ export default async () => {
 
 function Extension() {
   const { data, auth } = shopify;
+  const [planReady, setPlanReady] = useState(false);
+  const [hasActivePlan, setHasActivePlan] = useState(false);
   const [src, setSrc] = useState(null);
   const [printSalesOrder, setPrintSalesOrder] = useState(true);
   const [printInvoice, setPrintInvoice] = useState(false);
@@ -22,12 +24,55 @@ function Extension() {
   const orderGid = data?.selected?.[0]?.id;
   const orderId = orderGid ? String(orderGid).split("/").pop() : "";
 
+  // print-action does not support should_render — gate FREE inside the modal.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await auth.idToken();
+        if (!idToken) {
+          if (!cancelled) {
+            setHasActivePlan(false);
+            setPlanReady(true);
+            setPreparing(false);
+          }
+          return;
+        }
+        const res = await fetch("/extension-plan-access", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            Accept: "application/json",
+          },
+        });
+        const payload = res.ok ? await res.json() : null;
+        if (!cancelled) {
+          setHasActivePlan(Boolean(payload?.ok && payload?.hasActivePlan));
+          setPlanReady(true);
+          if (!(payload?.ok && payload?.hasActivePlan)) {
+            setPreparing(false);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setHasActivePlan(false);
+          setPlanReady(true);
+          setPreparing(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [auth]);
+
   // Lightweight convert flags only — do not block sales-order preview.
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
 
     (async () => {
+      if (!planReady || !hasActivePlan) return;
       if (!orderId) {
         setStatusReady(true);
         return;
@@ -84,7 +129,7 @@ function Extension() {
       cancelled = true;
       ac.abort();
     };
-  }, [auth, orderId]);
+  }, [auth, orderId, planReady, hasActivePlan]);
 
   // Prepare preview as soon as selected docs are printable.
   useEffect(() => {
@@ -92,6 +137,11 @@ function Extension() {
     const ac = new AbortController();
 
     (async () => {
+      if (!planReady || !hasActivePlan) {
+        setSrc(null);
+        setPreparing(false);
+        return;
+      }
       if (!orderId) {
         setSrc(null);
         setPreparing(false);
@@ -171,6 +221,8 @@ function Extension() {
   }, [
     auth,
     orderId,
+    planReady,
+    hasActivePlan,
     statusReady,
     printSalesOrder,
     printInvoice,
@@ -180,7 +232,7 @@ function Extension() {
   ]);
 
   const convertSelected = async () => {
-    if (converting || !orderId) return;
+    if (converting || !orderId || !hasActivePlan) return;
     const kinds = [];
     if (printInvoice && invoiceNeedsConvert) kinds.push("invoice");
     if (printPackingSlip && packingNeedsConvert) kinds.push("packing-slip");
@@ -232,8 +284,17 @@ function Extension() {
     (printInvoice || printPackingSlip) && !statusReady;
 
   return (
-    <s-admin-print-action src={src}>
+    <s-admin-print-action src={hasActivePlan ? src : null}>
       <s-stack direction="block" gap="base">
+        {!planReady ? (
+          <s-text>Checking plan…</s-text>
+        ) : !hasActivePlan ? (
+          <s-banner heading="Paid plan required" tone="warning">
+            Print from Shopify orders is locked on FREE. Choose a Billoxi plan
+            to unlock this action.
+          </s-banner>
+        ) : (
+          <>
         <s-text type="strong">Documents</s-text>
         {error ? (
           <s-banner heading="Could not continue" tone="critical">
@@ -298,6 +359,8 @@ function Extension() {
           <s-text>Select at least one document to print.</s-text>
         ) : (
           <s-text>Preview ready — click Continue to print.</s-text>
+        )}
+          </>
         )}
       </s-stack>
     </s-admin-print-action>
