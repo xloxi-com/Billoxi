@@ -33,7 +33,6 @@ import {
   ResourceItem,
   ResourceList,
   Scrollable,
-  Spinner,
   Text,
   TextField,
 } from "@shopify/polaris";
@@ -41,6 +40,7 @@ import { SearchIcon } from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { SalesOrderLiveDocument } from "../components/sales-order-live-document";
+import { PageLoader } from "../components/page-loader";
 import { requireAdminAuth } from "../shopify-context.server";
 import {
   fetchSalesOrderDocument,
@@ -2482,7 +2482,7 @@ export default function SalesOrderDocumentPage() {
                     <Suspense
                       fallback={
                         <div className="sales-order-document-sidebar__loading">
-                          <s-spinner accessibilityLabel="Loading orders" />
+                          <PageLoader label="Loading orders" />
                         </div>
                       }
                     >
@@ -2690,12 +2690,7 @@ export default function SalesOrderDocumentPage() {
           >
             {isPreviewLoading ? (
               <div className="sales-order-document-stage__loader no-print">
-                <AppProvider i18n={enTranslations}>
-                  <Spinner
-                    accessibilityLabel="Loading document preview"
-                    size="large"
-                  />
-                </AppProvider>
+                <PageLoader label="Loading document preview" />
               </div>
             ) : null}
             <Scrollable

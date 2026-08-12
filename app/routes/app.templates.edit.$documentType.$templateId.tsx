@@ -103,8 +103,11 @@ import {
   type PaymentStatusStyle,
   type SalesOrderLogoPosition,
   type SalesOrderMetaStyle,
+  type AddressBlockKey,
   type TemplateDateFormat,
   type TemplateCurrencyDisplay,
+  normalizeAddressBlockOrder,
+  DEFAULT_ADDRESS_BLOCK_ORDER,
   resolveDocumentNotes,
 } from "../sales-order-document";
 import {
@@ -112,6 +115,7 @@ import {
 } from "../sales-order-number.server";
 import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
+import { PageLoader } from "../components/page-loader";
 import { templatePreviewLogoDataUrl } from "../template-preview-logo";
 
 const SalesOrderLiveDocument = lazy(() =>
@@ -175,6 +179,7 @@ type SelectedCustomField = {
 
 type CustomerDetailKey =
   | "company"
+  | "companyId"
   | "name"
   | "address"
   | "taxId"
@@ -291,6 +296,7 @@ type TemplateEditorSettings = {
   billingDetails: CustomerDetailField[];
   shippingDetails: CustomerDetailField[];
   customerBlockDetails: CustomerDetailField[];
+  addressBlockOrder: AddressBlockKey[];
   transactionLabels: {
     organization: string;
     customer: string;
@@ -707,8 +713,6 @@ const defaultBillingDetails: CustomerDetailField[] = [
   { key: "address", enabled: true, label: "Address" },
   { key: "phone", enabled: true, label: "Phone" },
   { key: "email", enabled: true, label: "Email" },
-  { key: "taxId", enabled: false, label: "Tax ID" },
-  { key: "vatNumber", enabled: false, label: "VAT number" },
 ];
 
 const defaultShippingDetails: CustomerDetailField[] = [
@@ -721,16 +725,17 @@ const defaultShippingDetails: CustomerDetailField[] = [
 
 const defaultCustomerBlockDetails: CustomerDetailField[] = [
   { key: "company", enabled: true, label: "Company" },
+  { key: "companyId", enabled: true, label: "Company ID" },
   { key: "name", enabled: true, label: "Name" },
   { key: "address", enabled: true, label: "Address" },
-  { key: "taxId", enabled: false, label: "Tax ID" },
-  { key: "vatNumber", enabled: false, label: "VAT number" },
+  { key: "taxId", enabled: true, label: "Tax ID" },
   { key: "phone", enabled: true, label: "Phone" },
   { key: "email", enabled: true, label: "Email" },
 ];
 
 const customerDetailFallbacks: Record<CustomerDetailKey, string> = {
   company: "Company",
+  companyId: "Company ID",
   name: "First name and last name",
   address: "Address",
   taxId: "Tax ID",
@@ -740,8 +745,8 @@ const customerDetailFallbacks: Record<CustomerDetailKey, string> = {
 };
 
 const customerDetailKeysWithLabel: ReadonlySet<CustomerDetailKey> = new Set([
+  "companyId",
   "taxId",
-  "vatNumber",
   "phone",
   "email",
 ]);
@@ -898,7 +903,10 @@ function createDefaultSettings(
   name: string,
   templateId?: string,
 ): TemplateEditorSettings {
-  return defaultTemplateSettings(name, templateId ?? "sales-standard");
+  return defaultTemplateSettings(
+    name,
+    templateId ?? "sales-standard",
+  ) as TemplateEditorSettings;
 }
 
 function expectedDocumentTitle(documentType: string): string {
@@ -1342,6 +1350,9 @@ function mergeSettings(
     customerBlockDetails: normalizeCustomerDetails(
       input.customerBlockDetails,
       defaultCustomerBlockDetails,
+    ),
+    addressBlockOrder: normalizeAddressBlockOrder(
+      (input as { addressBlockOrder?: unknown }).addressBlockOrder,
     ),
     transactionLabels: {
       organization:
@@ -2030,6 +2041,10 @@ export default function TemplateEditorPage() {
     section: AddressSection;
     index: number;
   } | null>(null);
+  const [draggingAddressBlock, setDraggingAddressBlock] =
+    useState<AddressBlockKey | null>(null);
+  const [dragOverAddressBlock, setDragOverAddressBlock] =
+    useState<AddressBlockKey | null>(null);
   const [draggingCustomFieldIndex, setDraggingCustomFieldIndex] = useState<
     number | null
   >(null);
@@ -2416,6 +2431,27 @@ export default function TemplateEditorPage() {
     );
   };
 
+  const addressBlockOrder = useMemo(
+    () =>
+      normalizeAddressBlockOrder(
+        settings.addressBlockOrder,
+        DEFAULT_ADDRESS_BLOCK_ORDER,
+      ),
+    [settings.addressBlockOrder],
+  );
+
+  const moveAddressBlock = (fromKey: AddressBlockKey, toKey: AddressBlockKey) => {
+    if (fromKey === toKey) return;
+    const order = [...addressBlockOrder];
+    const fromIndex = order.indexOf(fromKey);
+    const toIndex = order.indexOf(toKey);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const [moved] = order.splice(fromIndex, 1);
+    if (!moved) return;
+    order.splice(toIndex, 0, moved);
+    updateSettings({ addressBlockOrder: order });
+  };
+
   const toggleHeaderPanel = (panel: string) => {
     setOpenHeaderPanel((current) => (current === panel ? null : panel));
   };
@@ -2424,29 +2460,99 @@ export default function TemplateEditorPage() {
     panel: string,
     title: string,
     panelId: string,
+    options?: {
+      draggable?: boolean;
+      dragKey?: AddressBlockKey;
+    },
   ) => {
     const isOpen = openHeaderPanel === panel;
+    const isDragging =
+      options?.draggable &&
+      options.dragKey != null &&
+      draggingAddressBlock === options.dragKey;
+    const isDropTarget =
+      options?.draggable &&
+      options.dragKey != null &&
+      dragOverAddressBlock === options.dragKey &&
+      draggingAddressBlock != null &&
+      draggingAddressBlock !== options.dragKey;
 
     return (
-      <button
-        type="button"
-        className="template-editor__accordion-trigger"
-        aria-expanded={isOpen}
-        aria-controls={panelId}
-        onClick={() => toggleHeaderPanel(panel)}
+      <div
+        className={[
+          "template-editor__accordion-header",
+          isDropTarget ? "template-editor__accordion-header--drop" : "",
+          isDragging ? "template-editor__accordion-header--dragging" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        onDragOver={
+          options?.draggable
+            ? (event) => {
+                event.preventDefault();
+                if (options.dragKey && dragOverAddressBlock !== options.dragKey) {
+                  setDragOverAddressBlock(options.dragKey);
+                }
+              }
+            : undefined
+        }
+        onDrop={
+          options?.draggable
+            ? (event) => {
+                event.preventDefault();
+                if (draggingAddressBlock && options.dragKey) {
+                  moveAddressBlock(draggingAddressBlock, options.dragKey);
+                }
+                setDraggingAddressBlock(null);
+                setDragOverAddressBlock(null);
+              }
+            : undefined
+        }
       >
-        <span className="template-editor__accordion-title">
-          <Text as="span" variant="headingMd">
-            {title}
-          </Text>
-        </span>
-        <span className="template-editor__accordion-icon" aria-hidden="true">
-          <Icon
-            source={isOpen ? ChevronUpIcon : ChevronDownIcon}
-            tone="base"
-          />
-        </span>
-      </button>
+        {options?.draggable && options.dragKey ? (
+          <button
+            type="button"
+            className="template-editor__drag-handle"
+            aria-label={`Drag to reorder ${title}`}
+            draggable
+            onDragStart={(event) => {
+              event.stopPropagation();
+              setDraggingAddressBlock(options.dragKey!);
+              try {
+                event.dataTransfer.setData("text/plain", options.dragKey!);
+                event.dataTransfer.effectAllowed = "move";
+              } catch {
+                // ignore
+              }
+            }}
+            onDragEnd={() => {
+              setDraggingAddressBlock(null);
+              setDragOverAddressBlock(null);
+            }}
+          >
+            <Icon source={DragHandleIcon} tone="subdued" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="template-editor__accordion-trigger"
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={() => toggleHeaderPanel(panel)}
+        >
+          <span className="template-editor__accordion-title">
+            <Text as="span" variant="headingMd">
+              {title}
+            </Text>
+          </span>
+          <span className="template-editor__accordion-icon" aria-hidden="true">
+            <Icon
+              source={isOpen ? ChevronUpIcon : ChevronDownIcon}
+              tone="base"
+            />
+          </span>
+        </button>
+      </div>
     );
   };
 
@@ -2474,7 +2580,10 @@ export default function TemplateEditorPage() {
 
     return (
       <Card padding="0">
-        {renderSectionHeader(section, title, panelId)}
+        {renderSectionHeader(section, title, panelId, {
+          draggable: true,
+          dragKey: section,
+        })}
 
         <Collapsible id={panelId} open={isOpen}>
           <div className="template-editor__accordion-body">
@@ -2500,8 +2609,9 @@ export default function TemplateEditorPage() {
               />
 
               <Text as="p" variant="bodySm" tone="subdued">
-                Drag to reorder fields. Expand Tax ID, VAT, Phone, or Email to
-                set an optional custom label.
+                {section === "customer"
+                  ? "Drag to reorder fields. Expand Company ID, Tax ID, Phone, or Email to set an optional custom label."
+                  : "Drag to reorder fields. Expand Phone or Email to set an optional custom label."}
               </Text>
 
               <FormLayout>
@@ -3518,16 +3628,43 @@ export default function TemplateEditorPage() {
                       </Collapsible>
                     </Card>
 
-                    {!isPackingSlipEditor
-                      ? renderAddressSectionPanel("billing", "Billing details")
-                      : null}
-                    {!isCreditNoteEditor
-                      ? renderAddressSectionPanel(
-                          "shipping",
-                          "Shipping details",
-                        )
-                      : null}
-                    {renderAddressSectionPanel("customer", "Customer details")}
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Drag Billing, Shipping, or Customer details to change
+                      their left-to-right order on the document.
+                    </Text>
+                    {addressBlockOrder.map((section) => {
+                      if (section === "billing" && !isPackingSlipEditor) {
+                        return (
+                          <div key={section}>
+                            {renderAddressSectionPanel(
+                              "billing",
+                              "Billing details",
+                            )}
+                          </div>
+                        );
+                      }
+                      if (section === "shipping" && !isCreditNoteEditor) {
+                        return (
+                          <div key={section}>
+                            {renderAddressSectionPanel(
+                              "shipping",
+                              "Shipping details",
+                            )}
+                          </div>
+                        );
+                      }
+                      if (section === "customer") {
+                        return (
+                          <div key={section}>
+                            {renderAddressSectionPanel(
+                              "customer",
+                              "Customer details",
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
 
                     <Card padding="0">
                       {renderSectionHeader(
@@ -4469,13 +4606,17 @@ export default function TemplateEditorPage() {
                   fallback={
                     <div
                       className="template-editor__preview-skeleton"
-                      aria-hidden="true"
                       style={{
                         minHeight: "40vh",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         background: "var(--p-color-bg-surface-secondary, #f6f6f7)",
                         borderRadius: 8,
                       }}
-                    />
+                    >
+                      <PageLoader label="Loading preview" />
+                    </div>
                   }
                 >
                   <SalesOrderLiveDocument

@@ -102,6 +102,7 @@ export type TemplateLabelPack = {
   };
   customerFields: {
     company: string;
+    companyId?: string;
     name: string;
     nameFallback: string;
     address: string;
@@ -163,6 +164,7 @@ const en: TemplateLabelPack = {
   },
   customerFields: {
     company: "Company",
+    companyId: "Company ID",
     name: "Name",
     nameFallback: "First name and last name",
     address: "Address",
@@ -3811,6 +3813,8 @@ export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
     switch (key) {
       case "company":
         return pack.customerFields.company;
+      case "companyId":
+        return pack.customerFields.companyId || "Company ID";
       case "name":
         return pack.customerFields.name;
       case "address":

@@ -19,6 +19,42 @@ export type SalesOrderMetaStyle =
   | "card"
   | "inverted";
 
+/** Bill To / Ship To / Customer Details column order on the document. */
+export type AddressBlockKey = "billing" | "shipping" | "customer";
+
+export const DEFAULT_ADDRESS_BLOCK_ORDER: AddressBlockKey[] = [
+  "billing",
+  "shipping",
+  "customer",
+];
+
+export function normalizeAddressBlockOrder(
+  value: unknown,
+  fallback: AddressBlockKey[] = DEFAULT_ADDRESS_BLOCK_ORDER,
+): AddressBlockKey[] {
+  const allowed = new Set<AddressBlockKey>(DEFAULT_ADDRESS_BLOCK_ORDER);
+  const seen = new Set<AddressBlockKey>();
+  const next: AddressBlockKey[] = [];
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (
+        (entry === "billing" ||
+          entry === "shipping" ||
+          entry === "customer") &&
+        allowed.has(entry) &&
+        !seen.has(entry)
+      ) {
+        seen.add(entry);
+        next.push(entry);
+      }
+    }
+  }
+  for (const key of fallback) {
+    if (!seen.has(key)) next.push(key);
+  }
+  return next;
+}
+
 export const PAYMENT_STATUS_STYLES: ReadonlyArray<{
   value: PaymentStatusStyle;
   label: string;
@@ -222,6 +258,8 @@ export type TemplateEditorSettings = {
   shippingDetails: Array<{ key: string; enabled: boolean; label: string }>;
   /** Third column: Customer Details (separate from Bill To / Ship To). */
   customerBlockDetails: Array<{ key: string; enabled: boolean; label: string }>;
+  /** Left-to-right order of Bill To / Ship To / Customer Details. */
+  addressBlockOrder: AddressBlockKey[];
   transactionLabels: {
     organization: string;
     customer: string;
@@ -486,25 +524,34 @@ export type SalesOrderDocumentData = {
   customerName: string;
   billing: {
     company: string;
+    companyId: string;
     name: string;
     address: string[];
     phone: string;
     email: string;
+    taxId: string;
+    vatNumber: string;
   };
   shipping: {
     company: string;
+    companyId: string;
     name: string;
     address: string[];
     phone: string;
     email: string;
+    taxId: string;
+    vatNumber: string;
   };
-  /** Shopify customer / account details for the Customer Details column. */
+  /** Shopify customer / B2B company details for the Customer Details column. */
   customer: {
     company: string;
+    companyId: string;
     name: string;
     address: string[];
     phone: string;
     email: string;
+    taxId: string;
+    vatNumber: string;
   };
   terms: string;
   /** Shopify Admin order note (`order.note`), when present. */
@@ -4001,8 +4048,6 @@ export function defaultTemplateSettings(
       { key: "address", enabled: true, label: "Address" },
       { key: "phone", enabled: true, label: "Phone" },
       { key: "email", enabled: true, label: "Email" },
-      { key: "taxId", enabled: false, label: "Tax ID" },
-      { key: "vatNumber", enabled: false, label: "VAT number" },
     ],
     shippingDetails: [
       { key: "company", enabled: true, label: "Company" },
@@ -4011,6 +4056,7 @@ export function defaultTemplateSettings(
       { key: "phone", enabled: true, label: "Phone" },
       { key: "email", enabled: true, label: "Email" },
     ],
+    addressBlockOrder: [...DEFAULT_ADDRESS_BLOCK_ORDER],
     transactionLabels: {
       organization: "Organization",
       customer: "Bill To",
@@ -4076,10 +4122,10 @@ export function defaultTemplateSettings(
     },
     customerBlockDetails: [
       { key: "company", enabled: true, label: "Company" },
+      { key: "companyId", enabled: true, label: "Company ID" },
       { key: "name", enabled: true, label: "Name" },
       { key: "address", enabled: true, label: "Address" },
-      { key: "taxId", enabled: false, label: "Tax ID" },
-      { key: "vatNumber", enabled: false, label: "VAT number" },
+      { key: "taxId", enabled: true, label: "Tax ID" },
       { key: "phone", enabled: true, label: "Phone" },
       { key: "email", enabled: true, label: "Email" },
     ],
@@ -4451,15 +4497,87 @@ export function mergeTemplateSettings(
         showPaymentMethod: merged.showPaymentMethod !== false,
       };
     })(),
-    billingDetails: Array.isArray(input.billingDetails)
-      ? input.billingDetails
-      : defaults.billingDetails,
+    billingDetails: (() => {
+      const allowed = new Set(
+        defaults.billingDetails.map((field) => field.key),
+      );
+      const source = Array.isArray(input.billingDetails)
+        ? input.billingDetails
+        : defaults.billingDetails;
+      const seen = new Set<string>();
+      const normalized: Array<{
+        key: string;
+        enabled: boolean;
+        label: string;
+      }> = [];
+      for (const field of source) {
+        if (
+          !field ||
+          typeof field.key !== "string" ||
+          !allowed.has(field.key) ||
+          seen.has(field.key)
+        ) {
+          continue;
+        }
+        seen.add(field.key);
+        normalized.push({
+          key: field.key,
+          enabled: field.enabled !== false,
+          label:
+            typeof field.label === "string" && field.label.trim()
+              ? field.label
+              : field.key,
+        });
+      }
+      for (const field of defaults.billingDetails) {
+        if (!seen.has(field.key)) normalized.push({ ...field });
+      }
+      return normalized;
+    })(),
     shippingDetails: Array.isArray(input.shippingDetails)
       ? input.shippingDetails
       : defaults.shippingDetails,
-    customerBlockDetails: Array.isArray(input.customerBlockDetails)
-      ? input.customerBlockDetails
-      : defaults.customerBlockDetails,
+    customerBlockDetails: (() => {
+      const allowed = new Set(
+        defaults.customerBlockDetails.map((field) => field.key),
+      );
+      const source = Array.isArray(input.customerBlockDetails)
+        ? input.customerBlockDetails
+        : defaults.customerBlockDetails;
+      const seen = new Set<string>();
+      const normalized: Array<{
+        key: string;
+        enabled: boolean;
+        label: string;
+      }> = [];
+      for (const field of source) {
+        if (
+          !field ||
+          typeof field.key !== "string" ||
+          !allowed.has(field.key) ||
+          seen.has(field.key)
+        ) {
+          continue;
+        }
+        seen.add(field.key);
+        normalized.push({
+          key: field.key,
+          enabled: field.enabled !== false,
+          label:
+            typeof field.label === "string" && field.label.trim()
+              ? field.label
+              : field.key,
+        });
+      }
+      for (const field of defaults.customerBlockDetails) {
+        if (!seen.has(field.key)) normalized.push({ ...field });
+      }
+      return normalized;
+    })(),
+    addressBlockOrder: normalizeAddressBlockOrder(
+      (input as { addressBlockOrder?: unknown }).addressBlockOrder,
+      defaults.addressBlockOrder,
+    ),
     transactionLabels: {
       organization:
         input.transactionLabels?.organization ??

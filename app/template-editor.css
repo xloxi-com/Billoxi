@@ -236,6 +236,27 @@
   text-align: left;
 }
 
+.template-editor__accordion-header {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-100, 4px);
+  padding-inline-start: var(--p-space-200, 8px);
+}
+
+.template-editor__accordion-header .template-editor__accordion-trigger {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline-start: var(--p-space-100, 4px);
+}
+
+.template-editor__accordion-header--drop {
+  background: var(--p-color-bg-surface-selected, #f0f4ff);
+}
+
+.template-editor__accordion-header--dragging {
+  opacity: 0.55;
+}
+
 .template-editor__accordion-trigger:hover {
   background: var(--p-color-bg-surface-hover, #f7f7f7);
 }
@@ -326,12 +347,9 @@
   hyphens: auto;
 }
 
-.live-document__customer--billing {
-  grid-column: 1;
-}
-
-.live-document__customer--shipping {
-  grid-column: 2;
+.live-document__address-blocks > .live-document__customer--empty {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .live-document__address-blocks > .live-document__customer > span:first-child,
@@ -344,19 +362,14 @@
 }
 
 .live-document__customer--details {
-  grid-column: 3;
   color: var(--doc-customer-details-color, var(--doc-text-color, #303030));
   font-size: var(--doc-customer-details-size, 1em);
 }
 
-/* Packing slips hide Bill To — pin Ship To + Customer Details to the left. */
-.live-document--packing-slip .live-document__customer--shipping {
-  grid-column: 1;
-}
-
-.live-document--packing-slip .live-document__customer--details {
-  grid-column: 2;
-}
+/*
+ * Packing slips hide Bill To — keep remaining blocks in configured order
+ * without pinning fixed grid columns (addressBlockOrder controls layout).
+ */
 
 /*
  * European right-aligns party blocks for invoice Bill To.

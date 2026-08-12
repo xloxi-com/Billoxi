@@ -46,6 +46,7 @@ const numericColumnKeys = new Set([
 
 const fieldFallbacks: Record<string, string> = {
   company: "Company",
+  companyId: "Company ID",
   name: "Name",
   address: "Address",
   taxId: "Tax ID",
@@ -100,7 +101,13 @@ function renderPartyFields(
         ? party.phone
         : field.key === "email"
           ? party.email
-          : "";
+          : field.key === "companyId"
+            ? party.companyId
+            : field.key === "taxId"
+              ? party.taxId
+              : field.key === "vatNumber"
+                ? party.vatNumber
+                : "";
     if (!value) return null;
 
     return (
@@ -512,42 +519,88 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
         settings.header.showShipping ||
         settings.header.showCustomerDetails ? (
           <div className="live-document__address-blocks">
-            {settings.header.showBilling ? (
-              <div className="live-document__customer live-document__customer--billing">
-                <span className="live-document__address-label">
-                  {settings.transactionLabels.customer}
-                </span>
-                {renderPartyFields(
-                  settings.billingDetails,
-                  order.billing,
-                  "billing",
-                )}
-              </div>
-            ) : null}
-            {settings.header.showShipping ? (
-              <div className="live-document__customer live-document__customer--shipping">
-                <span className="live-document__address-label">
-                  {settings.transactionLabels.shipping}
-                </span>
-                {renderPartyFields(
-                  settings.shippingDetails,
-                  order.shipping,
-                  "shipping",
-                )}
-              </div>
-            ) : null}
-            {settings.header.showCustomerDetails ? (
-              <div className="live-document__customer live-document__customer--details">
-                <span className="live-document__address-label">
-                  {settings.transactionLabels.customerDetails}
-                </span>
-                {renderPartyFields(
-                  settings.customerBlockDetails,
-                  order.customer,
-                  "customer",
-                )}
-              </div>
-            ) : null}
+            {(
+              settings.addressBlockOrder?.length
+                ? settings.addressBlockOrder
+                : (["billing", "shipping", "customer"] as const)
+            ).map((block) => {
+              if (block === "billing") {
+                if (!settings.header.showBilling) {
+                  return (
+                    <div
+                      key="billing-empty"
+                      className="live-document__customer live-document__customer--empty"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+                return (
+                  <div
+                    key="billing"
+                    className="live-document__customer live-document__customer--billing"
+                  >
+                    <span className="live-document__address-label">
+                      {settings.transactionLabels.customer}
+                    </span>
+                    {renderPartyFields(
+                      settings.billingDetails,
+                      order.billing,
+                      "billing",
+                    )}
+                  </div>
+                );
+              }
+              if (block === "shipping") {
+                if (!settings.header.showShipping) {
+                  return (
+                    <div
+                      key="shipping-empty"
+                      className="live-document__customer live-document__customer--empty"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+                return (
+                  <div
+                    key="shipping"
+                    className="live-document__customer live-document__customer--shipping"
+                  >
+                    <span className="live-document__address-label">
+                      {settings.transactionLabels.shipping}
+                    </span>
+                    {renderPartyFields(
+                      settings.shippingDetails,
+                      order.shipping,
+                      "shipping",
+                    )}
+                  </div>
+                );
+              }
+              if (!settings.header.showCustomerDetails) {
+                return (
+                  <div
+                    key="customer-empty"
+                    className="live-document__customer live-document__customer--empty"
+                    aria-hidden="true"
+                  />
+                );
+              }
+              return (
+                <div
+                  key="customer"
+                  className="live-document__customer live-document__customer--details"
+                >
+                  <span className="live-document__address-label">
+                    {settings.transactionLabels.customerDetails}
+                  </span>
+                  {renderPartyFields(
+                    settings.customerBlockDetails,
+                    order.customer,
+                    "customer",
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </section>

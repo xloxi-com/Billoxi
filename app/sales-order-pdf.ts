@@ -486,6 +486,21 @@ function partyLines(
         text: `${field.label.trim() || "Email"}: ${party.email}`,
         sizeKind: "body",
       });
+    } else if (field.key === "companyId" && party.companyId) {
+      lines.push({
+        text: `${field.label.trim() || "Company ID"}: ${party.companyId}`,
+        sizeKind: "body",
+      });
+    } else if (field.key === "taxId" && party.taxId) {
+      lines.push({
+        text: `${field.label.trim() || "Tax ID"}: ${party.taxId}`,
+        sizeKind: "body",
+      });
+    } else if (field.key === "vatNumber" && party.vatNumber) {
+      lines.push({
+        text: `${field.label.trim() || "VAT number"}: ${party.vatNumber}`,
+        sizeKind: "body",
+      });
     }
   }
   return lines;
@@ -1012,31 +1027,39 @@ async function buildSalesOrderVectorPdf({
   // `.live-document__header { margin-bottom: 3em }`
   y = Math.max(leftY, rightY, headerTop) + emMm(sizeBody, 3.0);
 
-  // Bill To / Ship To / Customer Details — fixed 3 slots (same positions
-  // whether a section is hidden or shown; empty slots stay blank).
-  const partySlots = [
-    settings.header.showBilling
-      ? {
-          label: settings.transactionLabels.customer,
-          fields: settings.billingDetails,
-          party: order.billing,
-        }
-      : null,
-    settings.header.showShipping
-      ? {
-          label: settings.transactionLabels.shipping,
-          fields: settings.shippingDetails,
-          party: order.shipping,
-        }
-      : null,
-    settings.header.showCustomerDetails
+  // Bill To / Ship To / Customer Details — 3 slots in configured order
+  // (empty slots stay blank so remaining columns keep their place).
+  const addressOrder =
+    settings.addressBlockOrder?.length === 3
+      ? settings.addressBlockOrder
+      : (["billing", "shipping", "customer"] as const);
+  const partySlots = addressOrder.map((block) => {
+    if (block === "billing") {
+      return settings.header.showBilling
+        ? {
+            label: settings.transactionLabels.customer,
+            fields: settings.billingDetails,
+            party: order.billing,
+          }
+        : null;
+    }
+    if (block === "shipping") {
+      return settings.header.showShipping
+        ? {
+            label: settings.transactionLabels.shipping,
+            fields: settings.shippingDetails,
+            party: order.shipping,
+          }
+        : null;
+    }
+    return settings.header.showCustomerDetails
       ? {
           label: settings.transactionLabels.customerDetails,
           fields: settings.customerBlockDetails,
           party: order.customer,
         }
-      : null,
-  ];
+      : null;
+  });
 
   if (partySlots.some(Boolean)) {
     ensureSpace(40);

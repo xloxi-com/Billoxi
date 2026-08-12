@@ -14,6 +14,10 @@ import {
   type CustomerOrderListItem,
 } from "./sales-order-document";
 import {
+  emptyPartyTaxFields,
+  resolveCustomerPartyFromOrder,
+} from "./sales-order-document.server";
+import {
   loadMultiCurrencySettingsForShop,
 } from "./shop-settings.server";
 import { usesPresentmentCurrency } from "./multi-currency-settings";
@@ -334,6 +338,7 @@ type DraftOrderNode = {
   status?: string | null;
   currencyCode?: string | null;
   customer?: { id?: string | null; displayName?: string | null } | null;
+  purchasingEntity?: Record<string, unknown> | null;
   billingAddress?: {
     company?: string | null;
     firstName?: string | null;
@@ -343,8 +348,10 @@ type DraftOrderNode = {
     address2?: string | null;
     city?: string | null;
     province?: string | null;
+    provinceCode?: string | null;
     zip?: string | null;
     country?: string | null;
+    countryCodeV2?: string | null;
     phone?: string | null;
   } | null;
   shippingAddress?: {
@@ -356,8 +363,10 @@ type DraftOrderNode = {
     address2?: string | null;
     city?: string | null;
     province?: string | null;
+    provinceCode?: string | null;
     zip?: string | null;
     country?: string | null;
+    countryCodeV2?: string | null;
     phone?: string | null;
   } | null;
   subtotalPriceSet?: MoneyBag | null;
@@ -386,28 +395,65 @@ const DRAFT_ORDER_DOCUMENT_QUERY = `#graphql
       status
       currencyCode
       customer { id displayName }
+      purchasingEntity {
+        ... on PurchasingCompany {
+          company {
+            name
+            externalId
+          }
+          contact {
+            customer {
+              displayName
+            }
+          }
+          location {
+            taxSettings {
+              taxRegistrationId
+            }
+            billingAddress {
+              firstName
+              lastName
+              address1
+              address2
+              city
+              province
+              zoneCode
+              zip
+              country
+              countryCode
+              phone
+            }
+          }
+        }
+      }
       billingAddress {
         company
+        name
         firstName
         lastName
         address1
         address2
         city
         province
+        provinceCode
         zip
         country
+        countryCodeV2
         phone
       }
       shippingAddress {
         company
+        name
         firstName
         lastName
         address1
         address2
         city
         province
+        provinceCode
         zip
         country
+        countryCodeV2
         phone
       }
       subtotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
@@ -499,17 +545,22 @@ function promotePresentmentDeep(value: unknown): void {
 }
 
 function formatDraftAddress(
-  address: DraftOrderNode["billingAddress"],
+  address: DraftOrderNode["billingAddress"] | DraftOrderNode["shippingAddress"],
 ): string[] {
   if (!address) return [];
   const lines: string[] = [];
-  if (address.address1) lines.push(address.address1);
-  if (address.address2) lines.push(address.address2);
-  const cityLine = [address.city, address.province, address.zip]
+  if (address.address1?.trim()) lines.push(address.address1.trim());
+  if (address.address2?.trim()) lines.push(address.address2.trim());
+  const cityLine = [
+    address.city?.trim(),
+    address.province?.trim() || address.provinceCode?.trim(),
+    address.zip?.trim(),
+  ]
     .filter(Boolean)
     .join(", ");
   if (cityLine) lines.push(cityLine);
-  if (address.country) lines.push(address.country);
+  const country = address.country?.trim() || address.countryCodeV2?.trim();
+  if (country) lines.push(country);
   return lines;
 }
 
@@ -517,8 +568,11 @@ function draftPersonName(
   address: DraftOrderNode["billingAddress"],
 ): string {
   if (!address) return "";
-  if (address.name) return address.name;
-  return [address.firstName, address.lastName].filter(Boolean).join(" ");
+  const fromParts = [address.firstName?.trim(), address.lastName?.trim()]
+    .filter(Boolean)
+    .join(" ");
+  if (fromParts) return fromParts;
+  return address.name?.trim() || "";
 }
 
 function resolveDraftVariantTitle(item: DraftOrderLineNode): string {
@@ -717,26 +771,22 @@ export async function fetchDraftOrderDocument(
     customerId: order.customer?.id ?? null,
     customerName,
     billing: {
-      company: order.billingAddress?.company || "",
-      name: draftPersonName(order.billingAddress) || customerName,
+      company: order.billingAddress?.company?.trim() || "",
+      name: draftPersonName(order.billingAddress),
       address: formatDraftAddress(order.billingAddress),
-      phone: order.billingAddress?.phone || order.phone || "",
-      email: order.email || "",
+      phone: order.billingAddress?.phone?.trim() || "",
+      email: order.billingAddress ? order.email?.trim() || "" : "",
+      ...emptyPartyTaxFields(),
     },
     shipping: {
-      company: order.shippingAddress?.company || "",
-      name: draftPersonName(order.shippingAddress) || customerName,
+      company: order.shippingAddress?.company?.trim() || "",
+      name: draftPersonName(order.shippingAddress),
       address: formatDraftAddress(order.shippingAddress),
-      phone: order.shippingAddress?.phone || order.phone || "",
-      email: order.email || "",
+      phone: order.shippingAddress?.phone?.trim() || "",
+      email: order.shippingAddress ? order.email?.trim() || "" : "",
+      ...emptyPartyTaxFields(),
     },
-    customer: {
-      company: order.billingAddress?.company || "",
-      name: customerName,
-      address: formatDraftAddress(order.billingAddress),
-      phone: order.phone || order.billingAddress?.phone || "",
-      email: order.email || "",
-    },
+    customer: resolveCustomerPartyFromOrder(order, customerName),
     terms: "Due on Receipt",
     orderNote: (order.note2 || "").trim(),
     lineItems,

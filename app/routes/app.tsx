@@ -17,6 +17,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { requireAdminAuth } from "../shopify-context.server";
 import { scheduleInstallNumberSync } from "../install-number-sync.server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
+import { PageLoader } from "../components/page-loader";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Warm auth for nested loaders (shared WeakMap memo).
@@ -79,7 +80,7 @@ function AppNavLoader() {
         background: "color-mix(in srgb, #f6f6f7 78%, transparent)",
       }}
     >
-      <s-spinner accessibilityLabel="Loading page" />
+      <PageLoader label="Loading page" />
     </div>
   );
 }
@@ -122,7 +123,11 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <AppNavPrefetch />
       <s-app-nav>
-        <s-link href="/app" rel="home">
+        {/* rel="home" sets Billoxi → /app and hides this link from the sidebar. */}
+        <s-link
+          href="/app"
+          {...({ rel: "home" } as Record<string, string>)}
+        >
           Home
         </s-link>
         <s-link href="/app/sales-order">Sales Orders</s-link>

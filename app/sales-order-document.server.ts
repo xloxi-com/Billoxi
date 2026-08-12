@@ -328,21 +328,35 @@ function formatAddress(
         address2?: string | null;
         city?: string | null;
         province?: string | null;
+        provinceCode?: string | null;
+        zoneCode?: string | null;
         zip?: string | null;
         country?: string | null;
+        countryCodeV2?: string | null;
+        countryCode?: string | null;
       }
     | null
     | undefined,
 ) {
   if (!address) return [];
   const lines: string[] = [];
-  if (address.address1) lines.push(address.address1);
-  if (address.address2) lines.push(address.address2);
-  const cityLine = [address.city, address.province, address.zip]
+  if (address.address1?.trim()) lines.push(address.address1.trim());
+  if (address.address2?.trim()) lines.push(address.address2.trim());
+  const cityLine = [
+    address.city?.trim(),
+    address.province?.trim() ||
+      address.provinceCode?.trim() ||
+      address.zoneCode?.trim(),
+    address.zip?.trim(),
+  ]
     .filter(Boolean)
     .join(", ");
   if (cityLine) lines.push(cityLine);
-  if (address.country) lines.push(address.country);
+  const country =
+    address.country?.trim() ||
+    address.countryCodeV2?.trim() ||
+    address.countryCode?.trim();
+  if (country) lines.push(country);
   return lines;
 }
 
@@ -357,8 +371,115 @@ function personName(
     | undefined,
 ) {
   if (!address) return "";
-  if (address.name) return address.name;
-  return [address.firstName, address.lastName].filter(Boolean).join(" ");
+  const fromParts = [address.firstName?.trim(), address.lastName?.trim()]
+    .filter(Boolean)
+    .join(" ");
+  if (fromParts) return fromParts;
+  return address.name?.trim() || "";
+}
+
+type PurchasingCompanyEntity = {
+  company?: {
+    name?: string | null;
+    externalId?: string | null;
+  } | null;
+  contact?: {
+    customer?: {
+      displayName?: string | null;
+    } | null;
+  } | null;
+  location?: {
+    taxSettings?: {
+      taxRegistrationId?: string | null;
+    } | null;
+    billingAddress?: {
+      name?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      address1?: string | null;
+      address2?: string | null;
+      city?: string | null;
+      province?: string | null;
+      zoneCode?: string | null;
+      zip?: string | null;
+      country?: string | null;
+      countryCode?: string | null;
+      phone?: string | null;
+    } | null;
+  } | null;
+};
+
+export function emptyPartyTaxFields() {
+  return {
+    companyId: "",
+    taxId: "",
+    vatNumber: "",
+  };
+}
+
+export function resolveCustomerPartyFromOrder(
+  order: {
+    email?: string | null;
+    phone?: string | null;
+    customer?: { displayName?: string | null } | null;
+    billingAddress?: {
+      company?: string | null;
+      phone?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
+      name?: string | null;
+      address1?: string | null;
+      address2?: string | null;
+      city?: string | null;
+      province?: string | null;
+      provinceCode?: string | null;
+      zoneCode?: string | null;
+      zip?: string | null;
+      country?: string | null;
+      countryCodeV2?: string | null;
+      countryCode?: string | null;
+    } | null;
+    purchasingEntity?: PurchasingCompanyEntity | Record<string, unknown> | null;
+  },
+  customerName: string,
+): SalesOrderDocumentData["customer"] {
+  const purchasing = order.purchasingEntity as PurchasingCompanyEntity | null | undefined;
+  const company = purchasing?.company;
+  if (company?.name?.trim() || company?.externalId?.trim()) {
+    const locationAddress = purchasing?.location?.billingAddress;
+    return {
+      company: company.name?.trim() || "",
+      companyId: company.externalId?.trim() || "",
+      name:
+        purchasing?.contact?.customer?.displayName?.trim() ||
+        personName(locationAddress) ||
+        customerName,
+      address:
+        formatAddress(locationAddress).length > 0
+          ? formatAddress(locationAddress)
+          : formatAddress(order.billingAddress),
+      phone:
+        locationAddress?.phone?.trim() ||
+        order.phone?.trim() ||
+        order.billingAddress?.phone?.trim() ||
+        "",
+      email: order.email?.trim() || "",
+      taxId:
+        purchasing?.location?.taxSettings?.taxRegistrationId?.trim() || "",
+      vatNumber: "",
+    };
+  }
+
+  return {
+    company: order.billingAddress?.company?.trim() || "",
+    companyId: "",
+    name: customerName,
+    address: formatAddress(order.billingAddress),
+    phone: order.phone?.trim() || order.billingAddress?.phone?.trim() || "",
+    email: order.email?.trim() || "",
+    taxId: "",
+    vatNumber: "",
+  };
 }
 
 export async function loadDocumentTemplateSettings(
@@ -537,6 +658,7 @@ type OrderNode = {
     manualPaymentGateway?: boolean | null;
   } | null> | null;
   customer?: { id?: string | null; displayName?: string | null } | null;
+  purchasingEntity?: Record<string, unknown> | null;
   billingAddress?: {
     company?: string | null;
     name?: string | null;
@@ -546,8 +668,10 @@ type OrderNode = {
     address2?: string | null;
     city?: string | null;
     province?: string | null;
+    provinceCode?: string | null;
     zip?: string | null;
     country?: string | null;
+    countryCodeV2?: string | null;
     phone?: string | null;
   } | null;
   shippingAddress?: {
@@ -559,8 +683,10 @@ type OrderNode = {
     address2?: string | null;
     city?: string | null;
     province?: string | null;
+    provinceCode?: string | null;
     zip?: string | null;
     country?: string | null;
+    countryCodeV2?: string | null;
     phone?: string | null;
   } | null;
   currentSubtotalPriceSet?: { shopMoney?: { amount: string; currencyCode: string } };
@@ -891,28 +1017,65 @@ export async function fetchSalesOrderDocument(
             manualPaymentGateway
           }
           customer { id displayName }
+          purchasingEntity {
+            ... on PurchasingCompany {
+              company {
+                name
+                externalId
+              }
+              contact {
+                customer {
+                  displayName
+                }
+              }
+              location {
+                taxSettings {
+                  taxRegistrationId
+                }
+                billingAddress {
+                  firstName
+                  lastName
+                  address1
+                  address2
+                  city
+                  province
+                  zoneCode
+                  zip
+                  country
+                  countryCode
+                  phone
+                }
+              }
+            }
+          }
           billingAddress {
             company
+            name
             firstName
             lastName
             address1
             address2
             city
             province
+            provinceCode
             zip
             country
+            countryCodeV2
             phone
           }
           shippingAddress {
             company
+            name
             firstName
             lastName
             address1
             address2
             city
             province
+            provinceCode
             zip
             country
+            countryCodeV2
             phone
           }
           currentSubtotalPriceSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
@@ -1177,26 +1340,22 @@ export async function fetchSalesOrderDocument(
     customerId: order.customer?.id ?? null,
     customerName,
     billing: {
-      company: order.billingAddress?.company || "",
-      name: personName(order.billingAddress) || customerName,
+      company: order.billingAddress?.company?.trim() || "",
+      name: personName(order.billingAddress),
       address: formatAddress(order.billingAddress),
-      phone: order.billingAddress?.phone || order.phone || "",
-      email: order.email || "",
+      phone: order.billingAddress?.phone?.trim() || "",
+      email: order.billingAddress ? order.email?.trim() || "" : "",
+      ...emptyPartyTaxFields(),
     },
     shipping: {
-      company: order.shippingAddress?.company || "",
-      name: personName(order.shippingAddress) || customerName,
+      company: order.shippingAddress?.company?.trim() || "",
+      name: personName(order.shippingAddress),
       address: formatAddress(order.shippingAddress),
-      phone: order.shippingAddress?.phone || order.phone || "",
-      email: order.email || "",
+      phone: order.shippingAddress?.phone?.trim() || "",
+      email: order.shippingAddress ? order.email?.trim() || "" : "",
+      ...emptyPartyTaxFields(),
     },
-    customer: {
-      company: order.billingAddress?.company || "",
-      name: customerName,
-      address: formatAddress(order.billingAddress),
-      phone: order.phone || order.billingAddress?.phone || "",
-      email: order.email || "",
-    },
+    customer: resolveCustomerPartyFromOrder(order, customerName),
     terms: "Due on Receipt",
     orderNote: (order.note || "").trim(),
     lineItems,
