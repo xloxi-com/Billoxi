@@ -1,8 +1,31 @@
 /**
- * Show Download return / Print return only when the order has a Shopify return
- * (or was already converted to a Billoxi return document).
+ * Show Download return / Print return only when:
+ * - shop has a paid Billoxi plan (not FREE), and
+ * - the order has a Shopify return (or was already converted to a Billoxi return).
  */
+async function hasPaidPlan() {
+  try {
+    const idToken = await shopify.auth.idToken();
+    if (!idToken) return false;
+    const res = await fetch("/extension-plan-access", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return false;
+    const payload = await res.json();
+    return Boolean(payload?.ok && payload?.hasActivePlan);
+  } catch (err) {
+    console.error("[billoxi] plan should-render failed", err);
+    return false;
+  }
+}
+
 export default async () => {
+  if (!(await hasPaidPlan())) return { display: false };
+
   const orderGid = shopify?.data?.selected?.[0]?.id;
   if (!orderGid) return { display: false };
 
