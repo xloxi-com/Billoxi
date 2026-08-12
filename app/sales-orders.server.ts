@@ -96,6 +96,12 @@ type RawSalesOrder = {
   customer: {
     displayName: string;
     defaultAddress?: { company?: string | null } | null;
+    companyContactProfiles?: Array<{
+      company?: { name?: string | null } | null;
+    } | null> | null;
+  } | null;
+  purchasingEntity?: {
+    company?: { name?: string | null } | null;
   } | null;
   billingAddress?: { company?: string | null } | null;
   shippingAddress?: { company?: string | null } | null;
@@ -281,6 +287,18 @@ const SALES_ORDERS_QUERY = `#graphql
           defaultAddress {
             company
           }
+          companyContactProfiles {
+            company {
+              name
+            }
+          }
+        }
+        purchasingEntity {
+          ... on PurchasingCompany {
+            company {
+              name
+            }
+          }
         }
         billingAddress {
           company
@@ -343,6 +361,18 @@ const SALES_ORDERS_BY_IDS_QUERY = `#graphql
           displayName
           defaultAddress {
             company
+          }
+          companyContactProfiles {
+            company {
+              name
+            }
+          }
+        }
+        purchasingEntity {
+          ... on PurchasingCompany {
+            company {
+              name
+            }
           }
         }
         billingAddress {
@@ -814,13 +844,24 @@ function fulfillmentBadge(status: string): Pick<
 }
 
 function resolveCompany(order: RawSalesOrder) {
-  const billing = order.billingAddress?.company?.trim() || "";
-  if (billing) return billing;
+  const fromOrder = order.purchasingEntity?.company?.name?.trim() || "";
+  if (fromOrder) return fromOrder;
 
-  const shipping = order.shippingAddress?.company?.trim() || "";
-  if (shipping) return shipping;
+  for (const profile of order.customer?.companyContactProfiles ?? []) {
+    const name = profile?.company?.name?.trim() || "";
+    if (name) return name;
+  }
 
-  return order.customer?.defaultAddress?.company?.trim() || "—";
+  const fromBilling = order.billingAddress?.company?.trim() || "";
+  if (fromBilling) return fromBilling;
+
+  const fromShipping = order.shippingAddress?.company?.trim() || "";
+  if (fromShipping) return fromShipping;
+
+  const fromDefault = order.customer?.defaultAddress?.company?.trim() || "";
+  if (fromDefault) return fromDefault;
+
+  return "—";
 }
 
 function resolveBalanceDue(order: RawSalesOrder): Money {
@@ -1122,6 +1163,7 @@ export async function loadSalesOrdersPage(
     params.returnFilter,
     params.creditNoteFilter,
     params.sortSelected,
+    "company-b2b-billing-v1",
   ].join("|");
 
   const now = Date.now();

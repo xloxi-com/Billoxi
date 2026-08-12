@@ -70,6 +70,12 @@ type RawDraftOrder = {
   customer: {
     displayName: string;
     defaultAddress?: { company?: string | null } | null;
+    companyContactProfiles?: Array<{
+      company?: { name?: string | null } | null;
+    } | null> | null;
+  } | null;
+  purchasingEntity?: {
+    company?: { name?: string | null } | null;
   } | null;
   billingAddress?: { company?: string | null } | null;
   shippingAddress?: { company?: string | null } | null;
@@ -125,6 +131,18 @@ const DRAFT_ORDERS_QUERY = `#graphql
           defaultAddress {
             company
           }
+          companyContactProfiles {
+            company {
+              name
+            }
+          }
+        }
+        purchasingEntity {
+          ... on PurchasingCompany {
+            company {
+              name
+            }
+          }
         }
         billingAddress {
           company
@@ -176,12 +194,21 @@ function formatDate(iso: string): string {
 }
 
 function resolveCompany(order: RawDraftOrder): string {
-  return (
-    order.billingAddress?.company ||
-    order.shippingAddress?.company ||
-    order.customer?.defaultAddress?.company ||
-    ""
-  );
+  const fromOrder = order.purchasingEntity?.company?.name?.trim() || "";
+  if (fromOrder) return fromOrder;
+
+  for (const profile of order.customer?.companyContactProfiles ?? []) {
+    const name = profile?.company?.name?.trim() || "";
+    if (name) return name;
+  }
+
+  const fromBilling = order.billingAddress?.company?.trim() || "";
+  if (fromBilling) return fromBilling;
+
+  const fromShipping = order.shippingAddress?.company?.trim() || "";
+  if (fromShipping) return fromShipping;
+
+  return order.customer?.defaultAddress?.company?.trim() || "";
 }
 
 function formatDraftStatus(status: string | null | undefined): string {
