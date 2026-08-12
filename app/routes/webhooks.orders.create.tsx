@@ -3,7 +3,7 @@ import { authenticate } from "../shopify.server";
 import { assertValidShopifyWebhookHmac } from "../webhook-hmac.server";
 import { numberingFromSeries } from "../number-series";
 import { resolveSalesOrderTemplateId } from "../sales-order-ids";
-import { allocateSalesOrderDocumentNumber, hasCompletedSalesOrderNumberSync } from "../sales-order-number.server";
+import { allocateSalesOrderDocumentNumber, hasCompletedSalesOrderNumberSync, waitForSalesOrderNumberSync } from "../sales-order-number.server";
 import {
   loadNumberSeriesEntryForShop,
   loadSelectedTemplateForShop,
@@ -55,6 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const templateId = resolveSalesOrderTemplateId(selectedTemplateIdRaw);
 
     if (series.entryMode !== "manual") {
+      await waitForSalesOrderNumberSync(shop);
       // Before Settings Sync, do not assign — Sync numbers oldest → newest.
       if (await hasCompletedSalesOrderNumberSync(shop)) {
         const documentNumber = await allocateSalesOrderDocumentNumber(

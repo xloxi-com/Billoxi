@@ -57,6 +57,7 @@ import {
 import {
   allocateSalesOrderDocumentNumber,
   hasCompletedSalesOrderNumberSync,
+  waitForSalesOrderNumberSync,
   getSalesOrderDocumentDetails,
   getSalesOrderDocumentNumbersByOrderGids,
   updateSalesOrderDocumentDetails,
@@ -520,6 +521,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         "sales-order",
       );
       if (soSeries.entryMode !== "manual") {
+        await waitForSalesOrderNumberSync(session.shop);
         if (await hasCompletedSalesOrderNumberSync(session.shop)) {
           const assigned = await allocateSalesOrderDocumentNumber(
             session.shop,

@@ -50,6 +50,10 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
     email: "xloxi@acme.example",
     taxId: "TAX-998877",
     vatNumber: "",
+    metafields: {
+      "custom.vat": "GB123456789",
+      "custom.b2b_customer_data": "tier: Gold, account: AC-1001",
+    },
   },
   terms: "Due on Receipt",
   orderNote: "Please gift-wrap and include the packing slip.",

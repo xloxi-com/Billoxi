@@ -10,7 +10,7 @@ import {
   widenStartingNumberPad,
   type NumberSeriesEntry,
 } from "./number-series";
-import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
+import { loadNumberSeriesEntryForShop, raiseNumberSeriesNextSequence } from "./shop-settings.server";
 import { getInvoicedMetaByOrderGids } from "./order-invoice-status.server";
 
 type OrderGidRow = { orderGid: string };
@@ -366,6 +366,7 @@ export async function ensureCreditNoteDocumentNumbers(
         }
       }
     }
+    await raiseNumberSeriesNextSequence(shop, "credit-note", nextSequence);
   }
 
   return numbers;
@@ -436,6 +437,7 @@ export async function markOrderCreditNote(
               AND "orderGid" = ${orderGid}
           `;
           if (Number(updated) > 0) {
+            await raiseNumberSeriesNextSequence(shop, "credit-note", sequence + 1);
             return existing[0].documentNumber || documentNumber;
           }
           continue;
@@ -462,6 +464,7 @@ export async function markOrderCreditNote(
             CURRENT_TIMESTAMP
           )
         `;
+        await raiseNumberSeriesNextSequence(shop, "credit-note", sequence + 1);
         return documentNumber;
       } catch (error) {
         const isUnique =

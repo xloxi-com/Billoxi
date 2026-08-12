@@ -109,6 +109,9 @@ import {
   normalizeAddressBlockOrder,
   DEFAULT_ADDRESS_BLOCK_ORDER,
   resolveDocumentNotes,
+  customerMetafieldDetailKey,
+  isCustomerMetafieldDetailKey,
+  parseCustomerMetafieldDetailKey,
 } from "../sales-order-document";
 import {
   syncNumberCounter,
@@ -179,16 +182,14 @@ type SelectedCustomField = {
 
 type CustomerDetailKey =
   | "company"
-  | "companyId"
   | "name"
   | "address"
-  | "taxId"
   | "vatNumber"
   | "phone"
   | "email";
 
 type CustomerDetailField = {
-  key: CustomerDetailKey;
+  key: string;
   enabled: boolean;
   label: string;
 };
@@ -725,28 +726,22 @@ const defaultShippingDetails: CustomerDetailField[] = [
 
 const defaultCustomerBlockDetails: CustomerDetailField[] = [
   { key: "company", enabled: true, label: "Company" },
-  { key: "companyId", enabled: true, label: "Company ID" },
   { key: "name", enabled: true, label: "Name" },
   { key: "address", enabled: true, label: "Address" },
-  { key: "taxId", enabled: true, label: "Tax ID" },
   { key: "phone", enabled: true, label: "Phone" },
   { key: "email", enabled: true, label: "Email" },
 ];
 
 const customerDetailFallbacks: Record<CustomerDetailKey, string> = {
   company: "Company",
-  companyId: "Company ID",
   name: "First name and last name",
   address: "Address",
-  taxId: "Tax ID",
   vatNumber: "VAT number",
   phone: "Phone",
   email: "Email",
 };
 
 const customerDetailKeysWithLabel: ReadonlySet<CustomerDetailKey> = new Set([
-  "companyId",
-  "taxId",
   "phone",
   "email",
 ]);
@@ -760,9 +755,10 @@ function isCustomerDetailKey(value: unknown): value is CustomerDetailKey {
 function normalizeCustomerDetails(
   value: unknown,
   defaults: CustomerDetailField[],
+  options?: { allowMetafieldKeys?: boolean },
 ): CustomerDetailField[] {
   if (Array.isArray(value)) {
-    const seen = new Set<CustomerDetailKey>();
+    const seen = new Set<string>();
     const normalized: CustomerDetailField[] = [];
     let mergedName: CustomerDetailField | null = null;
 
@@ -788,9 +784,14 @@ function normalizeCustomerDetails(
         continue;
       }
 
-      if (!isCustomerDetailKey(field.key) || seen.has(field.key)) continue;
-      // Keep only keys that belong in this section's defaults.
-      if (!defaults.some((item) => item.key === field.key)) continue;
+      if (!field.key || seen.has(field.key)) continue;
+      const isMetafield =
+        options?.allowMetafieldKeys && isCustomerMetafieldDetailKey(field.key);
+      if (!isMetafield) {
+        if (!isCustomerDetailKey(field.key)) continue;
+        // Keep only keys that belong in this section's defaults.
+        if (!defaults.some((item) => item.key === field.key)) continue;
+      }
       seen.add(field.key);
       normalized.push({
         key: field.key,
@@ -798,7 +799,9 @@ function normalizeCustomerDetails(
         label:
           typeof field.label === "string" && field.label.trim()
             ? field.label
-            : customerDetailFallbacks[field.key],
+            : isCustomerDetailKey(field.key)
+              ? customerDetailFallbacks[field.key]
+              : field.key,
       });
     }
 
@@ -1350,6 +1353,7 @@ function mergeSettings(
     customerBlockDetails: normalizeCustomerDetails(
       input.customerBlockDetails,
       defaultCustomerBlockDetails,
+      { allowMetafieldKeys: true },
     ),
     addressBlockOrder: normalizeAddressBlockOrder(
       (input as { addressBlockOrder?: unknown }).addressBlockOrder,
@@ -1663,6 +1667,60 @@ function isMerchantCreatedMetafield(node: MetafieldDefinitionNode): boolean {
   return true;
 }
 
+function isCustomerMetafieldSource(source: CustomFieldSource) {
+  return source.ownerType === "CUSTOMER" || source.ownerType === "Customer";
+}
+
+function syncCustomerMetafieldFields(
+  current: CustomerDetailField[],
+  sources: CustomFieldSource[],
+): CustomerDetailField[] {
+  const standardKeys = new Set(
+    defaultCustomerBlockDetails.map((field) => field.key),
+  );
+  const standard = current.filter((field) => standardKeys.has(field.key));
+  const existingMeta = new Map(
+    current
+      .filter((field) => isCustomerMetafieldDetailKey(field.key))
+      .map((field) => [field.key, field]),
+  );
+  const metaFields = sources
+    .filter(isCustomerMetafieldSource)
+    .map((source) => {
+      const namespace = source.namespace?.trim() || "";
+      const key = source.key?.trim() || "";
+      if (!namespace || !key) return null;
+      const detailKey = customerMetafieldDetailKey(namespace, key);
+      const existing = existingMeta.get(detailKey);
+      return {
+        key: detailKey,
+        enabled: existing?.enabled ?? true,
+        label: existing?.label?.trim() || source.name,
+      } satisfies CustomerDetailField;
+    })
+    .filter((field): field is CustomerDetailField => field != null);
+
+  return [...standard, ...metaFields];
+}
+
+function customerDetailFieldTitle(
+  field: CustomerDetailField,
+  sources: CustomFieldSource[],
+) {
+  if (isCustomerDetailKey(field.key)) return customerDetailFallbacks[field.key];
+  if (isCustomerMetafieldDetailKey(field.key)) {
+    const parsed = parseCustomerMetafieldDetailKey(field.key);
+    if (parsed) {
+      const source = sources.find(
+        (entry) =>
+          entry.namespace === parsed.namespace && entry.key === parsed.key,
+      );
+      return source?.name || field.label || `${parsed.namespace}.${parsed.key}`;
+    }
+  }
+  return field.label || field.key;
+}
+
 function getTemplate(documentType: string | undefined, templateId: string | undefined) {
   if (!documentType || !templateId) return null;
   const template = templateDefinitions[templateId];
@@ -1937,6 +1995,10 @@ export default function TemplateEditorPage() {
   ]);
 
   const customFieldsLoading = customFieldsRefreshing;
+  const customerMetafieldSources = useMemo(
+    () => customFieldSources.filter(isCustomerMetafieldSource),
+    [customFieldSources],
+  );
   const defaultAppearance = useMemo(() => {
     const preset = findTemplatePreset(data.templateId) ?? null;
     return {
@@ -2032,6 +2094,30 @@ export default function TemplateEditorPage() {
   const [openHeaderPanel, setOpenHeaderPanel] = useState<string | null>(
     "organization",
   );
+
+  useEffect(() => {
+    if (!customFieldsLoadRequested) {
+      refreshCustomFieldSources();
+    }
+  }, [customFieldsLoadRequested]);
+
+  useEffect(() => {
+    if (customerMetafieldSources.length === 0) return;
+    setSettings((current) => {
+      const nextDetails = syncCustomerMetafieldFields(
+        current.customerBlockDetails,
+        customerMetafieldSources,
+      );
+      if (
+        JSON.stringify(nextDetails) ===
+        JSON.stringify(current.customerBlockDetails)
+      ) {
+        return current;
+      }
+      return { ...current, customerBlockDetails: nextDetails };
+    });
+  }, [customerMetafieldSources]);
+
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [draggingField, setDraggingField] = useState<{
     section: AddressSection;
@@ -2053,7 +2139,7 @@ export default function TemplateEditorPage() {
   >(null);
   const [expandedLabel, setExpandedLabel] = useState<{
     section: AddressSection;
-    key: CustomerDetailKey;
+    key: string;
   } | null>(null);
   const isSaving = fetcher.state !== "idle";
   const selectedTab = Math.max(
@@ -2212,6 +2298,7 @@ export default function TemplateEditorPage() {
         customerBlockDetails: normalizeCustomerDetails(
           current.customerBlockDetails,
           defaultCustomerBlockDetails,
+          { allowMetafieldKeys: true },
         ),
       };
       // Separate clone so Discard can restore without sharing the live object.
@@ -2610,7 +2697,7 @@ export default function TemplateEditorPage() {
 
               <Text as="p" variant="bodySm" tone="subdued">
                 {section === "customer"
-                  ? "Drag to reorder fields. Expand Company ID, Tax ID, Phone, or Email to set an optional custom label."
+                  ? "Drag to reorder fields. Expand Phone or Email to set an optional custom label. Customer metafields appear in a separate list below."
                   : "Drag to reorder fields. Expand Phone or Email to set an optional custom label."}
               </Text>
 
@@ -2632,186 +2719,259 @@ export default function TemplateEditorPage() {
                 />
               </FormLayout>
 
-              <BlockStack gap="200">
-                <Text as="h4" variant="headingSm">
-                  Visible fields
-                </Text>
-                <Box
-                  borderWidth="025"
-                  borderColor="border"
-                  borderRadius="200"
-                  background="bg-surface"
-                  overflowX="hidden"
-                  overflowY="hidden"
-                >
-                  <BlockStack gap="0">
-                    {fields.map((field, index) => {
-                      const supportsLabel = customerDetailKeysWithLabel.has(
-                        field.key,
-                      );
-                      const isExpanded =
-                        supportsLabel &&
-                        expandedLabel?.section === section &&
-                        expandedLabel.key === field.key;
-                      const fieldPanelId = `${section}-field-${field.key}`;
-                      const isLast = index === fields.length - 1;
-                      const isDragging =
-                        draggingField?.section === section &&
-                        draggingField.index === index;
-                      const isDropTarget =
-                        dragOverField?.section === section &&
-                        dragOverField.index === index &&
-                        !(
-                          draggingField?.section === section &&
-                          draggingField.index === index
-                        );
+              {(() => {
+                const standardEntries = fields
+                  .map((field, index) => ({ field, index }))
+                  .filter(
+                    ({ field }) => !isCustomerMetafieldDetailKey(field.key),
+                  );
+                const metafieldEntries =
+                  section === "customer"
+                    ? fields
+                        .map((field, index) => ({ field, index }))
+                        .filter(({ field }) =>
+                          isCustomerMetafieldDetailKey(field.key),
+                        )
+                    : [];
+                const allowedDropIndexes = new Set(
+                  (draggingField?.section === section
+                    ? isCustomerMetafieldDetailKey(
+                        fields[draggingField.index]?.key || "",
+                      )
+                      ? metafieldEntries
+                      : standardEntries
+                    : standardEntries
+                  ).map((entry) => entry.index),
+                );
 
-                      return (
-                        <div
-                          key={field.key}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            if (
-                              dragOverField?.section !== section ||
-                              dragOverField.index !== index
-                            ) {
-                              setDragOverField({ section, index });
-                            }
-                          }}
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            if (
-                              draggingField &&
-                              draggingField.section === section
-                            ) {
-                              moveAddressField(
-                                section,
-                                draggingField.index,
-                                index,
-                              );
-                            }
-                            setDraggingField(null);
-                            setDragOverField(null);
-                          }}
-                        >
-                          <Box
-                            background={
-                              isDropTarget
-                                ? "bg-surface-selected"
-                                : isExpanded
-                                  ? "bg-surface-secondary"
-                                  : undefined
-                            }
-                            opacity={isDragging ? "0.55" : undefined}
+                const renderFieldList = (
+                  entries: Array<{
+                    field: CustomerDetailField;
+                    index: number;
+                  }>,
+                ) => (
+                  <Box
+                    borderWidth="025"
+                    borderColor="border"
+                    borderRadius="200"
+                    background="bg-surface"
+                    overflowX="hidden"
+                    overflowY="hidden"
+                  >
+                    <BlockStack gap="0">
+                      {entries.map(({ field, index }, rowIndex) => {
+                        const fieldTitle =
+                          section === "customer"
+                            ? customerDetailFieldTitle(
+                                field,
+                                customerMetafieldSources,
+                              )
+                            : isCustomerDetailKey(field.key)
+                              ? customerDetailFallbacks[field.key]
+                              : field.label || field.key;
+                        const supportsLabel =
+                          customerDetailKeysWithLabel.has(
+                            field.key as CustomerDetailKey,
+                          ) ||
+                          (section === "customer" &&
+                            isCustomerMetafieldDetailKey(field.key));
+                        const isExpanded =
+                          supportsLabel &&
+                          expandedLabel?.section === section &&
+                          expandedLabel.key === field.key;
+                        const fieldPanelId = `${section}-field-${field.key}`;
+                        const isLast = rowIndex === entries.length - 1;
+                        const isDragging =
+                          draggingField?.section === section &&
+                          draggingField.index === index;
+                        const isDropTarget =
+                          dragOverField?.section === section &&
+                          dragOverField.index === index &&
+                          !isDragging;
+
+                        return (
+                          <div
+                            key={field.key}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              if (!allowedDropIndexes.has(index)) return;
+                              if (
+                                dragOverField?.section !== section ||
+                                dragOverField.index !== index
+                              ) {
+                                setDragOverField({ section, index });
+                              }
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (
+                                draggingField &&
+                                draggingField.section === section &&
+                                allowedDropIndexes.has(index)
+                              ) {
+                                moveAddressField(
+                                  section,
+                                  draggingField.index,
+                                  index,
+                                );
+                              }
+                              setDraggingField(null);
+                              setDragOverField(null);
+                            }}
                           >
-                            <Box padding="300">
-                              <InlineStack
-                                align="space-between"
-                                blockAlign="center"
-                                wrap={false}
-                                gap="300"
-                              >
+                            <Box
+                              background={
+                                isDropTarget
+                                  ? "bg-surface-selected"
+                                  : isExpanded
+                                    ? "bg-surface-secondary"
+                                    : undefined
+                              }
+                              opacity={isDragging ? "0.55" : undefined}
+                            >
+                              <Box padding="300">
                                 <InlineStack
-                                  gap="200"
+                                  align="space-between"
                                   blockAlign="center"
                                   wrap={false}
+                                  gap="300"
                                 >
-                                  <div
-                                    className="template-editor__drag-handle"
-                                    draggable
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-label={`Drag to reorder ${customerDetailFallbacks[field.key]}`}
-                                    onDragStart={(event) => {
-                                      event.dataTransfer.effectAllowed =
-                                        "move";
-                                      event.dataTransfer.setData(
-                                        "text/plain",
-                                        String(index),
-                                      );
-                                      setDraggingField({ section, index });
-                                    }}
-                                    onDragEnd={() => {
-                                      setDraggingField(null);
-                                      setDragOverField(null);
-                                    }}
+                                  <InlineStack
+                                    gap="200"
+                                    blockAlign="center"
+                                    wrap={false}
                                   >
-                                    <Icon
-                                      source={DragHandleIcon}
-                                      tone="subdued"
-                                    />
-                                  </div>
-                                  <Checkbox
-                                    label={`Show ${customerDetailFallbacks[field.key]}`}
-                                    checked={field.enabled}
-                                    onChange={(enabled) =>
-                                      updateAddressField(section, index, {
-                                        enabled,
-                                      })
-                                    }
-                                  />
-                                </InlineStack>
-                                {supportsLabel ? (
-                                  <Button
-                                    variant="tertiary"
-                                    icon={
-                                      isExpanded
-                                        ? ChevronUpIcon
-                                        : ChevronDownIcon
-                                    }
-                                    accessibilityLabel={
-                                      isExpanded
-                                        ? `Hide label for ${customerDetailFallbacks[field.key]}`
-                                        : `Edit label for ${customerDetailFallbacks[field.key]}`
-                                    }
-                                    ariaExpanded={isExpanded}
-                                    ariaControls={fieldPanelId}
-                                    onClick={() =>
-                                      setExpandedLabel((current) =>
-                                        current?.section === section &&
-                                        current.key === field.key
-                                          ? null
-                                          : { section, key: field.key },
-                                      )
-                                    }
-                                  />
-                                ) : null}
-                              </InlineStack>
-
-                              {supportsLabel ? (
-                                <Collapsible
-                                  id={fieldPanelId}
-                                  open={isExpanded}
-                                >
-                                  <Box paddingBlockStart="300">
-                                    <Bleed marginInline="0">
-                                      <TextField
-                                        label="Custom label"
-                                        value={field.label}
-                                        placeholder={
-                                          customerDetailFallbacks[field.key]
-                                        }
-                                        onChange={(label) =>
-                                          updateAddressField(section, index, {
-                                            label,
-                                          })
-                                        }
-                                        autoComplete="off"
-                                        helpText="Optional. Leave blank to use the default name."
+                                    <div
+                                      className="template-editor__drag-handle"
+                                      draggable
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label={`Drag to reorder ${fieldTitle}`}
+                                      onDragStart={(event) => {
+                                        event.dataTransfer.effectAllowed =
+                                          "move";
+                                        event.dataTransfer.setData(
+                                          "text/plain",
+                                          String(index),
+                                        );
+                                        setDraggingField({ section, index });
+                                      }}
+                                      onDragEnd={() => {
+                                        setDraggingField(null);
+                                        setDragOverField(null);
+                                      }}
+                                    >
+                                      <Icon
+                                        source={DragHandleIcon}
+                                        tone="subdued"
                                       />
-                                    </Bleed>
-                                  </Box>
-                                </Collapsible>
-                              ) : null}
+                                    </div>
+                                    <Checkbox
+                                      label={`Show ${fieldTitle}`}
+                                      checked={field.enabled}
+                                      onChange={(enabled) =>
+                                        updateAddressField(section, index, {
+                                          enabled,
+                                        })
+                                      }
+                                    />
+                                  </InlineStack>
+                                  {supportsLabel ? (
+                                    <Button
+                                      variant="tertiary"
+                                      icon={
+                                        isExpanded
+                                          ? ChevronUpIcon
+                                          : ChevronDownIcon
+                                      }
+                                      accessibilityLabel={
+                                        isExpanded
+                                          ? `Hide label for ${fieldTitle}`
+                                          : `Edit label for ${fieldTitle}`
+                                      }
+                                      ariaExpanded={isExpanded}
+                                      ariaControls={fieldPanelId}
+                                      onClick={() =>
+                                        setExpandedLabel((current) =>
+                                          current?.section === section &&
+                                          current.key === field.key
+                                            ? null
+                                            : { section, key: field.key },
+                                        )
+                                      }
+                                    />
+                                  ) : null}
+                                </InlineStack>
+
+                                {supportsLabel ? (
+                                  <Collapsible
+                                    id={fieldPanelId}
+                                    open={isExpanded}
+                                  >
+                                    <Box paddingBlockStart="300">
+                                      <Bleed marginInline="0">
+                                        <TextField
+                                          label="Custom label"
+                                          value={field.label}
+                                          placeholder={fieldTitle}
+                                          onChange={(label) =>
+                                            updateAddressField(
+                                              section,
+                                              index,
+                                              { label },
+                                            )
+                                          }
+                                          autoComplete="off"
+                                          helpText="Optional. Leave blank to use the default name."
+                                        />
+                                      </Bleed>
+                                    </Box>
+                                  </Collapsible>
+                                ) : null}
+                              </Box>
+                              {isLast ? null : <Divider />}
                             </Box>
-                            {isLast ? null : <Divider />}
-                          </Box>
-                        </div>
-                      );
-                    })}
+                          </div>
+                        );
+                      })}
+                    </BlockStack>
+                  </Box>
+                );
+
+                return (
+                  <BlockStack gap="400">
+                    <BlockStack gap="200">
+                      <Text as="h4" variant="headingSm">
+                        Visible fields
+                      </Text>
+                      {renderFieldList(standardEntries)}
+                    </BlockStack>
+                    {section === "customer" ? (
+                      <BlockStack gap="200">
+                        <Text as="h4" variant="headingSm">
+                          Customer metafields
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Shopify customer metafields appear here automatically.
+                          Expand a field to set an optional custom label.
+                        </Text>
+                        {customFieldsLoading && metafieldEntries.length === 0 ? (
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Loading customer metafields…
+                          </Text>
+                        ) : metafieldEntries.length > 0 ? (
+                          renderFieldList(metafieldEntries)
+                        ) : customFieldsLoadRequested ? (
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            No customer metafields found. Create them in Shopify
+                            Admin under Customer metafield definitions.
+                          </Text>
+                        ) : null}
+                      </BlockStack>
+                    ) : null}
                   </BlockStack>
-                </Box>
-              </BlockStack>
+                );
+              })()}
             </BlockStack>
           </div>
         </Collapsible>

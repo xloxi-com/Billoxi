@@ -531,6 +531,7 @@ export type SalesOrderDocumentData = {
     email: string;
     taxId: string;
     vatNumber: string;
+    metafields?: Record<string, string>;
   };
   shipping: {
     company: string;
@@ -541,6 +542,7 @@ export type SalesOrderDocumentData = {
     email: string;
     taxId: string;
     vatNumber: string;
+    metafields?: Record<string, string>;
   };
   /** Shopify customer / B2B company details for the Customer Details column. */
   customer: {
@@ -552,6 +554,8 @@ export type SalesOrderDocumentData = {
     email: string;
     taxId: string;
     vatNumber: string;
+    /** Customer metafield values keyed by `namespace.key`. */
+    metafields: Record<string, string>;
   };
   terms: string;
   /** Shopify Admin order note (`order.note`), when present. */
@@ -2898,6 +2902,92 @@ export function isCustomTableColumnKey(key: string): boolean {
   return key === "custom" || key.startsWith("custom:");
 }
 
+const CUSTOMER_METAFIELD_DETAIL_PREFIX = "metafield:";
+
+/** Customer Details field backed by a Shopify customer metafield definition. */
+export function isCustomerMetafieldDetailKey(key: string): boolean {
+  return key.startsWith(CUSTOMER_METAFIELD_DETAIL_PREFIX);
+}
+
+export function customerMetafieldDetailKey(namespace: string, key: string) {
+  return `${CUSTOMER_METAFIELD_DETAIL_PREFIX}${namespace}.${key}`;
+}
+
+export function parseCustomerMetafieldDetailKey(
+  detailKey: string,
+): { namespace: string; key: string } | null {
+  if (!isCustomerMetafieldDetailKey(detailKey)) return null;
+  const rest = detailKey.slice(CUSTOMER_METAFIELD_DETAIL_PREFIX.length);
+  const dot = rest.indexOf(".");
+  if (dot <= 0 || dot >= rest.length - 1) return null;
+  return {
+    namespace: rest.slice(0, dot),
+    key: rest.slice(dot + 1),
+  };
+}
+
+export function customerMetafieldLookupKey(namespace: string, key: string) {
+  return `${namespace}.${key}`;
+}
+
+export function formatMetafieldDisplayValue(
+  value: string | null | undefined,
+  type?: string | null,
+): string {
+  const raw = value?.trim() || "";
+  if (!raw) return "";
+  const typeName = (type || "").toLowerCase();
+  if (typeName.includes("json")) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return Object.entries(parsed as Record<string, unknown>)
+          .map(([entryKey, entryValue]) => `${entryKey}: ${String(entryValue)}`)
+          .join(", ");
+      }
+      if (Array.isArray(parsed)) {
+        return parsed.map((entry) => String(entry)).join(", ");
+      }
+    } catch {
+      // Fall back to raw value.
+    }
+  }
+  return raw;
+}
+
+export function buildCustomerMetafieldValueMap(
+  nodes:
+    | ReadonlyArray<{
+        namespace?: string | null;
+        key?: string | null;
+        value?: string | null;
+        type?: string | null;
+      } | null>
+    | null
+    | undefined,
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const node of nodes ?? []) {
+    if (!node) continue;
+    const namespace = node.namespace?.trim();
+    const key = node.key?.trim();
+    if (!namespace || !key) continue;
+    const formatted = formatMetafieldDisplayValue(node.value, node.type);
+    if (!formatted) continue;
+    map[customerMetafieldLookupKey(namespace, key)] = formatted;
+  }
+  return map;
+}
+
+export function resolveCustomerMetafieldValue(
+  party: { metafields?: Record<string, string> },
+  detailKey: string,
+): string {
+  const parsed = parseCustomerMetafieldDetailKey(detailKey);
+  if (!parsed) return "";
+  return party.metafields?.[customerMetafieldLookupKey(parsed.namespace, parsed.key)] || "";
+}
+
 export type ExpandedTableColumn = TemplateEditorSettings["columns"][number] & {
   customFieldId?: string;
 };
@@ -4122,10 +4212,8 @@ export function defaultTemplateSettings(
     },
     customerBlockDetails: [
       { key: "company", enabled: true, label: "Company" },
-      { key: "companyId", enabled: true, label: "Company ID" },
       { key: "name", enabled: true, label: "Name" },
       { key: "address", enabled: true, label: "Address" },
-      { key: "taxId", enabled: true, label: "Tax ID" },
       { key: "phone", enabled: true, label: "Phone" },
       { key: "email", enabled: true, label: "Email" },
     ],
@@ -4538,7 +4626,7 @@ export function mergeTemplateSettings(
       ? input.shippingDetails
       : defaults.shippingDetails,
     customerBlockDetails: (() => {
-      const allowed = new Set(
+      const allowedStandard = new Set(
         defaults.customerBlockDetails.map((field) => field.key),
       );
       const source = Array.isArray(input.customerBlockDetails)
@@ -4554,8 +4642,9 @@ export function mergeTemplateSettings(
         if (
           !field ||
           typeof field.key !== "string" ||
-          !allowed.has(field.key) ||
-          seen.has(field.key)
+          seen.has(field.key) ||
+          (!allowedStandard.has(field.key) &&
+            !isCustomerMetafieldDetailKey(field.key))
         ) {
           continue;
         }

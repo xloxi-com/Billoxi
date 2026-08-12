@@ -24,6 +24,7 @@ import {
   CREDIT_NOTE_TEMPLATE_PRESETS,
   PACKING_SLIP_TEMPLATE_PRESETS,
   RETURN_TEMPLATE_PRESETS,
+  buildCustomerMetafieldValueMap,
   type CreditNoteRefundSource,
   type CreditNoteRefundLineSource,
   type SalesOrderDocumentData,
@@ -378,11 +379,36 @@ function personName(
   return address.name?.trim() || "";
 }
 
-type PurchasingCompanyEntity = {
-  company?: {
-    name?: string | null;
-    externalId?: string | null;
+type CompanyLocationAddress = {
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  province?: string | null;
+  zoneCode?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+  phone?: string | null;
+};
+
+type ShopifyCompanySource = {
+  name?: string | null;
+  externalId?: string | null;
+  locations?: {
+    nodes?: Array<{
+      taxSettings?: {
+        taxRegistrationId?: string | null;
+      } | null;
+      billingAddress?: CompanyLocationAddress | null;
+    } | null> | null;
   } | null;
+};
+
+type PurchasingCompanyEntity = {
+  company?: ShopifyCompanySource | null;
   contact?: {
     customer?: {
       displayName?: string | null;
@@ -392,22 +418,30 @@ type PurchasingCompanyEntity = {
     taxSettings?: {
       taxRegistrationId?: string | null;
     } | null;
-    billingAddress?: {
-      name?: string | null;
-      firstName?: string | null;
-      lastName?: string | null;
-      address1?: string | null;
-      address2?: string | null;
-      city?: string | null;
-      province?: string | null;
-      zoneCode?: string | null;
-      zip?: string | null;
-      country?: string | null;
-      countryCode?: string | null;
-      phone?: string | null;
-    } | null;
+    billingAddress?: CompanyLocationAddress | null;
   } | null;
 };
+
+type CustomerCompanyProfile = {
+  company?: ShopifyCompanySource | null;
+};
+
+function firstShopifyCompany(
+  purchasing: PurchasingCompanyEntity | null | undefined,
+  profiles: CustomerCompanyProfile[] | null | undefined,
+): ShopifyCompanySource | null {
+  const fromOrder = purchasing?.company;
+  if (fromOrder?.name?.trim() || fromOrder?.externalId?.trim()) {
+    return fromOrder;
+  }
+  for (const profile of profiles ?? []) {
+    const company = profile?.company;
+    if (company?.name?.trim() || company?.externalId?.trim()) {
+      return company;
+    }
+  }
+  return null;
+}
 
 export function emptyPartyTaxFields() {
   return {
@@ -421,7 +455,10 @@ export function resolveCustomerPartyFromOrder(
   order: {
     email?: string | null;
     phone?: string | null;
-    customer?: { displayName?: string | null } | null;
+    customer?: {
+      displayName?: string | null;
+      companyContactProfiles?: CustomerCompanyProfile[] | null;
+    } | null;
     billingAddress?: {
       company?: string | null;
       phone?: string | null;
@@ -444,41 +481,38 @@ export function resolveCustomerPartyFromOrder(
   customerName: string,
 ): SalesOrderDocumentData["customer"] {
   const purchasing = order.purchasingEntity as PurchasingCompanyEntity | null | undefined;
-  const company = purchasing?.company;
-  if (company?.name?.trim() || company?.externalId?.trim()) {
-    const locationAddress = purchasing?.location?.billingAddress;
-    return {
-      company: company.name?.trim() || "",
-      companyId: company.externalId?.trim() || "",
-      name:
-        purchasing?.contact?.customer?.displayName?.trim() ||
-        personName(locationAddress) ||
-        customerName,
-      address:
-        formatAddress(locationAddress).length > 0
-          ? formatAddress(locationAddress)
-          : formatAddress(order.billingAddress),
-      phone:
-        locationAddress?.phone?.trim() ||
-        order.phone?.trim() ||
-        order.billingAddress?.phone?.trim() ||
-        "",
-      email: order.email?.trim() || "",
-      taxId:
-        purchasing?.location?.taxSettings?.taxRegistrationId?.trim() || "",
-      vatNumber: "",
-    };
-  }
+  const company = firstShopifyCompany(
+    purchasing,
+    order.customer?.companyContactProfiles,
+  );
+  const locationAddress =
+    purchasing?.location?.billingAddress ||
+    company?.locations?.nodes?.find((node) => node?.billingAddress)?.billingAddress;
+  const companyName = company?.name?.trim() || "";
 
   return {
-    company: order.billingAddress?.company?.trim() || "",
-    companyId: "",
-    name: customerName,
-    address: formatAddress(order.billingAddress),
-    phone: order.phone?.trim() || order.billingAddress?.phone?.trim() || "",
+    company: companyName,
+    companyId: company?.externalId?.trim() || "",
+    name:
+      purchasing?.contact?.customer?.displayName?.trim() ||
+      personName(locationAddress) ||
+      customerName,
+    address:
+      formatAddress(locationAddress).length > 0
+        ? formatAddress(locationAddress)
+        : formatAddress(order.billingAddress),
+    phone:
+      locationAddress?.phone?.trim() ||
+      order.phone?.trim() ||
+      order.billingAddress?.phone?.trim() ||
+      "",
     email: order.email?.trim() || "",
-    taxId: "",
+    taxId:
+      purchasing?.location?.taxSettings?.taxRegistrationId?.trim() ||
+      company?.locations?.nodes?.[0]?.taxSettings?.taxRegistrationId?.trim() ||
+      "",
     vatNumber: "",
+    metafields: {},
   };
 }
 
@@ -657,7 +691,19 @@ type OrderNode = {
     formattedGateway?: string | null;
     manualPaymentGateway?: boolean | null;
   } | null> | null;
-  customer?: { id?: string | null; displayName?: string | null } | null;
+  customer?: {
+    id?: string | null;
+    displayName?: string | null;
+    metafields?: {
+      nodes?: Array<{
+        namespace?: string | null;
+        key?: string | null;
+        value?: string | null;
+        type?: string | null;
+      } | null> | null;
+    } | null;
+    companyContactProfiles?: CustomerCompanyProfile[] | null;
+  } | null;
   purchasingEntity?: Record<string, unknown> | null;
   billingAddress?: {
     company?: string | null;
@@ -1016,7 +1062,44 @@ export async function fetchSalesOrderDocument(
             formattedGateway
             manualPaymentGateway
           }
-          customer { id displayName }
+          customer {
+            id
+            displayName
+            metafields(first: 50) {
+              nodes {
+                namespace
+                key
+                value
+                type
+              }
+            }
+            companyContactProfiles {
+              company {
+                name
+                externalId
+                locations(first: 1) {
+                  nodes {
+                    taxSettings {
+                      taxRegistrationId
+                    }
+                    billingAddress {
+                      firstName
+                      lastName
+                      address1
+                      address2
+                      city
+                      province
+                      zoneCode
+                      zip
+                      country
+                      countryCode
+                      phone
+                    }
+                  }
+                }
+              }
+            }
+          }
           purchasingEntity {
             ... on PurchasingCompany {
               company {
@@ -1355,7 +1438,12 @@ export async function fetchSalesOrderDocument(
       email: order.shippingAddress ? order.email?.trim() || "" : "",
       ...emptyPartyTaxFields(),
     },
-    customer: resolveCustomerPartyFromOrder(order, customerName),
+    customer: {
+      ...resolveCustomerPartyFromOrder(order, customerName),
+      metafields: buildCustomerMetafieldValueMap(
+        order.customer?.metafields?.nodes,
+      ),
+    },
     terms: "Due on Receipt",
     orderNote: (order.note || "").trim(),
     lineItems,

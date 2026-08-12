@@ -6,6 +6,7 @@ import type {
 import { SORT_OPTIONS, parseSalesOrdersSearchParams } from "./sales-orders.server";
 import {
   buildTaxSummaryFromLineItems,
+  buildCustomerMetafieldValueMap,
   formatPercentOf,
   formatQuantityDisplay,
   reconcilePaymentAmounts,
@@ -337,7 +338,45 @@ type DraftOrderNode = {
   phone?: string | null;
   status?: string | null;
   currencyCode?: string | null;
-  customer?: { id?: string | null; displayName?: string | null } | null;
+  customer?: {
+    id?: string | null;
+    displayName?: string | null;
+    metafields?: {
+      nodes?: Array<{
+        namespace?: string | null;
+        key?: string | null;
+        value?: string | null;
+        type?: string | null;
+      } | null> | null;
+    } | null;
+    companyContactProfiles?: Array<{
+      company?: {
+        name?: string | null;
+        externalId?: string | null;
+        locations?: {
+          nodes?: Array<{
+            taxSettings?: {
+              taxRegistrationId?: string | null;
+            } | null;
+            billingAddress?: {
+              name?: string | null;
+              firstName?: string | null;
+              lastName?: string | null;
+              address1?: string | null;
+              address2?: string | null;
+              city?: string | null;
+              province?: string | null;
+              zoneCode?: string | null;
+              zip?: string | null;
+              country?: string | null;
+              countryCode?: string | null;
+              phone?: string | null;
+            } | null;
+          } | null> | null;
+        } | null;
+      } | null;
+    } | null> | null;
+  } | null;
   purchasingEntity?: Record<string, unknown> | null;
   billingAddress?: {
     company?: string | null;
@@ -394,7 +433,44 @@ const DRAFT_ORDER_DOCUMENT_QUERY = `#graphql
       phone
       status
       currencyCode
-      customer { id displayName }
+      customer {
+        id
+        displayName
+        metafields(first: 50) {
+          nodes {
+            namespace
+            key
+            value
+            type
+          }
+        }
+        companyContactProfiles {
+          company {
+            name
+            externalId
+            locations(first: 1) {
+              nodes {
+                taxSettings {
+                  taxRegistrationId
+                }
+                billingAddress {
+                  firstName
+                  lastName
+                  address1
+                  address2
+                  city
+                  province
+                  zoneCode
+                  zip
+                  country
+                  countryCode
+                  phone
+                }
+              }
+            }
+          }
+        }
+      }
       purchasingEntity {
         ... on PurchasingCompany {
           company {
@@ -786,7 +862,12 @@ export async function fetchDraftOrderDocument(
       email: order.shippingAddress ? order.email?.trim() || "" : "",
       ...emptyPartyTaxFields(),
     },
-    customer: resolveCustomerPartyFromOrder(order, customerName),
+    customer: {
+      ...resolveCustomerPartyFromOrder(order, customerName),
+      metafields: buildCustomerMetafieldValueMap(
+        order.customer?.metafields?.nodes,
+      ),
+    },
     terms: "Due on Receipt",
     orderNote: (order.note2 || "").trim(),
     lineItems,

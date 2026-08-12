@@ -43,8 +43,14 @@ function isMerchantCreatedMetafield(node: MetafieldDefinitionNode) {
   return true;
 }
 
-async function fetchAllProductMetafieldDefinitions(
-  admin: { graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response> },
+async function fetchMetafieldDefinitionsByOwnerType(
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: Record<string, unknown> },
+    ) => Promise<Response>;
+  },
+  ownerType: "PRODUCT" | "CUSTOMER",
 ): Promise<MetafieldDefinitionNode[]> {
   const nodes: MetafieldDefinitionNode[] = [];
   let cursor: string | null = null;
@@ -53,11 +59,11 @@ async function fetchAllProductMetafieldDefinitions(
   while (hasNextPage) {
     const response = await admin.graphql(
       `#graphql
-        query ProductCustomFieldSources($cursor: String) {
-          productMetafields: metafieldDefinitions(
+        query CustomFieldSources($cursor: String, $ownerType: MetafieldOwnerType!) {
+          metafieldDefinitions(
             first: 100
             after: $cursor
-            ownerType: PRODUCT
+            ownerType: $ownerType
           ) {
             nodes {
               id
@@ -75,11 +81,11 @@ async function fetchAllProductMetafieldDefinitions(
             }
           }
         }`,
-      { variables: { cursor } },
+      { variables: { cursor, ownerType } },
     );
     const payload = (await response.json()) as {
       data?: {
-        productMetafields?: {
+        metafieldDefinitions?: {
           nodes?: MetafieldDefinitionNode[];
           pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
         };
@@ -88,20 +94,39 @@ async function fetchAllProductMetafieldDefinitions(
     };
 
     if (payload.errors?.length) {
-      console.error("Custom field sources GraphQL errors:", payload.errors);
+      console.error(
+        `Custom field sources GraphQL errors (${ownerType}):`,
+        payload.errors,
+      );
       break;
     }
 
-    const page = payload.data?.productMetafields;
+    const page = payload.data?.metafieldDefinitions;
     nodes.push(...(page?.nodes ?? []));
     hasNextPage = Boolean(page?.pageInfo?.hasNextPage);
     cursor = page?.pageInfo?.endCursor ?? null;
     if (!hasNextPage || !cursor) break;
-    // Safety cap — unlikely a shop needs more than this in the picker.
     if (nodes.length >= 500) break;
   }
 
   return nodes;
+}
+
+function mapMetafieldDefinitions(
+  nodes: MetafieldDefinitionNode[],
+): CustomFieldSource[] {
+  return nodes
+    .filter(isMerchantCreatedMetafield)
+    .map((node) => ({
+      id: node.id,
+      kind: "metafield" as const,
+      name: node.name,
+      typeName: node.type?.name || "metafield",
+      namespace: node.namespace,
+      key: node.key,
+      ownerType: node.ownerType,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function fetchCustomFieldSources(
@@ -120,19 +145,14 @@ async function fetchCustomFieldSources(
   }
 
   try {
-    const nodes = await fetchAllProductMetafieldDefinitions(admin);
-    const value = nodes
-      .filter(isMerchantCreatedMetafield)
-      .map((node) => ({
-        id: node.id,
-        kind: "metafield" as const,
-        name: node.name,
-        typeName: node.type?.name || "metafield",
-        namespace: node.namespace,
-        key: node.key,
-        ownerType: node.ownerType,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const [productNodes, customerNodes] = await Promise.all([
+      fetchMetafieldDefinitionsByOwnerType(admin, "PRODUCT"),
+      fetchMetafieldDefinitionsByOwnerType(admin, "CUSTOMER"),
+    ]);
+    const value = [
+      ...mapMetafieldDefinitions(productNodes),
+      ...mapMetafieldDefinitions(customerNodes),
+    ];
 
     sourcesCache.set(shop, { expires: Date.now() + CACHE_TTL_MS, value });
     return value;

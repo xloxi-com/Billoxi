@@ -14,6 +14,7 @@ import {
 import {
   loadNumberSeriesEntryForShop,
   loadNumberSeriesForShop,
+  raiseNumberSeriesNextSequence,
   saveNumberSeriesForShop,
 } from "./shop-settings.server";
 import { unmarkOrdersDraft } from "./order-invoice-draft-status.server";
@@ -364,6 +365,7 @@ export async function ensureInvoiceDocumentNumbers(
         }
       }
     }
+    await raiseNumberSeriesNextSequence(shop, "invoice", nextSequence);
   }
 
   return numbers;
@@ -391,7 +393,10 @@ async function assignInvoiceNumberToOrder(
           AND "orderGid" = ${orderGid}
           AND "documentNumber" IS NULL
       `;
-      if (Number(updated) > 0) return documentNumber;
+      if (Number(updated) > 0) {
+        await raiseNumberSeriesNextSequence(shop, "invoice", sequence + 1);
+        return documentNumber;
+      }
 
       const existing = await prisma.$queryRaw<
         Array<{ documentNumber: string | null }>
@@ -484,6 +489,8 @@ export async function markOrderInvoiced(shop: string, orderGid: string) {
   const documentNumber =
     (await assignInvoiceNumberToOrder(shop, orderGid, series)) ||
     allocatedNumber;
+
+  await raiseNumberSeriesNextSequence(shop, "invoice", sequence + 1);
 
   // Issued invoice replaces any draft for this order.
   void unmarkOrdersDraft(shop, [orderGid]).catch(() => {});

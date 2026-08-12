@@ -145,7 +145,7 @@ import {
 } from "../customer-download-links";
 import { customerDownloadSnippetsForShop } from "../customer-download-links.server";
 import "../settings.css";
-import { RecommendedAppsSidebar } from "../components/recommended-apps";
+import { RecommendedAppsSidebar } from "../components/recommended-apps";  
 
 function getNumberSeriesAlreadyUsedError(
   current: NumberSeriesMap,

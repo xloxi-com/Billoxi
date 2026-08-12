@@ -20,6 +20,8 @@ import {
   resolveDisplayedUnitPrice,
   expandEnabledTableColumns,
   isCustomTableColumnKey,
+  isCustomerMetafieldDetailKey,
+  resolveCustomerMetafieldValue,
   itemBelowTitleMetaLines,
   resolveTaxSummaryLabel,
   taxSummaryDisplayRows,
@@ -107,7 +109,9 @@ function renderPartyFields(
               ? party.taxId
               : field.key === "vatNumber"
                 ? party.vatNumber
-                : "";
+                : isCustomerMetafieldDetailKey(field.key)
+                  ? resolveCustomerMetafieldValue(party, field.key)
+                  : "";
     if (!value) return null;
 
     return (

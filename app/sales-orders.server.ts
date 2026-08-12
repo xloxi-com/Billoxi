@@ -2,6 +2,7 @@ import {
   ensureSalesOrderDocumentNumbers,
   getSalesOrderDocumentNumbersByOrderGids,
   hasCompletedSalesOrderNumberSync,
+  waitForSalesOrderNumberSync,
 } from "./sales-order-number.server";
 import { syncSalesOrderNumbersForShop } from "./sales-order-number-sync.server";
 import {
@@ -1142,6 +1143,7 @@ export async function loadSalesOrdersPage(
           .filter((order) => !String(order.salesOrderNumber || "").trim())
           .map((order) => order.id);
         if (missingGids.length > 0) {
+          await waitForSalesOrderNumberSync(shop);
           const synced = await hasCompletedSalesOrderNumberSync(shop);
           if (synced) {
             const ensured = await ensureSalesOrderDocumentNumbers(
@@ -1377,6 +1379,7 @@ export async function loadSalesOrdersPage(
         (gid) => !documentNumbers.get(gid)?.trim(),
       );
       if (missing.length > 0) {
+        await waitForSalesOrderNumberSync(shop);
         const synced = await hasCompletedSalesOrderNumberSync(shop);
         if (synced) {
           const missingOldestFirst = nodes

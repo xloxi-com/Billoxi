@@ -18,6 +18,8 @@ import {
   paperMarginMm,
   resolveDisplayedUnitPrice,
   expandEnabledTableColumns,
+  isCustomerMetafieldDetailKey,
+  resolveCustomerMetafieldValue,
   itemBelowTitleMetaLines,
   resolveTaxSummaryLabel,
   salesOrderLogoPosition,
@@ -460,7 +462,7 @@ function fitLogoSize(
 
 function partyLines(
   fields: TemplateEditorSettings["billingDetails"],
-  party: SalesOrderDocumentData["billing"],
+  party: SalesOrderDocumentData["billing"] | SalesOrderDocumentData["customer"],
 ) {
   const lines: Array<{
     text: string;
@@ -501,6 +503,14 @@ function partyLines(
         text: `${field.label.trim() || "VAT number"}: ${party.vatNumber}`,
         sizeKind: "body",
       });
+    } else if (isCustomerMetafieldDetailKey(field.key)) {
+      const value = resolveCustomerMetafieldValue(party, field.key);
+      if (value) {
+        lines.push({
+          text: `${field.label.trim() || "Custom field"}: ${value}`,
+          sizeKind: "body",
+        });
+      }
     }
   }
   return lines;

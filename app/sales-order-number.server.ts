@@ -56,10 +56,45 @@ export async function getLastAllocatedSequence(
 /** True after merchant Sync. Before that, list must not allocate history out of order. */
 const completedSalesOrderSyncShops = new Set<string>();
 
+/** Oldest→newest backfill in progress — list/webhook must not steal numbers. */
+const salesOrderSyncInFlight = new Map<string, Promise<void>>();
+
+export function isSalesOrderNumberSyncInFlight(shop: string): boolean {
+  return salesOrderSyncInFlight.has(shop);
+}
+
+export async function waitForSalesOrderNumberSync(shop: string): Promise<void> {
+  const pending = salesOrderSyncInFlight.get(shop);
+  if (pending) await pending;
+}
+
+export async function runExclusiveSalesOrderNumberSync<T>(
+  shop: string,
+  fn: () => Promise<T>,
+): Promise<{ ran: true; value: T } | { ran: false }> {
+  const existing = salesOrderSyncInFlight.get(shop);
+  if (existing) {
+    await existing;
+    return { ran: false };
+  }
+  let resolve!: () => void;
+  const pending = new Promise<void>((next) => {
+    resolve = next;
+  });
+  salesOrderSyncInFlight.set(shop, pending);
+  try {
+    return { ran: true, value: await fn() };
+  } finally {
+    salesOrderSyncInFlight.delete(shop);
+    resolve();
+  }
+}
+
 export async function hasCompletedSalesOrderNumberSync(
   shop: string,
 ): Promise<boolean> {
-  if (completedSalesOrderSyncShops.has(shop)) return true;
+  // Mid-backfill: one early row must not unlock newest-first list allocation.
+  if (salesOrderSyncInFlight.has(shop)) return false;
 
   try {
     const flags = await loadNumberSyncFlagsForShop(shop);
@@ -67,6 +102,7 @@ export async function hasCompletedSalesOrderNumberSync(
       completedSalesOrderSyncShops.add(shop);
       return true;
     }
+    completedSalesOrderSyncShops.delete(shop);
   } catch {
     // Column / table may lag — fall through to number-row check.
   }
@@ -169,6 +205,8 @@ export async function ensureSalesOrderDocumentNumbers(
   );
   const missing = orderGids.filter((gid) => !map.get(gid)?.trim());
   if (missing.length === 0) return map;
+
+  await waitForSalesOrderNumberSync(shop);
 
   const series = await loadNumberSeriesEntryForShop(shop, "sales-order");
   if (series.entryMode === "manual") return map;
@@ -294,7 +332,7 @@ export async function syncNumberCounter(
       data: {
         shop,
         templateId,
-        nextValue: requested ?? startAt,
+        nextValue: requested ?? minNext,
         prefix,
         padLength,
       },
@@ -309,12 +347,13 @@ export async function syncNumberCounter(
   } = {};
   if (requested != null) {
     updates.nextValue = requested;
-  } else if (last == null) {
-    // No allocations left — align counter to series starting number / prefix.
-    updates.nextValue = startAt;
   } else if (startAt > counter.nextValue) {
     updates.nextValue = startAt;
+  } else if (minNext > counter.nextValue) {
+    updates.nextValue = minNext;
   }
+  // Never pull the counter backwards when rows are deleted — deleted
+  // numbers stay consumed so the next order continues from last+1.
   if (counter.prefix !== prefix) updates.prefix = prefix;
   if (counter.padLength !== padLength) updates.padLength = padLength;
   if (Object.keys(updates).length === 0) return;
@@ -449,7 +488,8 @@ export async function allocateSalesOrderDocumentNumber(
             prefix?: string;
             padLength?: number;
           } = {};
-          // Never move the counter backwards — only raise it when needed.
+          // Never move the counter backwards — deleted SO-0001 must not
+          // be reused; new orders continue from last issued + 1.
           if (minNext > counter.nextValue) {
             updates.nextValue = minNext;
           }
@@ -463,8 +503,9 @@ export async function allocateSalesOrderDocumentNumber(
           }
         }
 
-        // Skip any sequence that somehow already exists (collision / legacy data).
-        let sequence = counter.nextValue;
+        // Always go forward from the high-water mark. Do not fill holes
+        // left by deleted orders (SO-0001 deleted → next is still last+1).
+        let sequence = Math.max(counter.nextValue, minNext);
         for (let skip = 0; skip < 50; skip++) {
           const taken = await tx.salesOrderDocumentNumber.findFirst({
             where: {

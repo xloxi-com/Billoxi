@@ -994,6 +994,33 @@ export async function saveInvoiceNumberEntryMode(
   return saveNumberSeriesEntryMode(shop, "invoice", entryMode);
 }
 
+/** Never lower the high-water mark — deleted documents must not reuse numbers. */
+export async function raiseNumberSeriesNextSequence(
+  shop: string,
+  moduleId: NumberSeriesModuleId,
+  nextSequence: number,
+): Promise<void> {
+  const raised = Math.floor(nextSequence);
+  if (!Number.isFinite(raised) || raised < 0) return;
+
+  const series = await loadNumberSeriesForShop(shop);
+  const current = series[moduleId];
+  const existing =
+    typeof current.nextSequence === "number" &&
+    Number.isFinite(current.nextSequence)
+      ? Math.floor(current.nextSequence)
+      : null;
+  if (existing != null && existing >= raised) return;
+
+  await saveNumberSeriesForShop(shop, {
+    ...series,
+    [moduleId]: {
+      ...current,
+      nextSequence: raised,
+    },
+  });
+}
+
 export async function saveNumberSeriesForShop(
   shop: string,
   numberSeries: NumberSeriesMap,

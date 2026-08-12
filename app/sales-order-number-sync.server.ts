@@ -15,12 +15,13 @@ import {
   clearCompletedSalesOrderNumberSyncMemo,
   fetchAllOrderGidsOldestFirst,
   getLastAllocatedSequence,
+  isSalesOrderNumberSyncInFlight,
   resetSalesOrderNumberCounter,
+  runExclusiveSalesOrderNumberSync,
   type AdminGraphql,
 } from "./sales-order-number.server";
 import { invalidateSalesOrdersCache } from "./sales-orders.server";
 
-const syncInFlight = new Map<string, Promise<void>>();
 /** Process-local cache — skip DB check after first confirmed sync. */
 const syncedShops = new Set<string>();
 
@@ -76,7 +77,7 @@ export async function getSalesOrderNumbersSyncStatus(
   // Numbers exist but flag missing (DB wipe of flag only, or mark failed) —
   // heal so badge shows Synced and Sync stays locked until Reset.
   let synced = flagSynced;
-  if (!synced && assignedCount > 0) {
+  if (!synced && assignedCount > 0 && !isSalesOrderNumberSyncInFlight(shop)) {
     await markSalesOrderNumbersSynced(shop);
     synced = true;
   }
@@ -210,33 +211,7 @@ export async function syncSalesOrderNumbersForShop(
   salesOrderSync: SalesOrderSyncStatus;
   numberSeries: Awaited<ReturnType<typeof loadNumberSeriesForShop>>;
 }> {
-  const existing = syncInFlight.get(shop);
-  if (existing) {
-    await existing;
-    const [lastAllocatedSequence, salesOrderSync, numberSeries] =
-      await Promise.all([
-        getLastAllocatedSequence(shop),
-        getSalesOrderNumbersSyncStatus(shop),
-        loadNumberSeriesForShop(shop),
-      ]);
-    return {
-      assigned: 0,
-      skipped: 0,
-      lastNumber: null,
-      lastAllocatedSequence,
-      canReset: salesOrderSync.canReset,
-      salesOrderSync,
-      numberSeries,
-    };
-  }
-
-  let resolveInFlight!: () => void;
-  const inFlight = new Promise<void>((resolve) => {
-    resolveInFlight = resolve;
-  });
-  syncInFlight.set(shop, inFlight);
-
-  try {
+  const exclusive = await runExclusiveSalesOrderNumberSync(shop, async () => {
     const [selectedTemplateId, numberSeries, orderGids] = await Promise.all([
       loadSelectedTemplateForShop(shop, "sales-order"),
       loadNumberSeriesForShop(shop),
@@ -286,10 +261,27 @@ export async function syncSalesOrderNumbersForShop(
       salesOrderSync,
       numberSeries,
     };
-  } finally {
-    syncInFlight.delete(shop);
-    resolveInFlight();
+  });
+
+  if (!exclusive.ran) {
+    const [lastAllocatedSequence, salesOrderSync, numberSeries] =
+      await Promise.all([
+        getLastAllocatedSequence(shop),
+        getSalesOrderNumbersSyncStatus(shop),
+        loadNumberSeriesForShop(shop),
+      ]);
+    return {
+      assigned: 0,
+      skipped: 0,
+      lastNumber: null,
+      lastAllocatedSequence,
+      canReset: salesOrderSync.canReset,
+      salesOrderSync,
+      numberSeries,
+    };
   }
+
+  return exclusive.value;
 }
 
 /**

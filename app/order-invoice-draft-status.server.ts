@@ -9,7 +9,7 @@ import {
   widenStartingNumberPad,
   type NumberSeriesEntry,
 } from "./number-series";
-import { loadNumberSeriesEntryForShop } from "./shop-settings.server";
+import { loadNumberSeriesEntryForShop, raiseNumberSeriesNextSequence } from "./shop-settings.server";
 
 type OrderGidRow = { orderGid: string };
 
@@ -379,6 +379,7 @@ export async function ensureDraftDocumentNumbers(
         }
       }
     }
+    await raiseNumberSeriesNextSequence(shop, "draft", nextSequence);
   }
 
   return numbers;
@@ -424,6 +425,7 @@ export async function markOrderDraft(shop: string, orderGid: string) {
             AND "orderGid" = ${orderGid}
         `;
         if (Number(updated) > 0) {
+          await raiseNumberSeriesNextSequence(shop, "draft", sequence + 1);
           return documentNumber;
         }
         const after = await prisma.$queryRaw<
@@ -455,6 +457,7 @@ export async function markOrderDraft(shop: string, orderGid: string) {
           CURRENT_TIMESTAMP
         )
       `;
+      await raiseNumberSeriesNextSequence(shop, "draft", sequence + 1);
       return documentNumber;
     } catch (error) {
       if (isUniqueConflict(error)) continue;
