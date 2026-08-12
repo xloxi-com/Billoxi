@@ -47,6 +47,17 @@ import {
   ReceiptIcon,
   StoreIcon,
 } from "@shopify/polaris-icons";
+import {
+  PlanFeatureBadge,
+  PlanLockOverlay,
+  usePlanUpgradeModal,
+} from "../components/plan-lock";
+import {
+  getCurrentPlanId,
+  planHasCapability,
+  type PlanCapability,
+} from "../plan-access";
+import type { PlanId } from "../plan-features";
 
 import type { EmailBodyEditorHandle } from "../components/email-body-editor";
 import { AppearanceColorField } from "../components/appearance-color-field";
@@ -322,6 +333,37 @@ const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = 
   currency: CurrencyConvertIcon,
   clipboard: ClipboardIcon,
 };
+
+function settingsSectionCapability(
+  section: SettingsSection,
+): PlanCapability | null {
+  switch (section) {
+    case "credit-notes":
+      return "autoCreditNote";
+    case "multi-currency":
+      return "multiCurrency";
+    case "download-links":
+      return "customerDownloadLinks";
+    case "smtp":
+      return "smtp";
+    case "email-sales-order":
+    case "email-invoice":
+    case "email-draft":
+    case "email-credit-note":
+    case "email-packing-slip":
+    case "email-return":
+      return "emailTemplates";
+    default:
+      return null;
+  }
+}
+
+function settingsMenuCapability(
+  id: SettingsSection | "email-templates",
+): PlanCapability | null {
+  if (id === "email-templates") return "emailTemplates";
+  return settingsSectionCapability(id);
+}
 
 function isEmailTemplatesSection(section: SettingsSection): boolean {
   return (
@@ -617,6 +659,15 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "save-email-templates") {
+    if (!planHasCapability(getCurrentPlanId(), "emailTemplates")) {
+      return Response.json(
+        {
+          saved: false,
+          error: "Email templates need the PREMIUM plan.",
+        },
+        { status: 403 },
+      );
+    }
     const raw = formData.get("emailTemplates");
     if (typeof raw !== "string") {
       return Response.json(
@@ -908,6 +959,9 @@ export default function SettingsPage() {
     null,
   );
   const handledFetcherDataRef = useRef<unknown>(null);
+  const currentPlanId: PlanId = getCurrentPlanId();
+  const { guard: planGuard, modal: planUpgradeModal } =
+    usePlanUpgradeModal(currentPlanId);
   const isSaving = fetcher.state !== "idle";
   const isDirty =
     activeSection === "store-details"
@@ -1389,6 +1443,11 @@ export default function SettingsPage() {
   };
 
   const save = () => {
+    const sectionCap = settingsSectionCapability(activeSection);
+    if (sectionCap && !planHasCapability(currentPlanId, sectionCap)) {
+      planGuard(sectionCap);
+      return;
+    }
     if (activeSection === "smtp") {
       fetcher.submit(
         {
@@ -1656,6 +1715,12 @@ export default function SettingsPage() {
                                 <Text as="span" fontWeight="semibold">
                                   {item.label}
                                 </Text>
+                                <span className="settings-nav-item__plan-badge">
+                                  <PlanFeatureBadge
+                                    capability="emailTemplates"
+                                    currentPlanId={currentPlanId}
+                                  />
+                                </span>
                                 <span className="settings-nav-item__chevron">
                                   <Icon
                                     source={
@@ -1708,6 +1773,7 @@ export default function SettingsPage() {
                         }
 
                         const isActive = item.id === activeSection;
+                        const menuCap = settingsMenuCapability(item.id);
                         return (
                           <button
                             key={item.id}
@@ -1727,6 +1793,14 @@ export default function SettingsPage() {
                             >
                               {item.label}
                             </Text>
+                            {menuCap ? (
+                              <span className="settings-nav-item__plan-badge">
+                                <PlanFeatureBadge
+                                  capability={menuCap}
+                                  currentPlanId={currentPlanId}
+                                />
+                              </span>
+                            ) : null}
                           </button>
                         );
                       })}
@@ -1738,13 +1812,24 @@ export default function SettingsPage() {
                 <Layout.Section>
                   <div className="settings-form-column">
                   {activeSection === "credit-notes" ? (
+                    <PlanLockOverlay
+                      capability="autoCreditNote"
+                      currentPlanId={currentPlanId}
+                      onUpgrade={() => planGuard("autoCreditNote")}
+                    >
                     <BlockStack gap="400">
                       <Card>
                         <BlockStack gap="400">
                           <BlockStack gap="100">
-                            <Text as="h2" variant="headingMd">
-                              Credit Note
-                            </Text>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="h2" variant="headingMd">
+                                Credit Note
+                              </Text>
+                              <PlanFeatureBadge
+                                capability="autoCreditNote"
+                                currentPlanId={currentPlanId}
+                              />
+                            </InlineStack>
                             <Text as="p" tone="subdued">
                               Auto-create when an order is cancelled or
                               refunded. Needs an invoice first.
@@ -1829,12 +1914,24 @@ export default function SettingsPage() {
                         </Text>
                       ) : null}
                     </BlockStack>
+                    </PlanLockOverlay>
                   ) : activeSection === "multi-currency" ? (
+                    <PlanLockOverlay
+                      capability="multiCurrency"
+                      currentPlanId={currentPlanId}
+                      onUpgrade={() => planGuard("multiCurrency")}
+                    >
                     <BlockStack gap="400">
                       <BlockStack gap="200">
-                        <Text as="h2" variant="headingMd">
-                          Multi Currency
-                        </Text>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="h2" variant="headingMd">
+                            Multi Currency
+                          </Text>
+                          <PlanFeatureBadge
+                            capability="multiCurrency"
+                            currentPlanId={currentPlanId}
+                          />
+                        </InlineStack>
                         <Text as="p" tone="subdued">
                           Choose which currency appears on your invoices and
                           other documents.
@@ -1877,12 +1974,24 @@ export default function SettingsPage() {
                         </Text>
                       ) : null}
                     </BlockStack>
+                    </PlanLockOverlay>
                   ) : activeSection === "download-links" ? (
+                    <PlanLockOverlay
+                      capability="customerDownloadLinks"
+                      currentPlanId={currentPlanId}
+                      onUpgrade={() => planGuard("customerDownloadLinks")}
+                    >
                     <BlockStack gap="400">
                       <BlockStack gap="200">
-                        <Text as="h2" variant="headingMd">
-                          Automated PDF download links
-                        </Text>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="h2" variant="headingMd">
+                            Automated PDF download links
+                          </Text>
+                          <PlanFeatureBadge
+                            capability="customerDownloadLinks"
+                            currentPlanId={currentPlanId}
+                          />
+                        </InlineStack>
                         <Text as="p" tone="subdued">
                           Paste a link into Shopify order notification emails so
                           customers can download the PDF directly.
@@ -2003,12 +2112,21 @@ export default function SettingsPage() {
                         </BlockStack>
                       </Card>
                     </BlockStack>
+                    </PlanLockOverlay>
                   ) : (
                   <Card>
                     <BlockStack gap="400">
-                      <Text as="h2" variant="headingMd">
-                        {mainCardHeading}
-                      </Text>
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="h2" variant="headingMd">
+                          {mainCardHeading}
+                        </Text>
+                        {activeSection === "smtp" ? (
+                          <PlanFeatureBadge
+                            capability="smtp"
+                            currentPlanId={currentPlanId}
+                          />
+                        ) : null}
+                      </InlineStack>
 
                       {activeSection === "store-details" ? (
                         <BlockStack gap="400">
@@ -2392,6 +2510,11 @@ export default function SettingsPage() {
                           </Banner>
                         </BlockStack>
                       ) : activeSection === "smtp" ? (
+                        <PlanLockOverlay
+                          capability="smtp"
+                          currentPlanId={currentPlanId}
+                          onUpgrade={() => planGuard("smtp")}
+                        >
                         <BlockStack gap="400">
                           <Text as="p" tone="subdued">
                             {activeItem.description}
@@ -2644,11 +2767,23 @@ export default function SettingsPage() {
                             </Text>
                           ) : null}
                         </BlockStack>
+                        </PlanLockOverlay>
                       ) : isEmailTemplatesSection(activeSection) ? (
+                        <PlanLockOverlay
+                          capability="emailTemplates"
+                          currentPlanId={currentPlanId}
+                          onUpgrade={() => planGuard("emailTemplates")}
+                        >
                         <BlockStack gap="400">
-                          <Text as="p" tone="subdued">
-                            {activeItem.description}
-                          </Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text as="p" tone="subdued">
+                              {activeItem.description}
+                            </Text>
+                            <PlanFeatureBadge
+                              capability="emailTemplates"
+                              currentPlanId={currentPlanId}
+                            />
+                          </InlineStack>
 
                           <InlineStack gap="200">
                             <Button
@@ -2681,7 +2816,8 @@ export default function SettingsPage() {
                             <Checkbox
                               label="Attach PDF"
                               checked={
-                                emailTemplates.templates[emailTemplateKind].attachPdf
+                                emailTemplates.templates[emailTemplateKind]
+                                  .attachPdf
                               }
                               onChange={(checked) =>
                                 updateEmailTemplateField("attachPdf", checked)
@@ -2772,6 +2908,7 @@ export default function SettingsPage() {
                             </Text>
                           ) : null}
                         </BlockStack>
+                        </PlanLockOverlay>
                       ) : null}
                     </BlockStack>
                   </Card>
@@ -2784,6 +2921,15 @@ export default function SettingsPage() {
                     <div
                       className="settings-email-preview-column"
                       aria-label="Email preview"
+                      style={
+                        planHasCapability(currentPlanId, "emailTemplates")
+                          ? undefined
+                          : {
+                              opacity: 0.55,
+                              pointerEvents: "none",
+                              userSelect: "none",
+                            }
+                      }
                     >
                       <Card padding="0">
                         <div className="settings-email-preview-panel">
@@ -2880,6 +3026,7 @@ export default function SettingsPage() {
             </div>
           </BlockStack>
         </Page>
+        {planUpgradeModal}
       </AppProvider>
     </>
   );

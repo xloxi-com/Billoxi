@@ -5,6 +5,8 @@ import type {
 
 type DocumentActivityMetric = "printed" | "downloaded" | "sent" | "uploaded";
 
+export const DOCUMENT_ACTIVITY_RECORDED_EVENT = "billoxi:document-activity-recorded";
+
 export type RecordDocumentActivityOptions = {
   count?: number;
   documentKind?: DocumentEventKind | string | null;
@@ -40,9 +42,7 @@ function toOrderName(value?: string | null, gid?: string | null): string | null 
 }
 
 async function activityHeaders(): Promise<HeadersInit> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
+  const headers: Record<string, string> = {};
   try {
     const shopify = (window as Window & {
       shopify?: { idToken?: () => Promise<string> };
@@ -73,7 +73,7 @@ export function recordDocumentActivity(
 
   void (async () => {
     try {
-      const body = new URLSearchParams();
+      const body = new FormData();
       body.set("metric", metric);
       body.set("count", String(count));
       if (opts.documentKind) {
@@ -89,12 +89,17 @@ export function recordDocumentActivity(
       if (orderName) body.set("orderName", orderName);
       body.set("processType", opts.processType || "manual");
 
-      await fetch("/app/activity", {
+      const response = await fetch("/app/activity", {
         method: "POST",
         body,
         headers: await activityHeaders(),
         credentials: "same-origin",
       });
+      if (response.ok) {
+        window.dispatchEvent(
+          new CustomEvent(DOCUMENT_ACTIVITY_RECORDED_EVENT),
+        );
+      }
     } catch {
       // Ignore analytics failures — never block print/download UX.
     }

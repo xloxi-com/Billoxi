@@ -14,5 +14,14 @@ export async function requireAdminAuth(request: Request) {
     pending = authenticate.admin(request);
     adminAuthByRequest.set(request, pending);
   }
-  return pending;
+  try {
+    return await pending;
+  } catch (error) {
+    // Parallel parent/child loaders share one auth promise. Clone redirect
+    // Responses so React Router does not hit "Body has already been read".
+    if (error instanceof Response) {
+      throw error.clone();
+    }
+    throw error;
+  }
 }

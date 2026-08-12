@@ -22,6 +22,12 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
+  getCurrentPlanId,
+  planHasCapability,
+} from "../plan-access";
+import { usePlanUpgradeModal } from "../components/plan-lock";
+import type { PlanId } from "../plan-features";
+import {
   AppProvider,
   Avatar,
   Badge,
@@ -861,6 +867,9 @@ export default function SalesOrderPage() {
   const data = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
   const navigate = useNavigate();
+  const currentPlanId: PlanId = getCurrentPlanId();
+  const { guard: planGuard, modal: planUpgradeModal } =
+    usePlanUpgradeModal(currentPlanId);
   const [searchParams, setSearchParams] = useSearchParams();
   const [, startTransition] = useTransition();
   const [queryValue, setQueryValue] = useState(data.query);
@@ -1791,6 +1800,17 @@ export default function SalesOrderPage() {
   const promotedBulkActions = useMemo(() => {
     if (selectedResources.length === 0) return [];
 
+    const isBulkSelection = selectedResources.length > 1;
+    const bulkLocked =
+      isBulkSelection && !planHasCapability(currentPlanId, "bulkActions");
+    const wrapBulk = (run: () => void) => () => {
+      if (isBulkSelection) {
+        planGuard("bulkActions", run);
+        return;
+      }
+      run();
+    };
+
     const actions: Array<{
       content: string;
       onAction: () => void;
@@ -1800,13 +1820,15 @@ export default function SalesOrderPage() {
 
     if (isCreditNoteList) {
       actions.push({
-        content: "Send email",
-        onAction: () => setConfirmAction("email"),
+        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
       actions.push({
-        content: downloadPdfLabel,
-        onAction: () => setConfirmAction("download"),
+        content: bulkLocked
+          ? `${downloadPdfLabel} (PREMIUM)`
+          : downloadPdfLabel,
+        onAction: wrapBulk(() => setConfirmAction("download")),
         disabled: isBusy,
       });
       actions.push({
@@ -1826,13 +1848,15 @@ export default function SalesOrderPage() {
 
     if (isPackingSlipList) {
       actions.push({
-        content: "Send email",
-        onAction: () => setConfirmAction("email"),
+        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
       actions.push({
-        content: downloadPdfLabel,
-        onAction: () => setConfirmAction("download"),
+        content: bulkLocked
+          ? `${downloadPdfLabel} (PREMIUM)`
+          : downloadPdfLabel,
+        onAction: wrapBulk(() => setConfirmAction("download")),
         disabled: isBusy,
       });
       actions.push({
@@ -1847,13 +1871,15 @@ export default function SalesOrderPage() {
 
     if (isReturnList) {
       actions.push({
-        content: "Send email",
-        onAction: () => setConfirmAction("email"),
+        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
       actions.push({
-        content: downloadPdfLabel,
-        onAction: () => setConfirmAction("download"),
+        content: bulkLocked
+          ? `${downloadPdfLabel} (PREMIUM)`
+          : downloadPdfLabel,
+        onAction: wrapBulk(() => setConfirmAction("download")),
         disabled: isBusy,
       });
       actions.push({
@@ -1878,50 +1904,61 @@ export default function SalesOrderPage() {
     }
 
     if (!isInvoiceList) {
-      // Always show all sales-order actions (disable when not applicable).
       actions.push({
-        content: "Convert to invoice",
-        onAction: () => setConfirmAction("invoice"),
+        content: bulkLocked
+          ? "Convert to invoice (PREMIUM)"
+          : "Convert to invoice",
+        onAction: wrapBulk(() => setConfirmAction("invoice")),
         disabled: isBusy || !canConvertToInvoice,
       });
       actions.push({
-        content: "Convert to packing slip",
-        onAction: () => setConfirmAction("packing-slip"),
+        content: bulkLocked
+          ? "Convert to packing slip (PREMIUM)"
+          : "Convert to packing slip",
+        onAction: wrapBulk(() => setConfirmAction("packing-slip")),
         disabled: isBusy || !canConvertToPackingSlip,
       });
       if (canConvertToReturn) {
         actions.push({
-          content: "Convert to return",
-          onAction: () => setConfirmAction("return"),
+          content: bulkLocked
+            ? "Convert to return (PREMIUM)"
+            : "Convert to return",
+          onAction: wrapBulk(() => setConfirmAction("return")),
           disabled: isBusy,
         });
       }
       actions.push({
-        content: "Send email",
-        onAction: () => setConfirmAction("email"),
+        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
       actions.push({
-        content: downloadPdfLabel,
-        onAction: () => setConfirmAction("download"),
+        content: bulkLocked
+          ? `${downloadPdfLabel} (PREMIUM)`
+          : downloadPdfLabel,
+        onAction: wrapBulk(() => setConfirmAction("download")),
         disabled: isBusy,
       });
       return actions;
     }
 
     actions.push({
-      content: "Create credit note",
-      onAction: () => setConfirmAction("credit-note"),
+      content: bulkLocked
+        ? "Create credit note (PREMIUM)"
+        : "Create credit note",
+      onAction: wrapBulk(() => setConfirmAction("credit-note")),
       disabled: isBusy || !canCreateCreditNote,
     });
     actions.push({
-      content: "Send email",
-      onAction: () => setConfirmAction("email"),
+      content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+      onAction: wrapBulk(() => setConfirmAction("email")),
       disabled: isBusy || !canSendEmail,
     });
     actions.push({
-      content: downloadPdfLabel,
-      onAction: () => setConfirmAction("download"),
+      content: bulkLocked
+        ? `${downloadPdfLabel} (PREMIUM)`
+        : downloadPdfLabel,
+      onAction: wrapBulk(() => setConfirmAction("download")),
       disabled: isBusy,
     });
     actions.push({
@@ -1943,6 +1980,7 @@ export default function SalesOrderPage() {
     canSaveAsDraft,
     canSendEmail,
     canVoidCreditNote,
+    currentPlanId,
     downloadPdfLabel,
     isBusy,
     isCreditNoteList,
@@ -1951,6 +1989,7 @@ export default function SalesOrderPage() {
     isPackingSlipList,
     isReturnList,
     openOrderDocument,
+    planGuard,
     selectedOrders,
     selectedResources.length,
   ]);
@@ -3474,6 +3513,7 @@ export default function SalesOrderPage() {
         </Card>
         </div>
       </s-page>
+      {planUpgradeModal}
     </AppProvider>
   );
 }

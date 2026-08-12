@@ -61,6 +61,11 @@ export async function action({ request }: ActionFunctionArgs) {
   return Response.json({ ok: true });
 }
 
+/** Resource route — POST only; no UI. */
+export default function AppActivityRoute() {
+  return null;
+}
+
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };

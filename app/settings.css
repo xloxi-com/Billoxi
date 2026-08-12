@@ -167,19 +167,42 @@
   background: var(--p-color-bg-surface-selected, #f1f1f1);
 }
 
+.settings-nav-item--group {
+  width: 100%;
+}
+
+.settings-nav-item--group .settings-nav-item__plan-badge {
+  margin-left: auto;
+  margin-right: 4px;
+}
+
 .settings-nav-item--sub {
   padding-left: 32px;
   font-size: 0.8125rem;
-}
-
-.settings-nav-item--group {
-  width: 100%;
 }
 
 .settings-nav-item__chevron {
   margin-left: auto;
   display: inline-flex;
   flex: 0 0 auto;
+}
+
+.settings-nav-item__plan-badge {
+  margin-left: auto;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.settings-nav-item__plan-badge .plan-feature-crown {
+  display: inline-flex;
+  color: #6cb4ee;
+}
+
+.settings-nav-item__plan-badge .plan-feature-crown .Polaris-Icon,
+.settings-nav-item__plan-badge .plan-feature-crown svg {
+  width: 14px;
+  height: 14px;
 }
 
 .settings-nav__group {

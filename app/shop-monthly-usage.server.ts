@@ -69,6 +69,16 @@ export function currentYearMonth(date = new Date()): string {
   return `${year}-${month}`;
 }
 
+function monthBoundsUtc(now: Date) {
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0),
+  );
+  const end = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999),
+  );
+  return { start, end };
+}
+
 function utcDayKey(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -89,6 +99,42 @@ export async function loadShopMonthlyUsage(
   now = new Date(),
 ): Promise<ShopMonthlyUsageCounts> {
   const yearMonth = currentYearMonth(now);
+  const { start, end } = monthBoundsUtc(now);
+  const counts: ShopMonthlyUsageCounts = {
+    yearMonth,
+    printed: 0,
+    downloaded: 0,
+    sent: 0,
+    uploaded: 0,
+  };
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ action: string; total: number | bigint }>
+    >(
+      `SELECT action, COALESCE(SUM(count), 0) AS total
+       FROM "DocumentEventLog"
+       WHERE shop = $1
+         AND "createdAt" >= $2
+         AND "createdAt" <= $3
+         AND action IN ('printed', 'downloaded', 'sent', 'uploaded')
+       GROUP BY action`,
+      shop,
+      start,
+      end,
+    );
+    for (const row of rows) {
+      const total = Number(row.total) || 0;
+      if (row.action === "printed") counts.printed = total;
+      else if (row.action === "downloaded") counts.downloaded = total;
+      else if (row.action === "sent") counts.sent = total;
+      else if (row.action === "uploaded") counts.uploaded = total;
+    }
+    return counts;
+  } catch (error) {
+    console.error("[shop-monthly-usage] monthly aggregate failed", shop, error);
+  }
+
   const usage = shopMonthlyUsageDelegate();
   const row = usage
     ? await usage
@@ -148,13 +194,13 @@ export async function loadDailyUsageSeries(
 
   try {
     type AggRow = {
-      day: Date | string;
+      day_key: string;
       action: string;
       total: number | bigint;
     };
     const rows = await prisma.$queryRawUnsafe<AggRow[]>(
       `SELECT
-        date_trunc('day', "createdAt") AS day,
+        to_char("createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day_key,
         action,
         COALESCE(SUM(count), 0) AS total
       FROM "DocumentEventLog"
@@ -170,10 +216,7 @@ export async function loadDailyUsageSeries(
     );
 
     for (const row of rows) {
-      const dayDate =
-        row.day instanceof Date ? row.day : new Date(String(row.day));
-      const key = utcDayKey(dayDate);
-      const point = byDate.get(key);
+      const point = byDate.get(row.day_key);
       if (!point) continue;
       const total = Number(row.total) || 0;
       if (row.action === "printed") point.printed = total;

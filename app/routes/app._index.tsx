@@ -1,17 +1,13 @@
 import type {
-  ClientLoaderFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
-import {
-  cachedClientLoader,
-  createAppPageClientCache,
-} from "../client-page-cache";
 import { useEffect, useState } from "react";
 import {
   useLoaderData,
   useNavigate,
+  useRevalidator,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -19,6 +15,7 @@ import { renderEmbeddedRouteError } from "../embedded-route-error";
 import {
   AppProvider,
   Badge,
+  Banner,
   BlockStack,
   Box,
   Button,
@@ -47,7 +44,6 @@ import { requireAdminAuth } from "../shopify-context.server";
 import {
   loadDailyUsageSeries,
   loadShopMonthlyUsage,
-  type DailyUsagePoint,
 } from "../shop-monthly-usage.server";
 import {
   enrichDocumentEventsWithOrderNames,
@@ -67,6 +63,17 @@ import { isSmtpReadyForSend } from "../smtp-settings";
 import { loadSetupGuideProgress } from "../setup-guide.server";
 import prisma from "../db.server";
 import { RecommendedAppsCard } from "../components/recommended-apps";
+import { HomeAnalyticsSection } from "../components/home-analytics";
+import { DOCUMENT_ACTIVITY_RECORDED_EVENT } from "../record-document-activity.client";
+import { getPlanById, planMonthlyPriceLabel } from "../plan-features";
+import { planHasCapability } from "../plan-access";
+import { loadShopBillingState } from "../billing-plans";
+import {
+  PlanCrownBadge,
+  PlanFeatureBadge,
+  PlanLockOverlay,
+  usePlanUpgradeModal,
+} from "../components/plan-lock";
 
 type SetupStepId =
   | "store-details"
@@ -111,153 +118,11 @@ const FULL_SETUP_STEPS: Array<{
   },
 ];
 
-const CHART_SERIES = [
-  { key: "printed" as const, label: "Printed", color: "#2C6ECB" },
-  { key: "downloaded" as const, label: "Downloaded", color: "#1A7F64" },
-  { key: "sent" as const, label: "Sent", color: "#B98900" },
-];
-
-function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
-  const width = 720;
-  const height = 220;
-  const pad = { top: 16, right: 12, bottom: 36, left: 36 };
-  const plotW = width - pad.left - pad.right;
-  const plotH = height - pad.top - pad.bottom;
-  const maxValue = Math.max(
-    1,
-    ...series.flatMap((point) => [
-      point.printed,
-      point.downloaded,
-      point.sent,
-    ]),
-  );
-  const groupCount = Math.max(series.length, 1);
-  const groupWidth = plotW / groupCount;
-  const barGap = 2;
-  const barWidth = Math.max(
-    3,
-    Math.min(14, (groupWidth - 8) / CHART_SERIES.length - barGap),
-  );
-  const yTicks = [0, 0.5, 1].map((ratio) => Math.round(maxValue * ratio));
-
-  return (
-    <BlockStack gap="300">
-      <InlineStack align="space-between" blockAlign="center" wrap>
-        <Text as="h3" variant="headingSm">
-          Last 14 days
-        </Text>
-        <InlineStack gap="300" wrap>
-          {CHART_SERIES.map((item) => (
-            <InlineStack key={item.key} gap="100" blockAlign="center">
-              <span
-                aria-hidden
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 2,
-                  background: item.color,
-                  display: "inline-block",
-                }}
-              />
-              <Text as="span" variant="bodySm" tone="subdued">
-                {item.label}
-              </Text>
-            </InlineStack>
-          ))}
-        </InlineStack>
-      </InlineStack>
-
-      <div style={{ width: "100%", overflowX: "auto" }}>
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          width="100%"
-          height="220"
-          role="img"
-          aria-label="Printed, downloaded, and sent activity for the last 14 days"
-        >
-          {yTicks.map((tick) => {
-            const y = pad.top + plotH - (tick / maxValue) * plotH;
-            return (
-              <g key={`y-${tick}`}>
-                <line
-                  x1={pad.left}
-                  x2={width - pad.right}
-                  y1={y}
-                  y2={y}
-                  stroke="#E3E3E3"
-                  strokeWidth={1}
-                />
-                <text
-                  x={pad.left - 8}
-                  y={y + 4}
-                  textAnchor="end"
-                  fill="#8A8A8A"
-                  fontSize={11}
-                  fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
-                >
-                  {tick}
-                </text>
-              </g>
-            );
-          })}
-
-          {series.map((point, index) => {
-            const groupX = pad.left + index * groupWidth;
-            const clusterWidth =
-              CHART_SERIES.length * barWidth +
-              (CHART_SERIES.length - 1) * barGap;
-            const startX = groupX + (groupWidth - clusterWidth) / 2;
-            const showLabel = index % 2 === 0 || index === series.length - 1;
-
-            return (
-              <g key={point.date}>
-                {CHART_SERIES.map((item, barIndex) => {
-                  const value = point[item.key];
-                  const barH = (value / maxValue) * plotH;
-                  const x = startX + barIndex * (barWidth + barGap);
-                  const y = pad.top + plotH - barH;
-                  return (
-                    <rect
-                      key={item.key}
-                      x={x}
-                      y={y}
-                      width={barWidth}
-                      height={Math.max(barH, value > 0 ? 2 : 0)}
-                      rx={2}
-                      fill={item.color}
-                    >
-                      <title>
-                        {item.label}: {value} on {point.label}
-                      </title>
-                    </rect>
-                  );
-                })}
-                {showLabel ? (
-                  <text
-                    x={groupX + groupWidth / 2}
-                    y={height - 12}
-                    textAnchor="middle"
-                    fill="#8A8A8A"
-                    fontSize={10}
-                    fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
-                  >
-                    {point.label}
-                  </text>
-                ) : null}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    </BlockStack>
-  );
-}
-
-/** Placeholder plan until Shopify Billing is wired. */
-const PLAN_SUMMARY = {
-  planName: "Grow",
-  monthlyFee: "$ 9",
-  trialDays: 14,
+/** Fallback copy when no subscription is active yet. */
+const NO_PLAN_SUMMARY = {
+  planName: "No plan yet",
+  monthlyFee: "—",
+  trialDays: 7,
 } as const;
 
 function formatInstallDate(value: Date): string {
@@ -288,29 +153,38 @@ async function loadShopInstalledAt(shop: string): Promise<Date> {
   return new Date();
 }
 
-const homePageCache = createAppPageClientCache();
-
-export async function clientLoader(args: ClientLoaderFunctionArgs) {
-  return cachedClientLoader(homePageCache, args);
-}
+const homePagePath = (pathname: string) =>
+  pathname.replace(/\/$/, "") || "/app";
 
 export function shouldRevalidate({
   formMethod,
   currentUrl,
   nextUrl,
 }: ShouldRevalidateFunctionArgs) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") {
-    homePageCache.bust();
-    return true;
-  }
+  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
   if (currentUrl.search !== nextUrl.search) return true;
-  // Soft navigations / parent revalidations should not redo home analytics.
+  // Always refresh analytics when navigating back to Home.
+  if (homePagePath(nextUrl.pathname) === "/app") return true;
   return false;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const shop = session.shop;
+  const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
+  const planId = currentPlanId;
+  const canEventLog =
+    Boolean(planId) && planHasCapability(planId!, "eventLog");
+  const canDashboardChart =
+    Boolean(planId) && planHasCapability(planId!, "dashboardChart");
+  const activePlan = planId ? getPlanById(planId) : null;
+  const planSummary = activePlan
+    ? {
+        planName: activePlan.name,
+        monthlyFee: planMonthlyPriceLabel(activePlan.priceAmount),
+        trialDays: activePlan.trialDays,
+      }
+    : NO_PLAN_SUMMARY;
 
   const [
     monthlyUsage,
@@ -322,9 +196,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     setupProgress,
   ] = await Promise.all([
     loadShopMonthlyUsage(shop),
-    loadDailyUsageSeries(shop, 14),
+    canDashboardChart
+      ? loadDailyUsageSeries(shop, 14)
+      : Promise.resolve([]),
     loadShopInstalledAt(shop),
-    loadRecentDocumentEvents(shop, 15),
+    canEventLog
+      ? loadRecentDocumentEvents(shop, 15)
+      : Promise.resolve([]),
     loadNumberSyncFlagsForShop(shop),
     loadSmtpSettingsForShop(shop),
     loadSetupGuideProgress(shop),
@@ -334,13 +212,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const draftSynced = syncFlags.draft;
   const returnSynced = syncFlags.return;
 
-  const eventLogs = await enrichDocumentEventsWithOrderNames(
-    admin,
-    rawEventLogs,
-  );
+  const eventLogs = canEventLog
+    ? await enrichDocumentEventsWithOrderNames(admin, rawEventLogs)
+    : [];
 
   const trialEndsAt = new Date(installedAt);
-  trialEndsAt.setDate(trialEndsAt.getDate() + PLAN_SUMMARY.trialDays);
+  trialEndsAt.setDate(trialEndsAt.getDate() + planSummary.trialDays);
 
   const transactionNumbersReady =
     salesOrderSynced && invoiceSynced && draftSynced && returnSynced;
@@ -358,6 +235,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 
   return {
+    hasActivePlan,
+    currentPlanId: planId,
     analytics: {
       printed: monthlyUsage.printed,
       downloaded: monthlyUsage.downloaded,
@@ -365,9 +244,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       series: usageSeries,
     },
     plan: {
-      name: PLAN_SUMMARY.planName,
+      name: planSummary.planName,
       installedAtLabel: formatInstallDate(installedAt),
-      monthlyFee: PLAN_SUMMARY.monthlyFee,
+      monthlyFee: planSummary.monthlyFee,
       trialEndsAtLabel: formatTrialDate(trialEndsAt),
     },
     eventLogs,
@@ -376,14 +255,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function AppHomePage() {
-  const { analytics, plan, eventLogs, setupGuide } =
+  const { analytics, plan, eventLogs, setupGuide, hasActivePlan, currentPlanId } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
+  const planIdForLocks = currentPlanId ?? "starter";
+  const { guard: planGuard, modal: planUpgradeModal } =
+    usePlanUpgradeModal(planIdForLocks);
+  const chartUnlocked =
+    Boolean(currentPlanId) &&
+    planHasCapability(currentPlanId, "dashboardChart");
   const [stepSynced, setStepSynced] = useState(setupGuide.steps);
 
   useEffect(() => {
     setStepSynced(setupGuide.steps);
   }, [setupGuide.steps]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (revalidator.state === "idle") revalidator.revalidate();
+    };
+    window.addEventListener(DOCUMENT_ACTIVITY_RECORDED_EVENT, refresh);
+    return () =>
+      window.removeEventListener(DOCUMENT_ACTIVITY_RECORDED_EVENT, refresh);
+  }, [revalidator]);
 
   const planItems = [
     { label: "Your Current Plan", value: plan.name },
@@ -391,14 +286,8 @@ export default function AppHomePage() {
     { label: "Monthly Fee of Your Plan", value: plan.monthlyFee },
     {
       label: "Trial Period Expiration Date",
-      value: plan.trialEndsAtLabel,
+      value: hasActivePlan ? plan.trialEndsAtLabel : "—",
     },
-  ] as const;
-
-  const analyticsItems = [
-    { label: "Monthly Printed", value: analytics.printed },
-    { label: "Monthly Downloaded", value: analytics.downloaded },
-    { label: "Monthly Sent", value: analytics.sent },
   ] as const;
 
   const setupSteps = FULL_SETUP_STEPS.map((step) => ({
@@ -422,24 +311,85 @@ export default function AppHomePage() {
     <AppProvider i18n={enTranslations}>
       <Page
         title=""
-        primaryAction={{
-          content: "Sales orders",
-          onAction: () => navigate("/app/sales-order"),
-        }}
-        secondaryActions={[
-          {
-            content: "Templates",
-            onAction: () => navigate("/app/templates"),
-          },
-          {
-            content: "Settings",
-            onAction: () => navigate("/app/settings"),
-          },
-        ]}
+        primaryAction={
+          hasActivePlan
+            ? {
+                content: "Sales orders",
+                onAction: () => navigate("/app/sales-order"),
+              }
+            : {
+                content: "View pricing",
+                onAction: () => navigate("/app/pricing"),
+              }
+        }
+        secondaryActions={
+          hasActivePlan
+            ? [
+                {
+                  content: "Templates",
+                  onAction: () => navigate("/app/templates"),
+                },
+                {
+                  content: "Settings",
+                  onAction: () => navigate("/app/settings"),
+                },
+              ]
+            : undefined
+        }
       >
         <Layout>
+          {!hasActivePlan ? (
+            <Layout.Section>
+              <Banner
+                title="You’re on FREE"
+                tone="info"
+                action={{
+                  content: "View pricing",
+                  onAction: () => navigate("/app/pricing"),
+                }}
+              >
+                <p>
+                  Document modules are hidden until you choose STARTER,
+                  PREMIUM, or ULTIMATE.
+                </p>
+              </Banner>
+            </Layout.Section>
+          ) : null}
           <Layout.Section>
             <BlockStack gap="400">
+              {!hasActivePlan ? (
+                <Card>
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="h2" variant="headingMd">
+                        Setup guide
+                      </Text>
+                      <PlanCrownBadge label="Paid plan" />
+                    </InlineStack>
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      Setup is locked on FREE. Choose a paid plan to finish
+                      store details, templates, numbers, and SMTP.
+                    </Text>
+                    <Box
+                      background="bg-surface-secondary"
+                      borderRadius="200"
+                      padding="400"
+                    >
+                      <BlockStack gap="300" inlineAlign="center">
+                        <Text as="p" tone="subdued" alignment="center">
+                          Unlock Setup guide with STARTER or higher.
+                        </Text>
+                        <Button
+                          variant="primary"
+                          onClick={() => navigate("/app/pricing")}
+                        >
+                          View pricing
+                        </Button>
+                      </BlockStack>
+                    </Box>
+                  </BlockStack>
+                </Card>
+              ) : (
               <Card>
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center" wrap>
@@ -472,7 +422,11 @@ export default function AppHomePage() {
                       />
                     </InlineStack>
 
-                    <ProgressBar progress={setupProgress} size="small" />
+                    <ProgressBar
+                      progress={setupProgress}
+                      size="small"
+                      tone="primary"
+                    />
 
                     <Collapsible
                       open={setupOpen}
@@ -568,72 +522,108 @@ export default function AppHomePage() {
                     </Collapsible>
                   </BlockStack>
                 </Card>
+              )}
 
               <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Analytics
-                  </Text>
-                  <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
-                    {analyticsItems.map((metric) => (
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Plan
+                    </Text>
+                    <Button
+                      variant="plain"
+                      onClick={() => navigate("/app/pricing")}
+                    >
+                      View pricing
+                    </Button>
+                  </InlineStack>
+                  <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="300">
+                    {planItems.map((item) => (
                       <Box
-                        key={metric.label}
+                        key={item.label}
                         background="bg-surface-secondary"
                         borderRadius="200"
                         padding="400"
                       >
                         <BlockStack gap="100">
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {metric.label}
+                            {item.label}
                           </Text>
-                          <Text as="p" variant="headingLg" fontWeight="bold">
-                            {metric.value}
+                          <Text as="p" variant="headingSm" fontWeight="semibold">
+                            {item.value}
                           </Text>
                         </BlockStack>
                       </Box>
                     ))}
                   </InlineGrid>
-                  <Box
-                    background="bg-surface-secondary"
-                    borderRadius="200"
-                    padding="400"
-                  >
-                    <UsageStatisticsChart series={analytics.series} />
-                  </Box>
                 </BlockStack>
               </Card>
 
               <Card>
-                <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="300">
-                  {planItems.map((item) => (
-                    <Box
-                      key={item.label}
-                      background="bg-surface-secondary"
-                      borderRadius="200"
-                      padding="400"
-                    >
-                      <BlockStack gap="100">
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {item.label}
-                        </Text>
-                        <Text as="p" variant="headingSm" fontWeight="semibold">
-                          {item.value}
-                        </Text>
-                      </BlockStack>
-                    </Box>
-                  ))}
-                </InlineGrid>
+                <HomeAnalyticsSection
+                  printed={analytics.printed}
+                  downloaded={analytics.downloaded}
+                  sent={analytics.sent}
+                  series={chartUnlocked ? analytics.series : []}
+                  chartLocked={!chartUnlocked}
+                  onUnlockChart={() => planGuard("dashboardChart")}
+                />
               </Card>
             </BlockStack>
           </Layout.Section>
 
           <Layout.Section variant="fullWidth">
+            <PlanLockOverlay
+              capability="eventLog"
+              currentPlanId={planIdForLocks}
+              onUpgrade={() => planGuard("eventLog")}
+              lockedFallback={
+                <Card padding="0">
+                  <Box padding="400">
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="h2" variant="headingMd">
+                          Event Logs
+                        </Text>
+                        <PlanFeatureBadge
+                          capability="eventLog"
+                          currentPlanId={planIdForLocks}
+                        />
+                      </InlineStack>
+                      <Text as="p" tone="subdued" variant="bodySm">
+                        Recent print, download, and email activity for sales
+                        orders, invoices, credit notes, and packing slips.
+                      </Text>
+                    </BlockStack>
+                  </Box>
+                  <Box padding="400" paddingBlockStart="0">
+                    <Box
+                      background="bg-surface-secondary"
+                      borderRadius="200"
+                      padding="400"
+                    >
+                      <Text as="p" tone="subdued" alignment="center">
+                        Event log is locked on your plan. Upgrade to ULTIMATE to
+                        view activity. New events are not recorded until you
+                        upgrade.
+                      </Text>
+                    </Box>
+                  </Box>
+                </Card>
+              }
+            >
             <Card padding="0">
               <Box padding="400">
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingMd">
-                    Event Logs
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Event Logs
+                    </Text>
+                    <PlanFeatureBadge
+                      capability="eventLog"
+                      currentPlanId={planIdForLocks}
+                    />
+                  </InlineStack>
                   <Text as="p" tone="subdued" variant="bodySm">
                     Recent print, download, and email activity for sales
                     orders, invoices, credit notes, and packing slips.
@@ -727,6 +717,7 @@ export default function AppHomePage() {
                 </IndexTable>
               )}
             </Card>
+            </PlanLockOverlay>
           </Layout.Section>
 
           <Layout.Section variant="oneHalf">
@@ -734,6 +725,7 @@ export default function AppHomePage() {
           </Layout.Section>
         </Layout>
       </Page>
+      {planUpgradeModal}
     </AppProvider>
   );
 }

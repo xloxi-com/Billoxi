@@ -1,0 +1,86 @@
+.billoxi-analytics {
+  --billoxi-analytics-printed: var(--p-color-border-brand, #2c6ecb);
+  --billoxi-analytics-downloaded: var(--p-color-bg-fill-success, #29845a);
+  --billoxi-analytics-sent: var(--p-color-bg-fill-caution, #b98900);
+}
+
+.billoxi-analytics-metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--p-border-radius-full, 9999px);
+  flex-shrink: 0;
+}
+
+.billoxi-analytics-metric-icon--printed {
+  background: color-mix(
+    in srgb,
+    var(--billoxi-analytics-printed) 14%,
+    var(--p-color-bg-surface, #fff)
+  );
+}
+
+.billoxi-analytics-metric-icon--downloaded {
+  background: color-mix(
+    in srgb,
+    var(--billoxi-analytics-downloaded) 14%,
+    var(--p-color-bg-surface, #fff)
+  );
+}
+
+.billoxi-analytics-metric-icon--sent {
+  background: color-mix(
+    in srgb,
+    var(--billoxi-analytics-sent) 14%,
+    var(--p-color-bg-surface, #fff)
+  );
+}
+
+.billoxi-analytics-legend-swatch {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--p-border-radius-100, 4px);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.billoxi-analytics-chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.billoxi-analytics-chart {
+  display: block;
+  min-width: 100%;
+}
+
+.billoxi-analytics-chart-grid {
+  stroke: var(--p-color-border-secondary, #e3e3e3);
+  stroke-width: 1;
+}
+
+.billoxi-analytics-chart-axis {
+  fill: var(--p-color-text-secondary, #616161);
+  font-size: 11px;
+  font-family: var(
+    --p-font-family-sans,
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "San Francisco",
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif
+  );
+}
+
+.billoxi-analytics-chart-bar {
+  transition: opacity 120ms ease;
+}
+
+.billoxi-analytics-chart-bar:hover {
+  opacity: 0.82;
+}

@@ -1,6 +1,7 @@
 import type {
   HeadersFunction,
   LoaderFunctionArgs,
+  ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { useEffect, useState } from "react";
 import {
@@ -18,20 +19,60 @@ import { requireAdminAuth } from "../shopify-context.server";
 import { scheduleInstallNumberSync } from "../install-number-sync.server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
 import { PageLoader } from "../components/page-loader";
+import { TawkChat } from "../components/tawk-chat";
+import {
+  isAppPathAllowedWithoutPlan,
+  loadShopBillingState,
+} from "../billing-plans";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Warm auth for nested loaders (shared WeakMap memo).
-  const { session, admin } = await requireAdminAuth(request);
+export const loader = async ({ request, url }: LoaderFunctionArgs) => {
+  const { session, admin, billing, redirect } = await requireAdminAuth(request);
   // One-shot historical number backfill after install (idempotent).
   scheduleInstallNumberSync(session.shop, admin);
 
+  const billingState = await loadShopBillingState(billing);
+  // Prefer normalized `url` (no .data). Fall back strips .data from request.url
+  // because future.v8_passThroughRequests leaves the raw suffix on request.url.
+  const pathname = (
+    url?.pathname || new URL(request.url).pathname
+  ).replace(/\.data$/i, "");
+
+  // No paid plan yet (fresh install / FREE): force Pricing until they subscribe.
+  // Billoxi / Home / any other route → /app/pricing.
+  if (!billingState.hasActivePlan && !isAppPathAllowedWithoutPlan(pathname)) {
+    throw redirect("/app/pricing");
+  }
+
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    hasActivePlan: billingState.hasActivePlan,
+    currentPlanId: billingState.currentPlanId,
+    activeSubscriptionId: billingState.activeSubscriptionId,
+  };
 };
 
-export const shouldRevalidate = () => false;
+/** Keep nav warm; revalidate after billing posts — never same-path loops. */
+export const shouldRevalidate = ({
+  currentUrl,
+  nextUrl,
+  formMethod,
+}: ShouldRevalidateFunctionArgs) => {
+  if (formMethod && formMethod !== "GET") return true;
 
-const APP_NAV_PAGES = [
+  const curr = currentUrl.pathname.replace(/\/$/, "") || "/app";
+  const next = nextUrl.pathname.replace(/\/$/, "") || "/app";
+
+  if (curr === next && currentUrl.search === nextUrl.search) return false;
+
+  // Revalidate shell when entering/leaving pricing (plan may have changed).
+  if (next.includes("/pricing") && !curr.includes("/pricing")) return true;
+  if (curr.includes("/pricing") && !next.includes("/pricing")) return true;
+
+  return false;
+};
+
+const FULL_APP_NAV_PAGES = [
   "/app",
   "/app/sales-order",
   "/app/invoice",
@@ -40,8 +81,11 @@ const APP_NAV_PAGES = [
   "/app/credit-note",
   "/app/packing-slip",
   "/app/templates",
+  "/app/pricing",
   "/app/settings",
 ] as const;
+
+const FREE_NAV_PAGES = ["/app/pricing"] as const;
 
 function documentSectionBase(pathname: string) {
   const match = pathname.match(
@@ -85,13 +129,15 @@ function AppNavLoader() {
   );
 }
 
-function AppNavPrefetch() {
+function AppNavPrefetch({ hasActivePlan }: { hasActivePlan: boolean }) {
   const location = useLocation();
   const [pages, setPages] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
     const timers: number[] = [];
-    APP_NAV_PAGES.forEach((page, i) => {
+    const navPages = hasActivePlan ? FULL_APP_NAV_PAGES : FREE_NAV_PAGES;
+    setPages([]);
+    navPages.forEach((page, i) => {
       timers.push(
         window.setTimeout(() => {
           if (cancelled) return;
@@ -103,7 +149,7 @@ function AppNavPrefetch() {
       cancelled = true;
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, []);
+  }, [hasActivePlan]);
   const current = location.pathname.replace(/\/$/, "") || "/app";
   return (
     <>
@@ -116,31 +162,54 @@ function AppNavPrefetch() {
   );
 }
 
+export type AppOutletContext = {
+  hasActivePlan: boolean;
+  currentPlanId: import("../plan-features").PlanId | null;
+  activeSubscriptionId: string | null;
+};
+
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, hasActivePlan, currentPlanId, activeSubscriptionId } =
+    useLoaderData<typeof loader>();
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <AppNavPrefetch />
+      <AppNavPrefetch hasActivePlan={hasActivePlan} />
       <s-app-nav>
-        {/* rel="home" sets Billoxi → /app and hides this link from the sidebar. */}
+        {/* rel="home" → Billoxi title opens Home; Home link stays hidden from sidebar. */}
         <s-link
           href="/app"
           {...({ rel: "home" } as Record<string, string>)}
         >
           Home
         </s-link>
-        <s-link href="/app/sales-order">Sales Orders</s-link>
-        <s-link href="/app/invoice">Invoice</s-link>
-        <s-link href="/app/draft">Draft</s-link>
-        <s-link href="/app/return">Return</s-link>
-        <s-link href="/app/credit-note">Credit Note</s-link>
-        <s-link href="/app/packing-slip">Packing Slip</s-link>
-        <s-link href="/app/templates">Templates</s-link>
-        <s-link href="/app/settings">Settings</s-link>
+        {hasActivePlan ? (
+          <>
+            <s-link href="/app/sales-order">Sales Orders</s-link>
+            <s-link href="/app/invoice">Invoice</s-link>
+            <s-link href="/app/draft">Draft</s-link>
+            <s-link href="/app/return">Return</s-link>
+            <s-link href="/app/credit-note">Credit Note</s-link>
+            <s-link href="/app/packing-slip">Packing Slip</s-link>
+            <s-link href="/app/templates">Templates</s-link>
+          </>
+        ) : null}
+        <s-link href="/app/pricing">Pricing</s-link>
+        {hasActivePlan ? (
+          <s-link href="/app/settings">Settings</s-link>
+        ) : null}
       </s-app-nav>
       <AppNavLoader />
-      <Outlet />
+      <Outlet
+        context={
+          {
+            hasActivePlan,
+            currentPlanId,
+            activeSubscriptionId,
+          } satisfies AppOutletContext
+        }
+      />
+      <TawkChat />
     </AppProvider>
   );
 }
