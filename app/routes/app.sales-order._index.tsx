@@ -28,6 +28,17 @@ import {
 import { usePlanUpgradeModal } from "../components/plan-lock";
 import type { PlanId } from "../plan-features";
 import {
+  adminFulfillmentStatusLabel,
+  adminIndexColumnLabel,
+  adminListTabLabel,
+  adminPageHeading,
+  adminPaymentStatusLabel,
+  adminTf,
+  type AdminUiLanguage,
+} from "../admin-i18n";
+
+import { useAdminI18n } from "../admin-i18n-context";
+import {
   AppProvider,
   Avatar,
   Badge,
@@ -172,6 +183,7 @@ function ListEmptyState({
 function documentStatusDisplay(
   order: SalesOrderRow,
   listMode: "invoice" | "credit-note",
+  language: AdminUiLanguage | string | null | undefined,
 ): {
   label: string;
   tone: SalesOrderRow["paymentTone"];
@@ -180,43 +192,63 @@ function documentStatusDisplay(
   // Credit-note void is an app lifecycle status — only on the CN list.
   // Never override invoice status with a voided credit note.
   if (listMode === "credit-note" && order.creditNoteVoided) {
-    return { label: "Voided", tone: undefined, progress: "complete" };
+    return {
+      label: adminPaymentStatusLabel(language, "VOIDED"),
+      tone: undefined,
+      progress: "complete",
+    };
   }
 
   const key = (order.paymentStatusKey || "").toUpperCase();
 
   if (key === "PAID") {
-    return { label: "Paid", tone: "success", progress: "complete" };
+    return {
+      label: adminPaymentStatusLabel(language, "PAID"),
+      tone: "success",
+      progress: "complete",
+    };
   }
   if (key === "VOIDED") {
-    return { label: "Voided", tone: undefined, progress: "complete" };
+    return {
+      label: adminPaymentStatusLabel(language, "VOIDED"),
+      tone: undefined,
+      progress: "complete",
+    };
   }
   if (key === "REFUNDED") {
-    return { label: "Refunded", tone: undefined, progress: "complete" };
+    return {
+      label: adminPaymentStatusLabel(language, "REFUNDED"),
+      tone: undefined,
+      progress: "complete",
+    };
   }
   if (key === "PARTIALLY_REFUNDED") {
     return {
-      label: "Partially refunded",
+      label: adminPaymentStatusLabel(language, "PARTIALLY_REFUNDED"),
       tone: "warning",
       progress: "partiallyComplete",
     };
   }
   if (key === "PARTIALLY_PAID") {
     return {
-      label: "Partially paid",
+      label: adminPaymentStatusLabel(language, "PARTIALLY_PAID"),
       tone: "warning",
       progress: "partiallyComplete",
     };
   }
   if (key === "AUTHORIZED") {
     return {
-      label: "Authorized",
+      label: adminPaymentStatusLabel(language, "AUTHORIZED"),
       tone: "attention",
       progress: "partiallyComplete",
     };
   }
   if (key === "EXPIRED") {
-    return { label: "Expired", tone: "critical", progress: "incomplete" };
+    return {
+      label: adminPaymentStatusLabel(language, "EXPIRED"),
+      tone: "critical",
+      progress: "incomplete",
+    };
   }
 
   // PENDING / UNPAID / unknown unpaid — overdue only after the invoice day.
@@ -228,14 +260,17 @@ function documentStatusDisplay(
 
   if (days <= 0) {
     return {
-      label: "Unpaid",
+      label: adminPaymentStatusLabel(language, "UNPAID"),
       tone: "attention",
       progress: "incomplete",
     };
   }
 
   return {
-    label: `Overdue by ${days} ${days === 1 ? "day" : "days"}`,
+    label:
+      days === 1
+        ? adminTf(language, "status.overdueByOneDay", {})
+        : adminTf(language, "status.overdueByDays", { days: String(days) }),
     tone: "warning",
     progress: "incomplete",
   };
@@ -865,6 +900,7 @@ function ListPerfHelpers({
 
 export default function SalesOrderPage() {
   const data = useLoaderData<typeof loader>();
+  const { language, t } = useAdminI18n();
   const revalidator = useRevalidator();
   const navigate = useNavigate();
   const currentPlanId: PlanId = getCurrentPlanId();
@@ -878,23 +914,39 @@ export default function SalesOrderPage() {
   const isPackingSlipList = data.listMode === "packing-slip";
   const isReturnList = data.listMode === "return";
   const isDraftList = data.listMode === "draft";
+  const pageHeading = adminPageHeading(language, data.listMode);
   const isDocumentList =
     isInvoiceList ||
     isCreditNoteList ||
     isPackingSlipList ||
     isReturnList ||
     isDraftList;
-  const indexColumns = isReturnList
-    ? RETURN_INDEX_COLUMNS
-    : isPackingSlipList
-      ? PACKING_SLIP_INDEX_COLUMNS
-      : isCreditNoteList
-        ? CREDIT_NOTE_INDEX_COLUMNS
-        : isDraftList
-          ? DRAFT_INDEX_COLUMNS
-          : isInvoiceList
-            ? INVOICE_INDEX_COLUMNS
-            : SALES_ORDER_INDEX_COLUMNS;
+  const indexColumns = useMemo(() => {
+    const base = isReturnList
+      ? RETURN_INDEX_COLUMNS
+      : isPackingSlipList
+        ? PACKING_SLIP_INDEX_COLUMNS
+        : isCreditNoteList
+          ? CREDIT_NOTE_INDEX_COLUMNS
+          : isDraftList
+            ? DRAFT_INDEX_COLUMNS
+            : isInvoiceList
+              ? INVOICE_INDEX_COLUMNS
+              : SALES_ORDER_INDEX_COLUMNS;
+    return base.map((col) => ({
+      ...col,
+      label: adminIndexColumnLabel(language, data.listMode, col.id),
+    }));
+  }, [
+    data.listMode,
+    isCreditNoteList,
+    isDraftList,
+    isInvoiceList,
+    isPackingSlipList,
+    isReturnList,
+    language,
+  ]);
+
   const columnsStorageKey = isReturnList
     ? "billoxi.index-columns.return"
     : isPackingSlipList
@@ -1820,7 +1872,9 @@ export default function SalesOrderPage() {
 
     if (isCreditNoteList) {
       actions.push({
-        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        content: bulkLocked
+          ? `${t("list.actionSendEmail")} (PREMIUM)`
+          : t("list.actionSendEmail"),
         onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
@@ -1837,8 +1891,7 @@ export default function SalesOrderPage() {
         disabled: isBusy || !canVoidCreditNote,
       });
       actions.push({
-        content:
-          selectedResources.length > 1 ? "Delete credit notes" : "Delete",
+        content: t("common.delete"),
         onAction: () => setConfirmAction("delete-credit-note"),
         disabled: isBusy,
         destructive: true,
@@ -1848,7 +1901,9 @@ export default function SalesOrderPage() {
 
     if (isPackingSlipList) {
       actions.push({
-        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        content: bulkLocked
+          ? `${t("list.actionSendEmail")} (PREMIUM)`
+          : t("list.actionSendEmail"),
         onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
@@ -1860,8 +1915,7 @@ export default function SalesOrderPage() {
         disabled: isBusy,
       });
       actions.push({
-        content:
-          selectedResources.length > 1 ? "Delete packing slips" : "Delete",
+        content: t("common.delete"),
         onAction: () => setConfirmAction("delete-packing-slip"),
         disabled: isBusy,
         destructive: true,
@@ -1871,7 +1925,9 @@ export default function SalesOrderPage() {
 
     if (isReturnList) {
       actions.push({
-        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        content: bulkLocked
+          ? `${t("list.actionSendEmail")} (PREMIUM)`
+          : t("list.actionSendEmail"),
         onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
@@ -1883,7 +1939,7 @@ export default function SalesOrderPage() {
         disabled: isBusy,
       });
       actions.push({
-        content: selectedResources.length > 1 ? "Delete returns" : "Delete",
+        content: t("common.delete"),
         onAction: () => setConfirmAction("delete-return"),
         disabled: isBusy,
         destructive: true,
@@ -1906,29 +1962,31 @@ export default function SalesOrderPage() {
     if (!isInvoiceList) {
       actions.push({
         content: bulkLocked
-          ? "Convert to invoice (PREMIUM)"
-          : "Convert to invoice",
+          ? `${t("detail.convertToInvoice")} (PREMIUM)`
+          : t("detail.convertToInvoice"),
         onAction: wrapBulk(() => setConfirmAction("invoice")),
         disabled: isBusy || !canConvertToInvoice,
       });
       actions.push({
         content: bulkLocked
-          ? "Convert to packing slip (PREMIUM)"
-          : "Convert to packing slip",
+          ? `${t("detail.convertToPackingSlip")} (PREMIUM)`
+          : t("detail.convertToPackingSlip"),
         onAction: wrapBulk(() => setConfirmAction("packing-slip")),
         disabled: isBusy || !canConvertToPackingSlip,
       });
       if (canConvertToReturn) {
         actions.push({
           content: bulkLocked
-            ? "Convert to return (PREMIUM)"
-            : "Convert to return",
+            ? `${t("detail.convertToReturn")} (PREMIUM)`
+            : t("detail.convertToReturn"),
           onAction: wrapBulk(() => setConfirmAction("return")),
           disabled: isBusy,
         });
       }
       actions.push({
-        content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+        content: bulkLocked
+          ? `${t("list.actionSendEmail")} (PREMIUM)`
+          : t("list.actionSendEmail"),
         onAction: wrapBulk(() => setConfirmAction("email")),
         disabled: isBusy || !canSendEmail,
       });
@@ -1950,7 +2008,9 @@ export default function SalesOrderPage() {
       disabled: isBusy || !canCreateCreditNote,
     });
     actions.push({
-      content: bulkLocked ? "Send email (PREMIUM)" : "Send email",
+      content: bulkLocked
+        ? `${t("list.actionSendEmail")} (PREMIUM)`
+        : t("list.actionSendEmail"),
       onAction: wrapBulk(() => setConfirmAction("email")),
       disabled: isBusy || !canSendEmail,
     });
@@ -1962,7 +2022,7 @@ export default function SalesOrderPage() {
       disabled: isBusy,
     });
     actions.push({
-      content: selectedResources.length > 1 ? "Delete invoices" : "Delete",
+      content: t("common.delete"),
       onAction: () => setConfirmAction("delete-invoice"),
       disabled: isBusy || !canDeleteInvoice,
       destructive: true,
@@ -1992,6 +2052,7 @@ export default function SalesOrderPage() {
     planGuard,
     selectedOrders,
     selectedResources.length,
+    t,
   ]);
 
   useEffect(() => {
@@ -2386,7 +2447,7 @@ export default function SalesOrderPage() {
   const tabs: TabProps[] = useMemo(() => {
     if (isReturnList) {
       return RETURN_LIST_VIEWS.map((view, index) => ({
-        content: view.label,
+        content: adminListTabLabel(language, view.id),
         index,
         onAction: () => {},
         id: `return-${view.id}`,
@@ -2396,7 +2457,7 @@ export default function SalesOrderPage() {
     }
     if (isPackingSlipList) {
       return PACKING_SLIP_LIST_VIEWS.map((view, index) => ({
-        content: view.label,
+        content: adminListTabLabel(language, view.id),
         index,
         onAction: () => {},
         id: `packing-slip-${view.id}`,
@@ -2406,7 +2467,7 @@ export default function SalesOrderPage() {
     }
     if (isCreditNoteList) {
       return CREDIT_NOTE_LIST_VIEWS.map((view, index) => ({
-        content: view.label,
+        content: adminListTabLabel(language, view.id),
         index,
         onAction: () => {},
         id: `credit-note-${view.id}`,
@@ -2416,7 +2477,7 @@ export default function SalesOrderPage() {
     }
     if (isDraftList) {
       return DRAFT_LIST_VIEWS.map((view, index) => ({
-        content: view.label,
+        content: adminListTabLabel(language, view.id),
         index,
         onAction: () => {},
         id: `draft-${view.id}`,
@@ -2426,7 +2487,7 @@ export default function SalesOrderPage() {
     }
     if (isInvoiceList) {
       return INVOICE_LIST_VIEWS.map((view, index) => ({
-        content: view.label,
+        content: adminListTabLabel(language, view.id),
         index,
         onAction: () => {},
         id: `invoice-${view.id}`,
@@ -2435,7 +2496,7 @@ export default function SalesOrderPage() {
       }));
     }
     return visibleViews.map((view, index) => ({
-      content: view.label,
+      content: adminListTabLabel(language, view.id),
       index,
       onAction: () => {},
       id: `${view.id}-${view.viewIndex}`,
@@ -2443,7 +2504,15 @@ export default function SalesOrderPage() {
       isLocked: true,
       actions: [],
     }));
-  }, [isCreditNoteList, isDraftList, isInvoiceList, isPackingSlipList, isReturnList, visibleViews]);
+  }, [
+    isCreditNoteList,
+    isDraftList,
+    isInvoiceList,
+    isPackingSlipList,
+    isReturnList,
+    language,
+    visibleViews,
+  ]);
 
   const selectedTab = isReturnList
     ? 0
@@ -2757,57 +2826,57 @@ export default function SalesOrderPage() {
     <EmptySearchResult
       title={
         isPackingSlipList
-          ? "No packing slips found"
+          ? t("list.emptyNoPackingSlipsFound")
           : isReturnList
-            ? "No returns found"
+            ? t("list.emptyNoReturnsFound")
             : isCreditNoteList
-              ? "No credit notes found"
+              ? t("list.emptyNoCreditNotesFound")
               : isDraftList
-                ? "No drafts found"
+                ? t("list.emptyNoDraftsFound")
                 : isInvoiceList
-                  ? "No invoices found"
-                  : "No orders found"
+                  ? t("list.emptyNoInvoicesFound")
+                  : t("list.emptyNoOrdersFound")
       }
-      description="Try changing the filters or search term"
+      description={t("list.emptyFilterTry")}
       withIllustration
     />
   ) : isPackingSlipList ? (
     <ListEmptyState
-      heading="No packing slips yet"
-      description="Convert a sales order to a packing slip to see it listed here."
+      heading={t("list.emptyNoPackingSlipsYet")}
+      description={t("list.emptyNoPackingSlipsYetDesc")}
       initials="PS"
       action={{
-        content: "Go to Sales Orders",
+        content: t("list.goToSalesOrders"),
         onAction: () => navigate("/app/sales-order"),
       }}
     />
   ) : isReturnList ? (
     <ListEmptyState
-      heading="No returns yet"
-      description="Convert a sales order to a return to see it listed here."
+      heading={t("list.emptyNoReturnsYet")}
+      description={t("list.emptyNoReturnsYetDesc")}
       initials="RT"
       action={{
-        content: "Go to Sales Orders",
+        content: t("list.goToSalesOrders"),
         onAction: () => navigate("/app/sales-order"),
       }}
     />
   ) : isCreditNoteList ? (
     <ListEmptyState
-      heading="No credit notes yet"
-      description="Create a credit note from an invoice to see it listed here."
+      heading={t("list.emptyNoCreditNotesYet")}
+      description={t("list.emptyNoCreditNotesYetDesc")}
       initials="CN"
       action={{
-        content: "Go to Invoice",
+        content: t("list.goToInvoice"),
         onAction: () => navigate("/app/invoice"),
       }}
     />
   ) : isDraftList ? (
     <ListEmptyState
-      heading="No draft orders yet"
-      description="Draft orders created in Shopify Admin will appear here."
+      heading={t("list.emptyNoDraftsYet")}
+      description={t("list.emptyNoDraftsYetDesc")}
       initials="DR"
       action={{
-        content: "Create in Shopify",
+        content: t("list.createInShopify"),
         onAction: () => {
           const shop =
             "shopDomain" in data && typeof data.shopDomain === "string"
@@ -2825,18 +2894,18 @@ export default function SalesOrderPage() {
     />
   ) : isInvoiceList ? (
     <ListEmptyState
-      heading="No invoices yet"
-      description="Convert a sales order to an invoice to see it listed here."
+      heading={t("list.emptyNoInvoicesYet")}
+      description={t("list.emptyNoInvoicesYetDesc")}
       initials="IN"
       action={{
-        content: "Go to Sales Orders",
+        content: t("list.goToSalesOrders"),
         onAction: () => navigate("/app/sales-order"),
       }}
     />
   ) : (
     <ListEmptyState
-      heading="No sales orders yet"
-      description="Orders from your Shopify store will appear here."
+      heading={t("list.emptyNoOrdersYet")}
+      description={t("list.emptyNoOrdersYetDesc")}
       initials="SO"
     />
   );
@@ -2847,6 +2916,7 @@ export default function SalesOrderPage() {
         ? documentStatusDisplay(
             order,
             isCreditNoteList ? "credit-note" : "invoice",
+            language,
           )
         : null;
 
@@ -2987,7 +3057,10 @@ export default function SalesOrderPage() {
                     tone={order.paymentTone}
                     progress={order.paymentProgress}
                   >
-                    {order.paymentStatus}
+                    {adminPaymentStatusLabel(
+                      language,
+                      order.paymentStatusKey || order.paymentStatus,
+                    )}
                   </Badge>
                 )}
               </div>
@@ -3000,7 +3073,10 @@ export default function SalesOrderPage() {
                 tone={order.fulfillmentTone}
                 progress={order.fulfillmentProgress}
               >
-                {order.fulfillmentStatus}
+                {adminFulfillmentStatusLabel(
+                  language,
+                  order.fulfillmentStatus,
+                )}
               </Badge>
             </IndexTable.Cell>
           );
@@ -3008,7 +3084,13 @@ export default function SalesOrderPage() {
           return (
             <IndexTable.Cell key={col.id}>
               <InlineStack align="center" blockAlign="center">
-                <Tooltip content={order.invoiced ? "Invoiced" : "Not invoiced"}>
+                <Tooltip
+                  content={
+                    order.invoiced
+                      ? t("col.invoiced")
+                      : t("status.notInvoiced")
+                  }
+                >
                   <span>
                     <Icon
                       source={
@@ -3016,7 +3098,9 @@ export default function SalesOrderPage() {
                       }
                       tone={order.invoiced ? "success" : "subdued"}
                       accessibilityLabel={
-                        order.invoiced ? "Invoiced" : "Not invoiced"
+                        order.invoiced
+                          ? t("col.invoiced")
+                          : t("status.notInvoiced")
                       }
                     />
                   </span>
@@ -3031,8 +3115,8 @@ export default function SalesOrderPage() {
                 <Tooltip
                   content={
                     order.packingSlip
-                      ? "Packing slip created"
-                      : "No packing slip"
+                      ? t("status.packingSlipCreated")
+                      : t("status.noPackingSlip")
                   }
                 >
                   <span>
@@ -3043,8 +3127,8 @@ export default function SalesOrderPage() {
                       tone={order.packingSlip ? "info" : "subdued"}
                       accessibilityLabel={
                         order.packingSlip
-                          ? "Packing slip created"
-                          : "No packing slip"
+                          ? t("status.packingSlipCreated")
+                          : t("status.noPackingSlip")
                       }
                     />
                   </span>
@@ -3055,11 +3139,15 @@ export default function SalesOrderPage() {
         case "creditNote": {
           const hasCreditNote = Boolean(order.creditNote);
           const voided = Boolean(order.creditNoteVoided);
-          const tooltip = !hasCreditNote
-            ? "No credit note"
+          const tooltipBase = !hasCreditNote
+            ? t("status.noCreditNote")
             : voided
-              ? `Credit note voided${order.creditNoteNumber ? ` (${order.creditNoteNumber})` : ""}`
-              : `Credit note created${order.creditNoteNumber ? ` (${order.creditNoteNumber})` : ""}`;
+              ? t("status.creditNoteVoided")
+              : t("status.creditNoteCreated");
+          const tooltip =
+            hasCreditNote && order.creditNoteNumber
+              ? `${tooltipBase} (${order.creditNoteNumber})`
+              : tooltipBase;
           return (
             <IndexTable.Cell key={col.id}>
               <InlineStack align="center" blockAlign="center">
@@ -3091,8 +3179,10 @@ export default function SalesOrderPage() {
                 <Tooltip
                   content={
                     order.returnSlip
-                      ? `Return created${order.returnNumber ? ` (${order.returnNumber})` : ""}`
-                      : "No return"
+                      ? order.returnNumber
+                        ? `${t("status.returnCreated")} (${order.returnNumber})`
+                        : t("status.returnCreated")
+                      : t("status.noReturn")
                   }
                 >
                   <span>
@@ -3102,7 +3192,9 @@ export default function SalesOrderPage() {
                       }
                       tone={order.returnSlip ? "success" : "subdued"}
                       accessibilityLabel={
-                        order.returnSlip ? "Return created" : "No return"
+                        order.returnSlip
+                          ? t("status.returnCreated")
+                          : t("status.noReturn")
                       }
                     />
                   </span>
@@ -3148,7 +3240,7 @@ export default function SalesOrderPage() {
                 onKeyDown={(event) => event.stopPropagation()}
               >
                 <InlineStack align="center" gap="100" wrap={false}>
-                  <Tooltip content="Print">
+                  <Tooltip content={t("list.actionPrint")}>
                     <Button
                       icon={PrintIcon}
                       variant="tertiary"
@@ -3159,7 +3251,7 @@ export default function SalesOrderPage() {
                       }}
                     />
                   </Tooltip>
-                  <Tooltip content="Download PDF">
+                  <Tooltip content={t("list.actionDownloadPdf")}>
                     <Button
                       icon={ImportIcon}
                       variant="tertiary"
@@ -3170,8 +3262,13 @@ export default function SalesOrderPage() {
                       }}
                     />
                   </Tooltip>
-                  <Tooltip content={order.emailed ? "Email sent" : "Send email"}>
-                    <span
+                  <Tooltip
+                    content={
+                      order.emailed
+                        ? t("list.actionEmailSent")
+                        : t("list.actionSendEmail")
+                    }
+                  >                    <span
                       className={
                         order.emailed ? "sales-orders-action-done" : undefined
                       }
@@ -3307,7 +3404,7 @@ export default function SalesOrderPage() {
         onChanged={handleListChanged}
         resolvePath={resolveOrderPath}
       />
-      <s-page heading={data.pageHeading} inlineSize="large">
+      <s-page heading={pageHeading} inlineSize="large">
         <s-button
           slot="secondary-actions"
           variant="secondary"
@@ -3315,7 +3412,7 @@ export default function SalesOrderPage() {
           disabled={isBusy || revalidator.state !== "idle" || undefined}
           onClick={handleReload}
         >
-          Reload
+          {t("list.reload")}
         </s-button>
         <div className="sales-orders-page" ref={pageRef}>
         {columnsMenuPortal}

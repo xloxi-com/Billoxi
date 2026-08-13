@@ -27,8 +27,15 @@ const EMBEDDED_QUERY_KEYS = [
   "session",
 ] as const;
 
+function normalizeAppPath(path: string) {
+  const [pathname, query] = path.split("?");
+  const clean = (pathname || "/").replace(/\/{2,}/g, "/") || "/";
+  return query ? `${clean}?${query}` : clean;
+}
+
 function embeddedAppPath(path: string) {
-  if (typeof window === "undefined") return path;
+  const normalized = normalizeAppPath(path);
+  if (typeof window === "undefined") return normalized;
   const current = new URLSearchParams(window.location.search);
   const next = new URLSearchParams();
   for (const key of EMBEDDED_QUERY_KEYS) {
@@ -36,7 +43,19 @@ function embeddedAppPath(path: string) {
     if (value) next.set(key, value);
   }
   const qs = next.toString();
-  return qs ? `${path}${path.includes("?") ? "&" : "?"}${qs}` : path;
+  return qs
+    ? `${normalized}${normalized.includes("?") ? "&" : "?"}${qs}`
+    : normalized;
+}
+
+/** Collapse `//app/...` so React Router can match embedded routes. */
+export function normalizeEmbeddedLocation() {
+  if (typeof window === "undefined") return false;
+  const { pathname, search, hash } = window.location;
+  const next = pathname.replace(/\/{2,}/g, "/") || "/";
+  if (next === pathname) return false;
+  window.history.replaceState(null, "", `${next}${search}${hash}`);
+  return true;
 }
 
 function clearRecoverReloadKeys() {
@@ -55,14 +74,18 @@ function clearRecoverReloadKeys() {
   }
 }
 
-/** Navigate inside the embedded admin iframe (keeps shop/host params). */
-function navigateEmbedded(path: string) {
-  const target = embeddedAppPath(path);
-  const shopify = (
+function shopifyBridge() {
+  return (
     window as Window & {
       shopify?: { navigate?: (url: string) => void };
     }
   ).shopify;
+}
+
+/** Navigate inside the embedded admin iframe (keeps shop/host params). */
+function navigateEmbedded(path: string) {
+  const target = embeddedAppPath(path);
+  const shopify = shopifyBridge();
 
   if (typeof shopify?.navigate === "function") {
     shopify.navigate(target);
@@ -70,6 +93,22 @@ function navigateEmbedded(path: string) {
   }
 
   window.location.assign(target);
+}
+
+function currentEmbeddedPath() {
+  if (typeof window === "undefined") return "/app";
+  return (window.location.pathname || "/app").replace(/\/{2,}/g, "/") || "/app";
+}
+
+function navigateToCurrentPage() {
+  navigateEmbedded(currentEmbeddedPath());
+}
+
+function reloadEmbedded() {
+  clearRecoverReloadKeys();
+  const path = currentEmbeddedPath();
+  // Same-path navigate is ignored by App Bridge; bump a query so the route remounts.
+  navigateEmbedded(`${path}?_reload=${Date.now()}`);
 }
 
 function getErrorInfo(error: unknown): ErrorInfo {
@@ -177,8 +216,7 @@ export function EmbeddedRouteErrorPage({
   };
 
   const reload = () => {
-    clearRecoverReloadKeys();
-    window.location.reload();
+    reloadEmbedded();
   };
 
   return (
@@ -230,7 +268,8 @@ export function renderEmbeddedRouteError(
     const last = Number(sessionStorage.getItem(reloadKey) || "0");
     if (Date.now() - last > 4000) {
       sessionStorage.setItem(reloadKey, String(Date.now()));
-      window.location.reload();
+      normalizeEmbeddedLocation();
+      navigateToCurrentPage();
       return null;
     }
   }

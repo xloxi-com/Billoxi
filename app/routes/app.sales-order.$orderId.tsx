@@ -122,6 +122,13 @@ import {
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { recordDocumentActivity } from "../record-document-activity.client";
+import {
+  adminPageHeading,
+  adminPaymentStatusLabel,
+  adminTf,
+  type AdminMessageKey,
+} from "../admin-i18n";
+import { useAdminI18n } from "../admin-i18n-context";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
@@ -174,6 +181,78 @@ function formatStatus(status: string | null) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function sidebarTitleKey(mode: DocumentMode): AdminMessageKey {
+  switch (mode) {
+    case "credit-note":
+      return "detail.sidebarCreditNotes";
+    case "invoice":
+      return "detail.sidebarInvoices";
+    case "packing-slip":
+      return "detail.sidebarPackingSlips";
+    case "return":
+      return "detail.sidebarReturns";
+    case "draft":
+      return "detail.sidebarDrafts";
+    default:
+      return "common.salesOrders";
+  }
+}
+
+function sidebarSearchKey(mode: DocumentMode): AdminMessageKey {
+  switch (mode) {
+    case "credit-note":
+      return "detail.searchCreditNotes";
+    case "invoice":
+      return "detail.searchInvoices";
+    case "packing-slip":
+      return "detail.searchPackingSlips";
+    case "return":
+      return "detail.searchReturns";
+    case "draft":
+      return "detail.searchDrafts";
+    default:
+      return "detail.searchOrders";
+  }
+}
+
+function sidebarResourceNameKeys(mode: DocumentMode): {
+  singular: AdminMessageKey;
+  plural: AdminMessageKey;
+} {
+  switch (mode) {
+    case "credit-note":
+      return {
+        singular: "detail.noun.creditNote",
+        plural: "detail.noun.creditNotes",
+      };
+    case "invoice":
+      return {
+        singular: "detail.noun.invoice",
+        plural: "detail.noun.invoices",
+      };
+    case "packing-slip":
+      return {
+        singular: "detail.noun.packingSlip",
+        plural: "detail.noun.packingSlips",
+      };
+    case "return":
+      return {
+        singular: "detail.noun.return",
+        plural: "detail.noun.returns",
+      };
+    case "draft":
+      return {
+        singular: "detail.noun.draft",
+        plural: "detail.noun.drafts",
+      };
+    default:
+      return {
+        singular: "detail.noun.salesOrder",
+        plural: "detail.noun.salesOrders",
+      };
+  }
 }
 
 function paymentBadgeTone(
@@ -1142,6 +1221,7 @@ export async function clientLoader({
 
 export default function SalesOrderDocumentPage() {
   const data = useLoaderData<typeof loader>();
+  const { language, t } = useAdminI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const navigation = useNavigation();
@@ -1646,7 +1726,7 @@ export default function SalesOrderDocumentPage() {
     } catch (error) {
       console.error("Print failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("Print failed", { isError: true });
+        shopify.toast.show(t("detail.toast.printFailed"), { isError: true });
       }
     } finally {
       setIsPrinting(false);
@@ -1663,6 +1743,7 @@ export default function SalesOrderDocumentPage() {
     isReturn,
     isPrinting,
     previewOrder.documentNumber,
+    t,
   ]);
 
   const handleDownload = useCallback(async () => {
@@ -1699,7 +1780,7 @@ export default function SalesOrderDocumentPage() {
       );
 
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("PDF downloaded");
+        shopify.toast.show(t("detail.toast.pdfDownloaded"));
       }
       recordDocumentActivity("downloaded", {
         documentKind: isCreditNote
@@ -1722,7 +1803,7 @@ export default function SalesOrderDocumentPage() {
     } catch (error) {
       console.error("PDF download failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("PDF download failed", { isError: true });
+        shopify.toast.show(t("detail.toast.pdfFailed"), { isError: true });
       }
     } finally {
       setIsDownloading(false);
@@ -1739,13 +1820,14 @@ export default function SalesOrderDocumentPage() {
     isReturn,
     isPrinting,
     previewOrder.documentNumber,
+    t,
   ]);
 
   const handleSend = useCallback(async () => {
     const email = data.order.email || data.order.billing.email;
     if (!email) {
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("No customer email on this order", { isError: true });
+        shopify.toast.show(t("detail.toast.noEmail"), { isError: true });
       }
       return;
     }
@@ -1826,7 +1908,7 @@ export default function SalesOrderDocumentPage() {
     } catch (error) {
       console.error("Email PDF prepare failed:", error);
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("Could not prepare PDF for email", {
+        shopify.toast.show(t("detail.toast.pdfEmailFailed"), {
           isError: true,
         });
       }
@@ -1853,6 +1935,7 @@ export default function SalesOrderDocumentPage() {
     isSendingEmail,
     previewOrder.documentNumber,
     sendFetcher,
+    t,
   ]);
 
   const handledSendDataRef = useRef<unknown>(null);
@@ -1864,7 +1947,7 @@ export default function SalesOrderDocumentPage() {
     const result = sendFetcher.data;
     if (!result.ok) {
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show(result.error || "Failed to send email", {
+        shopify.toast.show(result.error || t("detail.toast.sendFailed"), {
           isError: true,
         });
       }
@@ -1874,11 +1957,15 @@ export default function SalesOrderDocumentPage() {
     if (typeof shopify !== "undefined" && shopify.toast) {
       shopify.toast.show(
         result.attachedPdf
-          ? `Email sent to ${result.to} with PDF attached`
-          : `Email sent to ${result.to}`,
+          ? adminTf(language, "detail.toast.emailSentPdf", {
+              email: result.to || "",
+            })
+          : adminTf(language, "detail.toast.emailSent", {
+              email: result.to || "",
+            }),
       );
     }
-  }, [sendFetcher.state, sendFetcher.data]);
+  }, [sendFetcher.state, sendFetcher.data, language, t]);
 
   const [queuedAction, setQueuedAction] = useState<
     "print" | "download" | "send" | null
@@ -1967,7 +2054,8 @@ export default function SalesOrderDocumentPage() {
       : isCreditNote && creditNoteVoided
         ? "VOIDED"
         : paymentStatus;
-  const paymentLabel = formatStatus(headerStatus);
+  const paymentLabel =
+    adminPaymentStatusLabel(language, headerStatus) || formatStatus(headerStatus);
   const paymentStatusKey = (paymentStatus || "").toUpperCase();
   const isCancelledOrder =
     paymentStatusKey === "VOIDED" ||
@@ -1979,34 +2067,40 @@ export default function SalesOrderDocumentPage() {
     if (!data.isAdmin) return null;
 
     if (isDraft) {
-      return { label: "Draft", variant: "pending" as const };
+      return { label: t("pages.draft"), variant: "pending" as const };
     }
 
     if (isPackingSlip || isReturn) {
       if (isCancelledOrder) {
-        return { label: "Voided", variant: "voided" as const };
+        return { label: t("status.voided"), variant: "voided" as const };
       }
       return null;
     }
 
     if (isIssuedDocument) {
       if (isCreditNote && creditNoteVoided) {
-        return { label: "Voided", variant: "voided" as const };
+        return { label: t("status.voided"), variant: "voided" as const };
       }
       if (isCancelledOrder) {
-        return { label: "Voided", variant: "voided" as const };
+        return { label: t("status.voided"), variant: "voided" as const };
       }
       if (paymentStatusKey === "REFUNDED") {
-        return { label: "Refunded", variant: "refunded" as const };
+        return { label: t("status.refunded"), variant: "refunded" as const };
       }
       if (paymentStatusKey === "PARTIALLY_REFUNDED") {
-        return { label: "Partial refund", variant: "partial" as const };
+        return {
+          label: t("status.partiallyRefunded"),
+          variant: "partial" as const,
+        };
       }
       if (paymentStatusKey === "PAID") {
-        return { label: "Paid", variant: "paid" as const };
+        return { label: t("status.paid"), variant: "paid" as const };
       }
       if (paymentStatusKey === "PARTIALLY_PAID") {
-        return { label: "Partial paid", variant: "partial" as const };
+        return {
+          label: t("status.partiallyPaid"),
+          variant: "partial" as const,
+        };
       }
       if (
         paymentStatusKey === "PENDING" ||
@@ -2015,21 +2109,21 @@ export default function SalesOrderDocumentPage() {
         paymentStatusKey === "EXPIRED" ||
         !paymentStatusKey
       ) {
-        return { label: "Pending", variant: "pending" as const };
+        return { label: t("status.pending"), variant: "pending" as const };
       }
       return null;
     }
 
     if (isCancelledOrder) {
-      return { label: "Voided", variant: "voided" as const };
+      return { label: t("status.voided"), variant: "voided" as const };
     }
     if (alreadyInvoiced) {
-      return { label: "Invoiced", variant: "invoiced" as const };
+      return { label: t("status.invoiced"), variant: "invoiced" as const };
     }
     if (alreadyDraft) {
-      return { label: "Draft", variant: "pending" as const };
+      return { label: t("pages.draft"), variant: "pending" as const };
     }
-    return { label: "Not invoiced", variant: "not-invoiced" as const };
+    return { label: t("status.notInvoiced"), variant: "not-invoiced" as const };
   })();
 
   const handleConvertToInvoice = useCallback(() => {
@@ -2119,10 +2213,9 @@ export default function SalesOrderDocumentPage() {
     if (!isInvoice) return;
     if (data.hasCreditNote) {
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show(
-          "Delete the credit note first. Invoices with a credit note cannot be deleted.",
-          { isError: true },
-        );
+        shopify.toast.show(t("detail.toast.deleteCreditFirst"), {
+          isError: true,
+        });
       }
       setDeleteInvoiceOpen(false);
       return;
@@ -2138,6 +2231,7 @@ export default function SalesOrderDocumentPage() {
     isInvoice,
     isPackingSlip,
     isReturn,
+    t,
   ]);
 
   useEffect(() => {
@@ -2164,43 +2258,43 @@ export default function SalesOrderDocumentPage() {
 
     if (typeof shopify !== "undefined" && shopify.toast) {
       if (result.document === "update-credit-note") {
-        shopify.toast.show("Credit note details saved");
+        shopify.toast.show(t("detail.toast.creditSaved"));
         setInvoiceEditOpen(false);
       } else if (result.document === "update-invoice") {
-        shopify.toast.show("Invoice details saved");
+        shopify.toast.show(t("detail.toast.invoiceSaved"));
         setInvoiceEditOpen(false);
       } else if (result.document === "update-draft") {
-        shopify.toast.show("Draft details saved");
+        shopify.toast.show(t("detail.toast.draftSaved"));
         setInvoiceEditOpen(false);
       } else if (result.document === "update-sales-order") {
-        shopify.toast.show("Sales order details saved");
+        shopify.toast.show(t("detail.toast.salesOrderSaved"));
         setInvoiceEditOpen(false);
       } else if (result.document === "delete-credit-note") {
-        shopify.toast.show("Credit note deleted");
+        shopify.toast.show(t("detail.toast.creditDeleted"));
         navigate(listPath);
         return;
       } else if (result.document === "delete-invoice") {
-        shopify.toast.show("Invoice deleted");
+        shopify.toast.show(t("detail.toast.invoiceDeleted"));
         navigate(listPath);
         return;
       } else if (result.document === "delete-packing-slip") {
-        shopify.toast.show("Packing slip deleted");
+        shopify.toast.show(t("detail.toast.packingDeleted"));
         navigate(listPath);
         return;
       } else if (result.document === "delete-return") {
-        shopify.toast.show("Return deleted");
+        shopify.toast.show(t("detail.toast.returnDeleted"));
         navigate(listPath);
         return;
       } else if (result.document === "delete-draft") {
-        shopify.toast.show("Draft deleted");
+        shopify.toast.show(t("detail.toast.draftDeleted"));
         navigate("/app/draft");
         return;
       } else if (result.document === "packing-slip") {
-        shopify.toast.show("Converted to packing slip");
+        shopify.toast.show(t("detail.toast.convertedPacking"));
       } else if (result.document === "return") {
-        shopify.toast.show("Converted to return");
+        shopify.toast.show(t("detail.toast.convertedReturn"));
       } else if (result.document === "draft") {
-        shopify.toast.show("Saved as draft");
+        shopify.toast.show(t("detail.toast.savedDraft"));
         const numericId = data.order.id.includes("/")
           ? data.order.id.split("/").pop() || data.order.id
           : data.order.id;
@@ -2211,7 +2305,7 @@ export default function SalesOrderDocumentPage() {
         (result.document === "invoice" && isDraft)
       ) {
         setConvertInvoiceOpen(false);
-        shopify.toast.show("Converted to invoice");
+        shopify.toast.show(t("detail.toast.convertedInvoice"));
         const numericId = data.order.id.includes("/")
           ? data.order.id.split("/").pop() || data.order.id
           : data.order.id;
@@ -2221,7 +2315,7 @@ export default function SalesOrderDocumentPage() {
         return;
       } else if (result.document === "invoice") {
         setConvertInvoiceOpen(false);
-        shopify.toast.show("Converted to invoice");
+        shopify.toast.show(t("detail.toast.convertedInvoice"));
       }
     }
     // Fetcher POST already revalidates via shouldRevalidate — avoid a second full reload.
@@ -2232,6 +2326,7 @@ export default function SalesOrderDocumentPage() {
     isDraft,
     listPath,
     navigate,
+    t,
     templateQuery,
   ]);
 
@@ -2266,17 +2361,7 @@ export default function SalesOrderDocumentPage() {
         <PrefetchPageLinks page={pendingPreviewHref} />
       ) : null}
       <s-link slot="breadcrumb-actions" href={listPath}>
-        {isCreditNote
-          ? "Credit Note"
-          : isInvoice
-            ? "Invoice"
-            : isPackingSlip
-              ? "Packing Slip"
-              : isReturn
-                ? "Return"
-                : isDraft
-                  ? "Draft"
-                  : "Sales Orders"}
+        {adminPageHeading(language, data.documentMode)}
       </s-link>
       {headerStatus ? (
         <s-badge slot="accessory" tone={paymentBadgeTone(headerStatus)}>
@@ -2293,7 +2378,7 @@ export default function SalesOrderDocumentPage() {
           void handleDownload();
         }}
       >
-        {isDownloading ? "Downloading…" : "Download"}
+        {isDownloading ? t("detail.downloading") : t("common.download")}
       </s-button>
       <s-button
         slot="secondary-actions"
@@ -2311,7 +2396,7 @@ export default function SalesOrderDocumentPage() {
         }
         onClick={handleReload}
       >
-        Reload
+        {t("list.reload")}
       </s-button>
       {!isPackingSlip && !isReturn ? (
         <s-button
@@ -2320,7 +2405,7 @@ export default function SalesOrderDocumentPage() {
           disabled={isConverting || undefined}
           onClick={openInvoiceEdit}
         >
-          Edit
+          {t("common.edit")}
         </s-button>
       ) : null}
       {!isCancelledOrder ? (
@@ -2337,7 +2422,7 @@ export default function SalesOrderDocumentPage() {
               disabled={isConverting || undefined}
               onClick={handleConvertToInvoice}
             >
-              Convert to invoice
+              {t("detail.convertToInvoice")}
             </s-button>
           ) : null}
           {!isIssuedDocument && !data.orderPackingSlip ? (
@@ -2352,7 +2437,7 @@ export default function SalesOrderDocumentPage() {
               disabled={isConverting || undefined}
               onClick={handleConvertToPackingSlip}
             >
-              Convert to packing slip
+              {t("detail.convertToPackingSlip")}
             </s-button>
           ) : null}
           {canConvertToReturn ? (
@@ -2367,7 +2452,7 @@ export default function SalesOrderDocumentPage() {
               disabled={isConverting || undefined}
               onClick={handleConvertToReturn}
             >
-              Convert to return
+              {t("detail.convertToReturn")}
             </s-button>
           ) : null}
         </>
@@ -2379,7 +2464,7 @@ export default function SalesOrderDocumentPage() {
         disabled={isConverting || isCancelledOrder || isSendingEmail || undefined}
         onClick={handleSend}
       >
-        Send Email
+        {t("list.actionSendEmail")}
       </s-button>
       <s-button
         slot="secondary-actions"
@@ -2390,7 +2475,7 @@ export default function SalesOrderDocumentPage() {
           void handlePrint();
         }}
       >
-        {isPrinting ? "Preparing…" : "Print"}
+        {isPrinting ? t("detail.preparing") : t("list.actionPrint")}
       </s-button>
       {isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft ? (
         <s-button
@@ -2413,7 +2498,7 @@ export default function SalesOrderDocumentPage() {
           }
           onClick={() => setDeleteInvoiceOpen(true)}
         >
-          Delete
+          {t("common.delete")}
         </s-button>
       ) : null}
 
@@ -2431,44 +2516,22 @@ export default function SalesOrderDocumentPage() {
                     <BlockStack gap="300">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="h2" variant="headingSm">
-                          {isCreditNote
-                            ? "Credit notes"
-                            : isInvoice
-                              ? "Invoices"
-                              : isPackingSlip
-                                ? "Packing slips"
-                                : isReturn
-                                  ? "Returns"
-                                  : isDraft
-                                    ? "Drafts"
-                                    : "Sales orders"}
+                          {t(sidebarTitleKey(data.documentMode))}
                         </Text>
                         <Button
                           onClick={() => navigate(listPath)}
                           variant="plain"
                         >
-                          View all
+                          {t("common.viewAll")}
                         </Button>
                       </InlineStack>
                       <TextField
-                        label="Search"
+                        label={t("common.search")}
                         labelHidden
                         value={sidebarQuery}
                         onChange={setSidebarQuery}
                         autoComplete="off"
-                        placeholder={
-                          isCreditNote
-                            ? "Search credit notes"
-                            : isInvoice
-                              ? "Search invoices"
-                              : isPackingSlip
-                                ? "Search packing slips"
-                                : isReturn
-                                  ? "Search returns"
-                                  : isDraft
-                                    ? "Search drafts"
-                                    : "Search orders"
-                        }
+                        placeholder={t(sidebarSearchKey(data.documentMode))}
                         prefix={<Icon source={SearchIcon} tone="subdued" />}
                         clearButton
                         onClearButtonClick={() => setSidebarQuery("")}
@@ -2484,7 +2547,7 @@ export default function SalesOrderDocumentPage() {
                     <Suspense
                       fallback={
                         <div className="sales-order-document-sidebar__loading">
-                          <PageLoader label="Loading orders" />
+                          <PageLoader label={t("detail.loadingOrders")} />
                         </div>
                       }
                     >
@@ -2500,6 +2563,10 @@ export default function SalesOrderDocumentPage() {
                                   item.total,
                                   item.paymentStatus,
                                   formatStatus(item.paymentStatus || ""),
+                                  adminPaymentStatusLabel(
+                                    language,
+                                    item.paymentStatus,
+                                  ),
                                 ]
                                   .filter(Boolean)
                                   .join(" ")
@@ -2527,32 +2594,23 @@ export default function SalesOrderDocumentPage() {
                       ) : null,
                     )}
                     <ResourceList
-                      resourceName={
-                        isCreditNote
-                          ? { singular: "credit note", plural: "credit notes" }
-                          : isInvoice
-                            ? { singular: "invoice", plural: "invoices" }
-                            : isPackingSlip
-                              ? {
-                                  singular: "packing slip",
-                                  plural: "packing slips",
-                                }
-                              : isReturn
-                                ? { singular: "return", plural: "returns" }
-                                : isDraft
-                                  ? { singular: "draft", plural: "drafts" }
-                                  : {
-                                      singular: "sales order",
-                                      plural: "sales orders",
-                                    }
-                      }
+                      resourceName={{
+                        singular: t(
+                          sidebarResourceNameKeys(data.documentMode).singular,
+                        ),
+                        plural: t(
+                          sidebarResourceNameKeys(data.documentMode).plural,
+                        ),
+                      }}
                       items={filteredOrders}
                       idForItem={(item) => item.id}
                       emptyState={
                         query ? (
                           <Box padding="400">
                             <Text as="p" tone="subdued" alignment="center">
-                              No matches for “{sidebarQuery.trim()}”
+                              {adminTf(language, "detail.noMatches", {
+                                query: sidebarQuery.trim(),
+                              })}
                             </Text>
                           </Box>
                         ) : undefined
@@ -2583,7 +2641,11 @@ export default function SalesOrderDocumentPage() {
                         return (
                           <ResourceItem
                             id={item.id}
-                            accessibilityLabel={`Open ${salesOrderLabel}`}
+                            accessibilityLabel={adminTf(
+                              language,
+                              "detail.openItem",
+                              { name: salesOrderLabel },
+                            )}
                             onClick={() => {
                               if (item.id === data.order.id) return;
                               openOrder(item.id);
@@ -2641,7 +2703,10 @@ export default function SalesOrderDocumentPage() {
                                           : badgeTone ?? undefined
                                       }
                                     >
-                                      {formatStatus(sidebarBadgeStatus)}
+                                      {adminPaymentStatusLabel(
+                                        language,
+                                        sidebarBadgeStatus,
+                                      ) || formatStatus(sidebarBadgeStatus)}
                                     </Badge>
                                   ) : null}
                                   {!isIssuedDocument ? (
@@ -2654,13 +2719,13 @@ export default function SalesOrderDocumentPage() {
                                       role="img"
                                       aria-label={
                                         item.invoiced
-                                          ? "Invoiced"
-                                          : "Not invoiced"
+                                          ? t("status.invoiced")
+                                          : t("status.notInvoiced")
                                       }
                                       title={
                                         item.invoiced
-                                          ? "Invoiced"
-                                          : "Not invoiced"
+                                          ? t("status.invoiced")
+                                          : t("status.notInvoiced")
                                       }
                                     />
                                   ) : null}
@@ -2692,7 +2757,7 @@ export default function SalesOrderDocumentPage() {
           >
             {isPreviewLoading ? (
               <div className="sales-order-document-stage__loader no-print">
-                <PageLoader label="Loading document preview" />
+                <PageLoader label={t("detail.loadingPreview")} />
               </div>
             ) : null}
             <Scrollable
@@ -2740,9 +2805,9 @@ export default function SalesOrderDocumentPage() {
             if (isConverting) return;
             setConvertInvoiceOpen(false);
           }}
-          title="Convert to invoice?"
+          title={t("detail.convertInvoiceTitle")}
           primaryAction={{
-            content: "Yes",
+            content: t("common.yes"),
             onAction: confirmConvertToInvoice,
             loading:
               isConverting &&
@@ -2751,7 +2816,7 @@ export default function SalesOrderDocumentPage() {
           }}
           secondaryActions={[
             {
-              content: "No",
+              content: t("common.no"),
               disabled: isConverting,
               onAction: () => setConvertInvoiceOpen(false),
             },
@@ -2760,8 +2825,8 @@ export default function SalesOrderDocumentPage() {
           <Modal.Section>
             <Text as="p">
               {isDraft
-                ? "Are you sure you want to convert this draft to an invoice? The draft will be replaced by the invoice."
-                : "Are you sure you want to convert this sales order to an invoice?"}
+                ? t("detail.convertDraftInvoiceBody")
+                : t("detail.convertInvoiceBody")}
             </Text>
           </Modal.Section>
         </Modal>
@@ -2770,17 +2835,17 @@ export default function SalesOrderDocumentPage() {
           onClose={() => setDeleteInvoiceOpen(false)}
           title={
             isCreditNote
-              ? "Delete credit note?"
+              ? t("detail.deleteCreditNoteTitle")
               : isPackingSlip
-                ? "Delete packing slip?"
+                ? t("detail.deletePackingSlipTitle")
                 : isReturn
-                  ? "Delete return?"
+                  ? t("detail.deleteReturnTitle")
                   : isDraft
-                    ? "Delete draft?"
-                    : "Delete invoice?"
+                    ? t("detail.deleteDraftTitle")
+                    : t("detail.deleteInvoiceTitle")
           }
           primaryAction={{
-            content: "Delete",
+            content: t("common.delete"),
             destructive: true,
             onAction: handleDeleteInvoice,
             loading:
@@ -2796,7 +2861,7 @@ export default function SalesOrderDocumentPage() {
           }}
           secondaryActions={[
             {
-              content: "Cancel",
+              content: t("common.cancel"),
               onAction: () => setDeleteInvoiceOpen(false),
             },
           ]}
@@ -2804,16 +2869,16 @@ export default function SalesOrderDocumentPage() {
           <Modal.Section>
             <Text as="p">
               {isCreditNote
-                ? "Are you sure you want to delete this credit note? The invoice and sales order stay; only the credit note record is removed."
+                ? t("detail.deleteCreditNoteBody")
                 : isPackingSlip
-                  ? "Are you sure you want to delete this packing slip? The sales order will stay; only the packing slip record is removed."
+                  ? t("detail.deletePackingSlipBody")
                   : isReturn
-                    ? "Are you sure you want to delete this return? The sales order will stay; only the return record is removed."
+                    ? t("detail.deleteReturnBody")
                     : isDraft
-                      ? "Are you sure you want to delete this draft? The sales order will stay; only the draft record is removed."
+                      ? t("detail.deleteDraftBody")
                       : data.hasCreditNote
-                        ? "This invoice has a credit note. Delete the credit note first, then you can delete the invoice."
-                        : "Are you sure you want to delete this invoice? The sales order will stay; only the invoice record is removed."}
+                        ? t("detail.deleteInvoiceHasCredit")
+                        : t("detail.deleteInvoiceBody")}
             </Text>
           </Modal.Section>
         </Modal>
@@ -2822,15 +2887,15 @@ export default function SalesOrderDocumentPage() {
           onClose={closeInvoiceEdit}
           title={
             isCreditNote
-              ? "Edit credit note"
+              ? t("detail.editCreditNote")
               : isInvoice
-                ? "Edit invoice"
+                ? t("detail.editInvoice")
                 : isDraft
-                  ? "Edit draft"
-                  : "Edit sales order"
+                  ? t("detail.editDraft")
+                  : t("detail.editSalesOrder")
           }
           primaryAction={{
-            content: "Save",
+            content: t("common.save"),
             onAction: handleSaveInvoiceDetails,
             loading:
               isConverting &&
@@ -2846,7 +2911,7 @@ export default function SalesOrderDocumentPage() {
           }}
           secondaryActions={[
             {
-              content: "Cancel",
+              content: t("common.cancel"),
               onAction: closeInvoiceEdit,
             },
           ]}
@@ -2861,12 +2926,12 @@ export default function SalesOrderDocumentPage() {
                 <s-text-field
                   label={
                     isCreditNote
-                      ? "Credit note number"
+                      ? t("detail.numberCreditNote")
                       : isInvoice
-                        ? "Invoice number"
+                        ? t("detail.numberInvoice")
                         : isDraft
-                          ? "Draft number"
-                          : "Sales order number"
+                          ? t("detail.numberDraft")
+                          : t("detail.numberSalesOrder")
                   }
                   value={editInvoiceNumber}
                   onInput={handleInvoiceNumberInput}
@@ -2875,12 +2940,12 @@ export default function SalesOrderDocumentPage() {
                 <s-date-field
                   label={
                     isCreditNote
-                      ? "Credit note date"
+                      ? t("detail.dateCreditNote")
                       : isInvoice
-                        ? "Invoice date"
+                        ? t("detail.dateInvoice")
                         : isDraft
-                          ? "Draft date"
-                          : "Order date"
+                          ? t("detail.dateDraft")
+                          : t("detail.dateSalesOrder")
                   }
                   value={editInvoiceDate}
                   onInput={(event: Event) =>
@@ -2893,29 +2958,31 @@ export default function SalesOrderDocumentPage() {
               </s-grid>
               {isCreditNote ? (
                 <s-text-field
-                  label="Reason"
+                  label={t("detail.reason")}
                   value={editCreditReason}
                   onInput={(event: Event) =>
                     setEditCreditReason(fieldValue(event))
                   }
                   autocomplete="off"
-                  placeholder="Return, overcharge, goodwill…"
+                  placeholder={t("detail.reasonPlaceholder")}
                 />
               ) : null}
               {!isInvoice && !isCreditNote && !isDraft && numberChanged ? (
                 <BlockStack gap="200">
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    After saving this number
+                    {t("detail.afterSavingNumber")}
                   </Text>
                   <RadioButton
-                    label={`Use ${editInvoiceNumber.trim() || "this number"} for this order, then continue auto-generating from the next number`}
+                    label={adminTf(language, "detail.numberModeContinue", {
+                      number: editInvoiceNumber.trim() || t("detail.thisNumber"),
+                    })}
                     checked={numberMode === "continue"}
                     id="so-number-mode-continue"
                     name="so-number-mode"
                     onChange={() => setNumberMode("continue")}
                   />
                   <RadioButton
-                    label="Switch to manual sales order numbers (enter each one yourself)"
+                    label={t("detail.numberModeManual")}
                     checked={numberMode === "manual"}
                     id="so-number-mode-manual"
                     name="so-number-mode"
@@ -2924,7 +2991,7 @@ export default function SalesOrderDocumentPage() {
                 </BlockStack>
               ) : null}
               <s-text-area
-                label="Customer note"
+                label={t("detail.customerNote")}
                 value={editCustomerNote}
                 rows={3}
                 onInput={(event: Event) =>
@@ -2932,26 +2999,24 @@ export default function SalesOrderDocumentPage() {
                 }
               />
               <Text as="p" tone="subdued">
-                Shown in the Notes section. Leave blank to use the Shopify order
-                note (or the template default notes).
+                {t("detail.customerNoteHelp")}
               </Text>
               <s-text-area
-                label="Terms & Conditions"
+                label={t("detail.terms")}
                 value={editTerms}
                 rows={3}
                 onInput={(event: Event) => setEditTerms(fieldValue(event))}
               />
-              <s-banner tone="info" heading="Important">
-                Items, prices, discounts, tax, and totals cannot be edited here.
-                Update them in the Shopify order — changes sync to this{" "}
-                {isCreditNote
-                  ? "credit note"
-                  : isInvoice
-                    ? "invoice"
-                    : isDraft
-                      ? "draft"
-                      : "sales order"}{" "}
-                automatically.
+              <s-banner tone="info" heading={t("detail.important")}>
+                {adminTf(language, "detail.itemsLocked", {
+                  kind: isCreditNote
+                    ? t("detail.noun.creditNote")
+                    : isInvoice
+                      ? t("detail.noun.invoice")
+                      : isDraft
+                        ? t("detail.noun.draft")
+                        : t("detail.noun.salesOrder"),
+                })}
               </s-banner>
             </s-stack>
           </Modal.Section>

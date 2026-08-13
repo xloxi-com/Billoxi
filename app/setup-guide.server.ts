@@ -1,13 +1,29 @@
 import { randomUUID } from "node:crypto";
 import prisma from "./db.server";
+import {
+  normalizeAdminUiLanguage,
+  type AdminUiLanguage,
+} from "./admin-i18n";
 
 export type SetupGuideStepId =
+  | "admin-language"
   | "store-details"
   | "templates"
   | "transaction-numbers"
   | "smtp";
 
-export type SetupGuideProgress = Partial<Record<SetupGuideStepId, boolean>>;
+export type SetupGuideProgress = Partial<Record<SetupGuideStepId, boolean>> & {
+  /** Billoxi admin UI language (menus/pages) — not template/PDF language. */
+  adminLanguage?: AdminUiLanguage;
+};
+
+const SETUP_GUIDE_STEPS: readonly SetupGuideStepId[] = [
+  "admin-language",
+  "store-details",
+  "templates",
+  "transaction-numbers",
+  "smtp",
+] as const;
 
 const SETUP_GUIDE_TTL_MS = 120_000;
 const setupGuideCache = new Map<
@@ -19,13 +35,12 @@ function normalizeSetupGuide(value: unknown): SetupGuideProgress {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const raw = value as Record<string, unknown>;
   const next: SetupGuideProgress = {};
-  for (const key of [
-    "store-details",
-    "templates",
-    "transaction-numbers",
-    "smtp",
-  ] as const) {
+  for (const key of SETUP_GUIDE_STEPS) {
     if (raw[key] === true) next[key] = true;
+  }
+  if (typeof raw.adminLanguage === "string" && raw.adminLanguage.trim()) {
+    next.adminLanguage = normalizeAdminUiLanguage(raw.adminLanguage);
+    next["admin-language"] = true;
   }
   return next;
 }
@@ -67,15 +82,17 @@ export async function loadSetupGuideProgress(
   }
 }
 
-export async function markSetupGuideStep(
+export async function loadAdminLanguage(
   shop: string,
-  step: SetupGuideStepId,
+): Promise<AdminUiLanguage | null> {
+  const progress = await loadSetupGuideProgress(shop);
+  return progress.adminLanguage ?? null;
+}
+
+async function persistSetupGuide(
+  shop: string,
+  next: SetupGuideProgress,
 ): Promise<SetupGuideProgress> {
-  const current = await loadSetupGuideProgress(shop);
-  if (current[step]) return current;
-
-  const next: SetupGuideProgress = { ...current, [step]: true };
-
   try {
     const existing = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "ShopSettings" WHERE shop = ${shop} LIMIT 1
@@ -106,8 +123,7 @@ export async function markSetupGuideStep(
       `;
     }
   } catch {
-    // Column missing or DB error — don't block the merchant save.
-    return current;
+    return next;
   }
 
   setupGuideCache.set(shop, {
@@ -115,4 +131,30 @@ export async function markSetupGuideStep(
     value: next,
   });
   return next;
+}
+
+export async function markSetupGuideStep(
+  shop: string,
+  step: SetupGuideStepId,
+): Promise<SetupGuideProgress> {
+  const current = await loadSetupGuideProgress(shop);
+  if (current[step]) return current;
+
+  const next: SetupGuideProgress = { ...current, [step]: true };
+  return persistSetupGuide(shop, next);
+}
+
+/** Save admin UI language and mark the setup step done. Does not change template/PDF language. */
+export async function saveAdminLanguage(
+  shop: string,
+  language: string,
+): Promise<SetupGuideProgress> {
+  const current = await loadSetupGuideProgress(shop);
+  const adminLanguage = normalizeAdminUiLanguage(language);
+  const next: SetupGuideProgress = {
+    ...current,
+    adminLanguage,
+    "admin-language": true,
+  };
+  return persistSetupGuide(shop, next);
 }

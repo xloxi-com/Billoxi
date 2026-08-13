@@ -9,6 +9,7 @@ import {
 import { EmailIcon, ImportIcon, PrintIcon } from "@shopify/polaris-icons";
 
 import type { DailyUsagePoint } from "../shop-monthly-usage.server";
+import { useAdminI18n } from "../admin-i18n-context";
 
 import "./home-analytics.css";
 
@@ -18,20 +19,20 @@ type AnalyticsMetric = {
   value: number;
 };
 
-const CHART_SERIES = [
+const CHART_SERIES_META = [
   {
     key: "printed" as const,
-    label: "Printed",
+    labelKey: "home.chartPrinted" as const,
     cssVar: "--billoxi-analytics-printed",
   },
   {
     key: "downloaded" as const,
-    label: "Downloaded",
+    labelKey: "home.chartDownloaded" as const,
     cssVar: "--billoxi-analytics-downloaded",
   },
   {
     key: "sent" as const,
-    label: "Sent",
+    labelKey: "home.chartSent" as const,
     cssVar: "--billoxi-analytics-sent",
   },
 ] as const;
@@ -91,6 +92,11 @@ function AnalyticsMetricCard({ metric }: { metric: AnalyticsMetric }) {
 }
 
 function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
+  const { t } = useAdminI18n();
+  const chartSeries = CHART_SERIES_META.map((item) => ({
+    ...item,
+    label: t(item.labelKey),
+  }));
   const width = 720;
   const height = 228;
   const pad = { top: 12, right: 8, bottom: 40, left: 40 };
@@ -113,7 +119,7 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
   const barGap = 3;
   const barWidth = Math.max(
     4,
-    Math.min(12, (groupWidth - 10) / CHART_SERIES.length - barGap),
+    Math.min(12, (groupWidth - 10) / chartSeries.length - barGap),
   );
   const yTicks = buildYTicks(maxValue);
 
@@ -129,14 +135,14 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
         <InlineStack align="space-between" blockAlign="center" wrap gap="300">
           <BlockStack gap="050">
             <Text as="h3" variant="headingSm">
-              Last 14 days
+              {t("home.chartTitle")}
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Print, download, and email activity
+              {t("home.chartSubtitle")}
             </Text>
           </BlockStack>
           <InlineStack gap="300" wrap>
-            {CHART_SERIES.map((item) => (
+            {chartSeries.map((item) => (
               <InlineStack key={item.key} gap="150" blockAlign="center">
                 <span
                   className="billoxi-analytics-legend-swatch"
@@ -158,8 +164,7 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
             padding="600"
           >
             <Text as="p" alignment="center" tone="subdued" variant="bodySm">
-              No activity in the last 14 days. Print, download, or send a
-              document to see trends here.
+              {t("home.chartEmpty")}
             </Text>
           </Box>
         ) : (
@@ -170,7 +175,7 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
               width="100%"
               height="228"
               role="img"
-              aria-label="Printed, downloaded, and sent activity for the last 14 days"
+              aria-label={t("home.chartAria")}
             >
               {yTicks.map((tick) => {
                 const y = pad.top + plotH - (tick / maxValue) * plotH;
@@ -198,15 +203,15 @@ function UsageStatisticsChart({ series }: { series: DailyUsagePoint[] }) {
               {series.map((point, index) => {
                 const groupX = pad.left + index * groupWidth;
                 const clusterWidth =
-                  CHART_SERIES.length * barWidth +
-                  (CHART_SERIES.length - 1) * barGap;
+                  chartSeries.length * barWidth +
+                  (chartSeries.length - 1) * barGap;
                 const startX = groupX + (groupWidth - clusterWidth) / 2;
                 const showLabel =
                   index % 2 === 0 || index === series.length - 1;
 
                 return (
                   <g key={point.date}>
-                    {CHART_SERIES.map((item, barIndex) => {
+                    {chartSeries.map((item, barIndex) => {
                       const value = point[item.key];
                       const barH = (value / maxValue) * plotH;
                       const x = startX + barIndex * (barWidth + barGap);
@@ -266,65 +271,70 @@ export function HomeAnalyticsSection({
   chartLocked = false,
   onUnlockChart,
 }: HomeAnalyticsProps) {
+  const { t } = useAdminI18n();
   const metrics: AnalyticsMetric[] = [
-    { key: "printed", label: "Monthly Printed", value: printed },
-    { key: "downloaded", label: "Monthly Downloaded", value: downloaded },
-    { key: "sent", label: "Monthly Sent", value: sent },
+    { key: "printed", label: t("home.monthlyPrinted"), value: printed },
+    {
+      key: "downloaded",
+      label: t("home.monthlyDownloaded"),
+      value: downloaded,
+    },
+    { key: "sent", label: t("home.monthlySent"), value: sent },
   ];
 
   return (
     <div className="billoxi-analytics">
       <BlockStack gap="400">
-      <BlockStack gap="100">
-        <Text as="h2" variant="headingMd">
-          Analytics
-        </Text>
-        <Text as="p" tone="subdued" variant="bodySm">
-          Document activity for the current calendar month
-        </Text>
-      </BlockStack>
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingMd">
+            {t("home.analytics")}
+          </Text>
+          <Text as="p" tone="subdued" variant="bodySm">
+            {t("home.analyticsSubtitle")}
+          </Text>
+        </BlockStack>
 
-      <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
-        {metrics.map((metric) => (
-          <AnalyticsMetricCard key={metric.key} metric={metric} />
-        ))}
-      </InlineGrid>
+        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
+          {metrics.map((metric) => (
+            <AnalyticsMetricCard key={metric.key} metric={metric} />
+          ))}
+        </InlineGrid>
 
-      {chartLocked ? (
-        <Box
-          background="bg-surface-secondary"
-          borderRadius="200"
-          padding="500"
-        >
-          <BlockStack gap="300" inlineAlign="center">
-            <Text as="p" alignment="center" fontWeight="semibold">
-              Usage chart — PREMIUM
-            </Text>
-            <Text as="p" alignment="center" tone="subdued" variant="bodySm">
-              Upgrade to unlock the last 14 days activity chart.
-            </Text>
-            {onUnlockChart ? (
-              <button
-                type="button"
-                onClick={onUnlockChart}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--p-color-text-link, #005bd3)",
-                  cursor: "pointer",
-                  font: "inherit",
-                  fontWeight: 600,
-                  padding: 0,
-                }}
-              >
-                Upgrade plan
-              </button>
-            ) : null}
-          </BlockStack>
-        </Box>
-      ) : (
-        <UsageStatisticsChart series={series} />
-      )}
+        {chartLocked ? (
+          <Box
+            background="bg-surface-secondary"
+            borderRadius="200"
+            padding="500"
+          >
+            <BlockStack gap="300" inlineAlign="center">
+              <Text as="p" alignment="center" fontWeight="semibold">
+                {t("home.chartLockedTitle")}
+              </Text>
+              <Text as="p" alignment="center" tone="subdued" variant="bodySm">
+                {t("home.chartLockedBody")}
+              </Text>
+              {onUnlockChart ? (
+                <button
+                  type="button"
+                  onClick={onUnlockChart}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--p-color-text-link, #005bd3)",
+                    cursor: "pointer",
+                    font: "inherit",
+                    fontWeight: 600,
+                    padding: 0,
+                  }}
+                >
+                  {t("home.upgradePlan")}
+                </button>
+              ) : null}
+            </BlockStack>
+          </Box>
+        ) : (
+          <UsageStatisticsChart series={series} />
+        )}
       </BlockStack>
     </div>
   );

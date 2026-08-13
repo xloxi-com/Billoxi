@@ -11,7 +11,7 @@
 /* Email templates: nav | form | preview */
 .settings-page--with-preview > .Polaris-Layout {
   display: grid !important;
-  grid-template-columns: 230px 640px 420px;
+  grid-template-columns: 260px 640px 420px;
   gap: 16px;
   flex-wrap: nowrap;
   justify-content: center;
@@ -23,7 +23,7 @@
 /* Store / numbers / SMTP: nav | form | recommend apps */
 .settings-page--with-recommend > .Polaris-Layout {
   display: grid !important;
-  grid-template-columns: 230px 640px 360px;
+  grid-template-columns: 260px 640px 360px;
   gap: 16px;
   flex-wrap: nowrap;
   justify-content: center;
@@ -44,9 +44,9 @@
 
 .settings-page:not(.settings-page--with-preview):not(.settings-page--with-recommend)
   .Polaris-Layout__Section--oneThird {
-  flex: 0 0 230px !important;
-  max-width: 230px !important;
-  min-width: 220px;
+  flex: 0 0 260px !important;
+  max-width: 260px !important;
+  min-width: 240px;
 }
 
 .settings-nav-column,
@@ -62,7 +62,7 @@
 
 /* Multi Currency: same form width as other settings sections */
 .settings-page--multi-currency > .Polaris-Layout {
-  grid-template-columns: 230px 640px 360px;
+  grid-template-columns: 260px 640px 360px;
 }
 
 .settings-page--multi-currency .settings-form-column {
@@ -71,17 +71,17 @@
 
 @media (max-width: 1300px) {
   .settings-page--multi-currency > .Polaris-Layout {
-    grid-template-columns: 230px minmax(0, 1fr) 320px;
+    grid-template-columns: 260px minmax(0, 1fr) 320px;
   }
 }
 
 @media (max-width: 1300px) {
   .settings-page--with-preview > .Polaris-Layout {
-    grid-template-columns: 230px minmax(0, 1fr) 380px;
+    grid-template-columns: 260px minmax(0, 1fr) 380px;
   }
 
   .settings-page--with-recommend > .Polaris-Layout {
-    grid-template-columns: 230px minmax(0, 1fr) 320px;
+    grid-template-columns: 260px minmax(0, 1fr) 320px;
   }
 
   .settings-page--with-preview .settings-form-column,
@@ -93,7 +93,7 @@
 @media (max-width: 1100px) {
   .settings-page--with-preview > .Polaris-Layout,
   .settings-page--with-recommend > .Polaris-Layout {
-    grid-template-columns: 230px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
 
   .settings-page--with-preview .settings-email-preview-column,
@@ -120,7 +120,7 @@
 
 .settings-nav-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
@@ -133,19 +133,24 @@
   color: var(--p-color-text, #303030);
   font: inherit;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
   cursor: pointer;
 }
 
 .settings-nav-item .Polaris-Icon {
-  margin: 0;
+  margin: 2px 0 0;
   flex: 0 0 auto;
 }
 
 .settings-nav-item .Polaris-Text {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
+  line-height: 1.3;
 }
 
 .settings-nav__group:last-child > .settings-nav-item,
@@ -174,6 +179,7 @@
 .settings-nav-item--group .settings-nav-item__plan-badge {
   margin-left: auto;
   margin-right: 4px;
+  margin-top: 2px;
 }
 
 .settings-nav-item--sub {
@@ -183,6 +189,7 @@
 
 .settings-nav-item__chevron {
   margin-left: auto;
+  margin-top: 2px;
   display: inline-flex;
   flex: 0 0 auto;
 }

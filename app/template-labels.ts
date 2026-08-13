@@ -1,6 +1,7 @@
 /**
  * Document label translations for template Language setting.
  * Changing language replaces built-in PDF/document labels (not the store name).
+ * Dropdown matches admin UI languages, plus English/Portuguese regional variants.
  */
 
 import {
@@ -8,71 +9,26 @@ import {
   getDraftLabels,
   getPackingSlipLabels,
   getReturnLabels,
+  INVOICE_LABELS,
   isBuiltInCreditOrPackingBody,
 } from "./template-document-type-labels";
+import extraTemplateLabelPacks from "./template-label-packs-extra.json";
+import { EXTENDED_TEMPLATE_LABEL_PACKS } from "./template-label-packs-extended";
+import {
+  DEFAULT_TEMPLATE_LANGUAGE,
+  isTemplateLanguage,
+  normalizeTemplateLanguage,
+  TEMPLATE_LANGUAGES,
+  type TemplateLanguage,
+} from "./template-languages";
 
-export const TEMPLATE_LANGUAGES = [
-  { value: "sq", label: "Shqip (Albanian)" },
-  { value: "ar", label: "العربية (Arabic)" },
-  { value: "eu", label: "Euskara (Basque)" },
-  { value: "be", label: "Беларуская (Belarusian)" },
-  { value: "bs", label: "Bosanski (Bosnian)" },
-  { value: "bg", label: "Български (Bulgarian)" },
-  { value: "ca", label: "Català (Catalan)" },
-  { value: "zh-CN", label: "简体中文 (Chinese Simplified)" },
-  { value: "zh-TW", label: "繁體中文 (Chinese Traditional)" },
-  { value: "hr", label: "Hrvatski (Croatian)" },
-  { value: "cs", label: "Čeština (Czech)" },
-  { value: "da", label: "Dansk (Danish)" },
-  { value: "nl", label: "Nederlands (Dutch)" },
-  { value: "en", label: "English" },
-  { value: "en-AU", label: "English (Australia)" },
-  { value: "en-CA", label: "English (Canada)" },
-  { value: "en-GB", label: "English (United Kingdom)" },
-  { value: "et", label: "Eesti (Estonian)" },
-  { value: "fi", label: "Suomi (Finnish)" },
-  { value: "fr", label: "Français (French)" },
-  { value: "gl", label: "Galego (Galician)" },
-  { value: "de", label: "Deutsch (German)" },
-  { value: "el", label: "Ελληνικά (Greek)" },
-  { value: "he", label: "עברית (Hebrew)" },
-  { value: "hi", label: "हिन्दी (Hindi)" },
-  { value: "hu", label: "Magyar (Hungarian)" },
-  { value: "is", label: "Íslenska (Icelandic)" },
-  { value: "id", label: "Bahasa Indonesia" },
-  { value: "ga", label: "Gaeilge (Irish)" },
-  { value: "it", label: "Italiano (Italian)" },
-  { value: "ja", label: "日本語 (Japanese)" },
-  { value: "ko", label: "한국어 (Korean)" },
-  { value: "lv", label: "Latviešu (Latvian)" },
-  { value: "lt", label: "Lietuvių (Lithuanian)" },
-  { value: "lb", label: "Lëtzebuergesch (Luxembourgish)" },
-  { value: "mk", label: "Македонски (Macedonian)" },
-  { value: "ms", label: "Bahasa Melayu" },
-  { value: "mt", label: "Malti (Maltese)" },
-  { value: "no", label: "Norsk (Norwegian)" },
-  { value: "pl", label: "Polski (Polish)" },
-  { value: "pt", label: "Português (Portuguese)" },
-  { value: "pt-BR", label: "Português — Brasil" },
-  { value: "pt-PT", label: "Português — Portugal" },
-  { value: "ro", label: "Română (Romanian)" },
-  { value: "ru", label: "Русский (Russian)" },
-  { value: "sr", label: "Српски (Serbian)" },
-  { value: "sk", label: "Slovenčina (Slovak)" },
-  { value: "sl", label: "Slovenščina (Slovenian)" },
-  { value: "es", label: "Español (Spanish)" },
-  { value: "sv", label: "Svenska (Swedish)" },
-  { value: "ta", label: "தமிழ் (Tamil)" },
-  { value: "th", label: "ไทย (Thai)" },
-  { value: "tr", label: "Türkçe (Turkish)" },
-  { value: "uk", label: "Українська (Ukrainian)" },
-  { value: "vi", label: "Tiếng Việt (Vietnamese)" },
-  { value: "cy", label: "Cymraeg (Welsh)" },
-] as const;
-
-export type TemplateLanguage = (typeof TEMPLATE_LANGUAGES)[number]["value"];
-
-export const DEFAULT_TEMPLATE_LANGUAGE: TemplateLanguage = "en";
+export {
+  DEFAULT_TEMPLATE_LANGUAGE,
+  isTemplateLanguage,
+  normalizeTemplateLanguage,
+  TEMPLATE_LANGUAGES,
+  type TemplateLanguage,
+};
 
 export type TemplateLabelPack = {
   transaction: {
@@ -3272,84 +3228,74 @@ const lb: TemplateLabelPack = {
   terms: "Bezuelung bei Empfang geschëldert.",
 };
 
-export const TEMPLATE_LABEL_PACKS: Record<TemplateLanguage, TemplateLabelPack> =
-  {
-    sq,
-    ar,
-    eu,
-    be,
-    bs,
-    bg,
-    ca,
-    "zh-CN": zhCN,
-    "zh-TW": zhTW,
-    hr,
-    cs,
-    da,
-    nl,
-    en,
-    "en-AU": en,
-    "en-CA": en,
-    "en-GB": en,
-    et,
-    fi,
-    fr,
-    gl,
-    de,
-    el,
-    he,
-    hi,
-    hu,
-    is: isLang,
-    id,
-    ga,
-    it,
-    ja,
-    ko,
-    lv,
-    lt,
-    lb,
-    mk,
-    ms,
-    mt,
-    no,
-    pl,
-    pt,
-    "pt-BR": ptBR,
-    "pt-PT": ptPT,
-    ro,
-    ru,
-    sr,
-    sk,
-    sl,
-    es,
-    sv,
-    ta,
-    th,
-    tr,
-    uk,
-    vi,
-    cy,
-  };
-
-export function isTemplateLanguage(value: unknown): value is TemplateLanguage {
-  return (
-    typeof value === "string" &&
-    Object.prototype.hasOwnProperty.call(TEMPLATE_LABEL_PACKS, value)
-  );
-}
-
-export function normalizeTemplateLanguage(
-  value: unknown,
-  fallback: TemplateLanguage = DEFAULT_TEMPLATE_LANGUAGE,
-): TemplateLanguage {
-  return isTemplateLanguage(value) ? value : fallback;
-}
+export const TEMPLATE_LABEL_PACKS: Record<string, TemplateLabelPack> = {
+  sq,
+  ar,
+  eu,
+  be,
+  bs,
+  bg,
+  ca,
+  "zh-CN": zhCN,
+  "zh-TW": zhTW,
+  hr,
+  cs,
+  da,
+  nl,
+  en,
+  "en-AU": en,
+  "en-CA": en,
+  "en-GB": en,
+  et,
+  fi,
+  fr,
+  gl,
+  de,
+  el,
+  he,
+  hi,
+  hu,
+  is: isLang,
+  id,
+  ga,
+  it,
+  ja,
+  ko,
+  lv,
+  lt,
+  lb,
+  mk,
+  ms,
+  mt,
+  no,
+  pl,
+  pt,
+  "pt-BR": ptBR,
+  "pt-PT": ptPT,
+  ro,
+  ru,
+  sr,
+  sk,
+  sl,
+  es,
+  sv,
+  ta,
+  th,
+  tr,
+  uk,
+  vi,
+  cy,
+  ...EXTENDED_TEMPLATE_LABEL_PACKS,
+  ...(extraTemplateLabelPacks as Record<string, TemplateLabelPack>),
+};
 
 export function getTemplateLabelPack(
   language: TemplateLanguage | string | undefined | null,
 ): TemplateLabelPack {
-  return TEMPLATE_LABEL_PACKS[normalizeTemplateLanguage(language)];
+  return (
+    TEMPLATE_LABEL_PACKS[normalizeTemplateLanguage(language)] ??
+    TEMPLATE_LABEL_PACKS.en
+  );
 }
 
 /** True if value matches a built-in notes/terms string in any language. */
@@ -3721,6 +3667,8 @@ function resolveDocumentTypeTransaction(
     const override =
       INVOICE_TRANSACTION_LABELS[language] ??
       INVOICE_TRANSACTION_LABELS[base] ??
+      INVOICE_LABELS[language] ??
+      INVOICE_LABELS[base] ??
       INVOICE_TXN_EN;
     return {
       ...pack.transaction,

@@ -52,13 +52,24 @@ import {
   PLAN_USAGE_COUNTS,
   PLAN_USAGE_NOT_COUNTED,
   YEARLY_DISCOUNT_PERCENT,
-  planMonthlyPriceLabel,
-  planYearlyEquivalentLabel,
+  formatUsd,
   planYearlyPriceLabel,
+  planYearlyMonthlyEquivalent,
   planCtaKind,
-  planCtaLabel,
   type PlanId,
 } from "../plan-features";
+import {
+  pricingT,
+  pricingTf,
+  pricingHighlight,
+  pricingFeature,
+  pricingValue,
+  pricingUsageAction,
+  pricingUsageCount,
+  pricingUsageFree,
+  pricingPlanCtaLabel,
+} from "../admin-pricing-i18n";
+import { useAdminI18n } from "../admin-i18n-context";
 import type { loader as appLoader } from "./app";
 
 /** Static catalog only — billing status comes from parent `routes/app` loader. */
@@ -133,42 +144,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-function PlanValue({ value }: { value: string }) {
+function PlanValue({
+  value,
+  language,
+}: {
+  value: string;
+  language: string;
+}) {
   const trimmed = value.trim();
   const normalized = trimmed.toLowerCase();
+  const display = pricingValue(language, trimmed);
 
   let content: ReactNode;
 
   if (normalized === "no") {
     content = (
-      <span title="No" aria-label="No">
+      <span title={display} aria-label={display}>
         <Icon source={XCircleIcon} tone="critical" />
       </span>
     );
   } else if (normalized === "yes") {
     content = (
-      <span title="Yes" aria-label="Yes">
+      <span title={display} aria-label={display}>
         <Icon source={CheckCircleIcon} tone="success" />
       </span>
     );
   } else if (normalized.startsWith("yes ")) {
-    const note = trimmed.replace(/^yes\s*/i, "").trim();
+    // e.g. "Yes (all 6 types)" — prefer full translation when available.
     content = (
       <InlineStack gap="100" blockAlign="center" wrap={false} align="center">
-        <span title={trimmed} aria-label={trimmed}>
+        <span title={display} aria-label={display}>
           <Icon source={CheckCircleIcon} tone="success" />
         </span>
-        {note ? (
-          <Text as="span" variant="bodySm" tone="subdued">
-            {note}
-          </Text>
-        ) : null}
+        <Text as="span" variant="bodySm" tone="subdued">
+          {display}
+        </Text>
       </InlineStack>
     );
   } else {
     content = (
       <Text as="span" fontWeight="semibold">
-        {value}
+        {display}
       </Text>
     );
   }
@@ -179,6 +195,7 @@ function PlanValue({ value }: { value: string }) {
 export default function PricingPage() {
   const { plans, comparisonRows, yearlyDiscountPercent } =
     useLoaderData<typeof loader>();
+  const { language } = useAdminI18n();
   const appData = useRouteLoaderData<typeof appLoader>("routes/app");
   const hasActivePlan = Boolean(appData?.hasActivePlan);
   const currentPlanId = (appData?.currentPlanId ?? null) as PlanId | null;
@@ -226,10 +243,22 @@ export default function PricingPage() {
   }, [navigation.state, actionData]);
 
   const comparisonTableRows = comparisonRows.map((row) => [
-    row.feature,
-    <PlanValue key={`s-${row.feature}`} value={row.starter} />,
-    <PlanValue key={`p-${row.feature}`} value={row.premium} />,
-    <PlanValue key={`u-${row.feature}`} value={row.ultimate} />,
+    pricingFeature(language, row.feature),
+    <PlanValue
+      key={`s-${row.feature}`}
+      value={row.starter}
+      language={language}
+    />,
+    <PlanValue
+      key={`p-${row.feature}`}
+      value={row.premium}
+      language={language}
+    />,
+    <PlanValue
+      key={`u-${row.feature}`}
+      value={row.ultimate}
+      language={language}
+    />,
   ]);
 
   const requestPlan = (planId: PlanId) => {
@@ -252,11 +281,11 @@ export default function PricingPage() {
   return (
     <AppProvider i18n={enTranslations}>
       <Page
-        title="Pricing"
+        title={pricingT(language, "pricing.title")}
         subtitle={
           hasActivePlan
-            ? "Choose STARTER, PREMIUM, or ULTIMATE. Upgrade opens Shopify’s billing confirmation."
-            : "Choose a plan to continue. After you subscribe, you’ll go to the Billoxi home page."
+            ? pricingT(language, "pricing.subtitleActive")
+            : pricingT(language, "pricing.subtitleFree")
         }
       >
         <Layout>
@@ -267,13 +296,15 @@ export default function PricingPage() {
                   pressed={billingPeriod === "monthly"}
                   onClick={() => setBillingPeriod("monthly")}
                 >
-                  Monthly
+                  {pricingT(language, "pricing.monthly")}
                 </Button>
                 <Button
                   pressed={billingPeriod === "yearly"}
                   onClick={() => setBillingPeriod("yearly")}
                 >
-                  {`Yearly (save ${yearlyDiscountPercent}%)`}
+                  {pricingTf(language, "pricing.yearlySave", {
+                    percent: String(yearlyDiscountPercent),
+                  })}
                 </Button>
               </ButtonGroup>
             </InlineStack>
@@ -286,6 +317,13 @@ export default function PricingPage() {
                 const isPremium = plan.id === "premium";
                 const ctaKind = planCtaKind(plan.id, currentPlanId);
                 const isCurrent = ctaKind === "current";
+                const monthlyLabel = pricingTf(language, "pricing.pricePerMo", {
+                  price: formatUsd(
+                    isYearly
+                      ? planYearlyMonthlyEquivalent(plan.priceAmount)
+                      : plan.priceAmount,
+                  ),
+                });
 
                 return (
                   <div key={plan.id} className="pricing-plan-card-wrap">
@@ -295,7 +333,9 @@ export default function PricingPage() {
                           <BlockStack gap="400">
                             <BlockStack gap="200" inlineAlign="center">
                               {isPremium ? (
-                                <Badge tone="info">Most popular</Badge>
+                                <Badge tone="info">
+                                  {pricingT(language, "pricing.mostPopular")}
+                                </Badge>
                               ) : (
                                 <div className="pricing-plan-card__badge-spacer" />
                               )}
@@ -312,9 +352,7 @@ export default function PricingPage() {
                                 alignment="center"
                                 fontWeight="bold"
                               >
-                                {isYearly
-                                  ? planYearlyEquivalentLabel(plan.priceAmount)
-                                  : planMonthlyPriceLabel(plan.priceAmount)}
+                                {monthlyLabel}
                               </Text>
                               <Text
                                 as="p"
@@ -323,8 +361,17 @@ export default function PricingPage() {
                                 alignment="center"
                               >
                                 {isYearly
-                                  ? `${planYearlyPriceLabel(plan.priceAmount)} · save ${yearlyDiscountPercent}%`
-                                  : "Billed monthly"}
+                                  ? pricingTf(
+                                      language,
+                                      "pricing.yearlyBilledSave",
+                                      {
+                                        price: planYearlyPriceLabel(
+                                          plan.priceAmount,
+                                        ),
+                                        percent: String(yearlyDiscountPercent),
+                                      },
+                                    )
+                                  : pricingT(language, "pricing.billedMonthly")}
                               </Text>
                               <Text
                                 as="p"
@@ -332,7 +379,9 @@ export default function PricingPage() {
                                 variant="bodySm"
                                 alignment="center"
                               >
-                                {plan.trialDays}-day free trial
+                                {pricingTf(language, "pricing.trialDays", {
+                                  days: String(plan.trialDays),
+                                })}
                               </Text>
                             </BlockStack>
 
@@ -351,7 +400,7 @@ export default function PricingPage() {
                                     />
                                   </span>
                                   <Text as="p" variant="bodySm" alignment="start">
-                                    {item}
+                                    {pricingHighlight(language, item)}
                                   </Text>
                                 </InlineStack>
                               ))}
@@ -376,7 +425,11 @@ export default function PricingPage() {
                               requestPlan(plan.id);
                             }}
                           >
-                            {planCtaLabel(plan.id, currentPlanId)}
+                            {pricingPlanCtaLabel(
+                              language,
+                              plan.id,
+                              currentPlanId,
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -391,11 +444,10 @@ export default function PricingPage() {
                 <div className="pricing-free-row__inner">
                   <BlockStack gap="100">
                     <Text as="h2" variant="headingMd">
-                      FREE
+                      {pricingT(language, "pricing.freeTitle")}
                     </Text>
                     <Text as="p" tone="subdued" variant="bodySm">
-                      $0 / mo · Home and Pricing only. Document modules stay
-                      locked until you choose a paid plan.
+                      {pricingT(language, "pricing.freeDesc")}
                     </Text>
                   </BlockStack>
                   <div className="pricing-free-row__cta">
@@ -405,7 +457,9 @@ export default function PricingPage() {
                       loading={isDowngradingFree}
                       onClick={downgradeToFree}
                     >
-                      {hasActivePlan ? "Downgrade" : "Current"}
+                      {hasActivePlan
+                        ? pricingT(language, "pricing.ctaDowngrade")
+                        : pricingT(language, "pricing.ctaCurrent")}
                     </Button>
                   </div>
                 </div>
@@ -520,10 +574,10 @@ export default function PricingPage() {
               <Box padding="400">
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd">
-                    Plan features
+                    {pricingT(language, "pricing.featuresTitle")}
                   </Text>
                   <Text as="p" tone="subdued" variant="bodySm">
-                    All three plans in one comparison table.
+                    {pricingT(language, "pricing.featuresSubtitle")}
                   </Text>
                 </BlockStack>
               </Box>
@@ -531,7 +585,7 @@ export default function PricingPage() {
                 <DataTable
                   columnContentTypes={["text", "text", "text", "text"]}
                   headings={[
-                    "Feature",
+                    pricingT(language, "pricing.featureCol"),
                     <div key="h-starter" className="pricing-plan-heading">
                       STARTER
                     </div>,
@@ -539,7 +593,7 @@ export default function PricingPage() {
                       <InlineStack gap="100" blockAlign="center" align="center" wrap={false}>
                         <span>PREMIUM</span>
                         <Badge tone="info" size="small">
-                          Most popular
+                          {pricingT(language, "pricing.mostPopular")}
                         </Badge>
                       </InlineStack>
                     </div>,
@@ -581,12 +635,10 @@ export default function PricingPage() {
               <BlockStack gap="400">
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd">
-                    How monthly orders work
+                    {pricingT(language, "pricing.howOrdersTitle")}
                   </Text>
                   <Text as="p" tone="subdued">
-                    Each plan includes a monthly order limit. Documents for
-                    orders within that limit are covered. Browsing and editing
-                    stay free.
+                    {pricingT(language, "pricing.howOrdersDesc")}
                   </Text>
                 </BlockStack>
 
@@ -598,7 +650,7 @@ export default function PricingPage() {
                   >
                     <BlockStack gap="300">
                       <Text as="h3" variant="headingSm">
-                        Counts toward your order limit
+                        {pricingT(language, "pricing.countsToward")}
                       </Text>
                       <BlockStack gap="200">
                         {PLAN_USAGE_COUNTS.map((row) => (
@@ -609,9 +661,11 @@ export default function PricingPage() {
                             gap="300"
                             wrap={false}
                           >
-                            <Text as="p">{row.action}</Text>
+                            <Text as="p">
+                              {pricingUsageAction(language, row.action)}
+                            </Text>
                             <Text as="p" tone="subdued" variant="bodySm">
-                              {row.count}
+                              {pricingUsageCount(language, row.count)}
                             </Text>
                           </InlineStack>
                         ))}
@@ -626,12 +680,12 @@ export default function PricingPage() {
                   >
                     <BlockStack gap="300">
                       <Text as="h3" variant="headingSm">
-                        Free — never counted
+                        {pricingT(language, "pricing.neverCounted")}
                       </Text>
                       <BlockStack gap="200">
                         {PLAN_USAGE_NOT_COUNTED.map((item) => (
                           <Text key={item} as="p">
-                            {item}
+                            {pricingUsageFree(language, item)}
                           </Text>
                         ))}
                       </BlockStack>

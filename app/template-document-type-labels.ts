@@ -1,13 +1,40 @@
 import type { TemplateLanguage } from "./template-labels";
+import extraDocumentTypeLabels from "./template-document-type-labels-extra.json";
 import {
-  CREDIT_NOTE_LABELS,
-  DRAFT_LABELS,
-  PACKING_SLIP_LABELS,
-  RETURN_LABELS,
+  CREDIT_NOTE_LABELS as BASE_CREDIT_NOTE_LABELS,
+  DRAFT_LABELS as BASE_DRAFT_LABELS,
+  PACKING_SLIP_LABELS as BASE_PACKING_SLIP_LABELS,
+  RETURN_LABELS as BASE_RETURN_LABELS,
   type DocumentTypeLabelOverrides,
 } from "./template-document-type-labels.data";
 
 export type { DocumentTypeLabelOverrides };
+
+const extra = extraDocumentTypeLabels as {
+  credit?: Record<string, DocumentTypeLabelOverrides>;
+  packing?: Record<string, DocumentTypeLabelOverrides>;
+  draft?: Record<string, DocumentTypeLabelOverrides>;
+  return?: Record<string, DocumentTypeLabelOverrides>;
+  invoice?: Record<string, Pick<DocumentTypeLabelOverrides, "documentTitle" | "orderNumber" | "date">>;
+};
+
+export const CREDIT_NOTE_LABELS: Record<string, DocumentTypeLabelOverrides> = {
+  ...BASE_CREDIT_NOTE_LABELS,
+  ...extra.credit,
+};
+export const DRAFT_LABELS: Record<string, DocumentTypeLabelOverrides> = {
+  ...BASE_DRAFT_LABELS,
+  ...extra.draft,
+};
+export const PACKING_SLIP_LABELS: Record<string, DocumentTypeLabelOverrides> = {
+  ...BASE_PACKING_SLIP_LABELS,
+  ...extra.packing,
+};
+export const RETURN_LABELS: Record<string, DocumentTypeLabelOverrides> = {
+  ...BASE_RETURN_LABELS,
+  ...extra.return,
+};
+export const INVOICE_LABELS = extra.invoice ?? {};
 
 export function lookupDocumentTypeLabels(
   table: Record<string, DocumentTypeLabelOverrides>,

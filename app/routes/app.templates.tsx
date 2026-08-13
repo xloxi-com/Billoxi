@@ -28,6 +28,16 @@ import {
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
+import { useAdminI18n } from "../admin-i18n-context";
+import {
+  templatesDocTypeDesc,
+  templatesDocTypeLabel,
+  templatesHeading,
+  templatesPresetDescription,
+  templatesPresetName,
+  templatesT,
+  templatesTf,
+} from "../admin-templates-i18n";
 import {
   defaultTemplateSettings,
   getSalesOrderTemplatePreset,
@@ -95,41 +105,13 @@ type SalesOrderPreviewBundle = {
   storeDetails: StoreDetails;
 };
 
-const documentTypes: Array<{
-  id: DocumentType;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "sales-order",
-    label: "Sales Order",
-    description: "Choose the layout used for sales orders.",
-  },
-  {
-    id: "invoice",
-    label: "Invoice",
-    description: "Choose the layout used for invoices.",
-  },
-  {
-    id: "draft",
-    label: "Draft",
-    description: "Choose the layout used for draft orders.",
-  },
-  {
-    id: "credit-note",
-    label: "Credit Note",
-    description: "Choose the layout used for credit notes.",
-  },
-  {
-    id: "packing-slip",
-    label: "Packing Slip",
-    description: "Choose the layout used for packing slips.",
-  },
-  {
-    id: "return",
-    label: "Return",
-    description: "Choose the layout used for returns.",
-  },
+const documentTypeIds: DocumentType[] = [
+  "sales-order",
+  "invoice",
+  "draft",
+  "credit-note",
+  "packing-slip",
+  "return",
 ];
 
 const templates: Record<DocumentType, Template[]> = {
@@ -178,7 +160,7 @@ const templates: Record<DocumentType, Template[]> = {
 };
 
 const isDocumentType = (value: string | null): value is DocumentType => {
-  return documentTypes.some(({ id }) => id === value);
+  return documentTypeIds.some((id) => id === value);
 };
 
 const selectionKey = (documentType: DocumentType) =>
@@ -711,6 +693,7 @@ export default function TemplatesPage() {
     numberSeries,
     customizationByKey,
   } = useLoaderData<typeof loader>();
+  const { t, language } = useAdminI18n();
   const selectFetcher = useFetcher<typeof action>();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -720,8 +703,8 @@ export default function TemplatesPage() {
   const [activeType, setActiveType] = useState<DocumentType>(
     isDocumentType(requestedType) ? requestedType : "sales-order",
   );
-  const activeDocument =
-    documentTypes.find(({ id }) => id === activeType) ?? documentTypes[0];
+  const activeTypeLabel = templatesDocTypeLabel(language, activeType);
+  const activeTypeDesc = templatesDocTypeDesc(language, activeType);
   const [selectedTemplates, setSelectedTemplates] = useState<
     Partial<Record<DocumentType, string>>
   >({});
@@ -761,7 +744,7 @@ export default function TemplatesPage() {
   useEffect(() => {
     const savedSelections: Partial<Record<DocumentType, string>> = {};
 
-    documentTypes.forEach(({ id }) => {
+    documentTypeIds.forEach((id) => {
       const available = templates[id];
       const firstTemplateId = available[0]?.id;
       if (!firstTemplateId) return;
@@ -847,20 +830,22 @@ export default function TemplatesPage() {
   return (
     <AppProvider i18n={enTranslations}>
     <div className="templates-polaris-shell">
-    <s-page heading="Templates" inlineSize="large">
+    <s-page heading={t("pages.templates")} inlineSize="large">
       <div className="templates-page">
         <s-stack direction="block" gap="base">
           <div className="templates-content__header">
             <BlockStack gap="100">
               <Text as="h2" variant="headingLg">
-                {activeDocument.label} templates
+                {templatesHeading(language, activeType)}
               </Text>
               <Text as="p" tone="subdued">
-                {activeDocument.description}
+                {activeTypeDesc}
               </Text>
             </BlockStack>
             <Badge tone="info">
-              {`${templates[activeType].length} available`}
+              {templatesTf(language, "tpl.available", {
+                count: String(templates[activeType].length),
+              })}
             </Badge>
           </div>
 
@@ -869,15 +854,15 @@ export default function TemplatesPage() {
               <Card padding="0">
                 <Box paddingBlockStart="300" paddingInline="300" paddingBlockEnd="100">
                   <Text as="h3" variant="headingSm">
-                    Document type
+                    {templatesT(language, "tpl.documentType")}
                   </Text>
                 </Box>
                 <ActionList
                   actionRole="menuitem"
-                  items={documentTypes.map((documentType) => ({
-                    content: documentType.label,
-                    active: documentType.id === activeType,
-                    onAction: () => changeDocumentType(documentType.id),
+                  items={documentTypeIds.map((documentType) => ({
+                    content: templatesDocTypeLabel(language, documentType),
+                    active: documentType === activeType,
+                    onAction: () => changeDocumentType(documentType),
                   }))}
                 />
               </Card>
@@ -890,6 +875,14 @@ export default function TemplatesPage() {
                     const isSelected =
                       selectedTemplates[activeType] === template.id;
                     const livePreview = salesOrderPreviews[template.id] ?? null;
+                    const displayName = templatesPresetName(
+                      language,
+                      template.name,
+                    );
+                    const displayDescription = templatesPresetDescription(
+                      language,
+                      template.description,
+                    );
 
                     return (
                       <div className="template-card" key={template.id}>
@@ -908,22 +901,24 @@ export default function TemplatesPage() {
                               <BlockStack gap="300">
                                 <InlineStack gap="200" blockAlign="center" wrap={false}>
                                   <Text as="h3" variant="headingSm">
-                                    {template.name}
+                                    {displayName}
                                   </Text>
                                   {isSelected ? (
-                                    <Badge tone="success">Active</Badge>
+                                    <Badge tone="success">
+                                      {templatesT(language, "tpl.active")}
+                                    </Badge>
                                   ) : null}
                                 </InlineStack>
                                 <Text as="p" variant="bodySm" tone="subdued">
                                   <span className="template-card__description">
-                                    {template.description}
+                                    {displayDescription}
                                   </span>
                                 </Text>
                                 <div className="template-card__actions">
                                   <Button
                                     onClick={() => setPreviewTemplate(template)}
                                   >
-                                    Preview
+                                    {templatesT(language, "tpl.preview")}
                                   </Button>
                                   {isSelected ? (
                                     <>
@@ -938,7 +933,7 @@ export default function TemplatesPage() {
                                           )
                                         }
                                       >
-                                        Edit template
+                                        {templatesT(language, "tpl.edit")}
                                       </Button>
                                     </>
                                   ) : (
@@ -946,7 +941,7 @@ export default function TemplatesPage() {
                                       variant="primary"
                                       onClick={() => setConfirmTemplate(template)}
                                     >
-                                      Use template
+                                      {templatesT(language, "tpl.use")}
                                     </Button>
                                   )}
                                 </div>
@@ -966,14 +961,14 @@ export default function TemplatesPage() {
       <Modal
         open={confirmTemplate !== null}
         onClose={() => setConfirmTemplate(null)}
-        title="Use this template?"
+        title={templatesT(language, "tpl.useConfirmTitle")}
         primaryAction={{
-          content: "Yes",
+          content: templatesT(language, "tpl.useConfirmYes"),
           onAction: confirmUseTemplate,
         }}
         secondaryActions={[
           {
-            content: "Cancel",
+            content: templatesT(language, "tpl.useConfirmCancel"),
             onAction: () => setConfirmTemplate(null),
           },
         ]}
@@ -981,8 +976,11 @@ export default function TemplatesPage() {
         <Modal.Section>
           <Text as="p">
             {confirmTemplate
-              ? `Use “${confirmTemplate.name}” as your active ${activeDocument.label} template?`
-              : "Use this template?"}
+              ? templatesTf(language, "tpl.useConfirmBody", {
+                  name: templatesPresetName(language, confirmTemplate.name),
+                  type: activeTypeLabel,
+                })
+              : templatesT(language, "tpl.useConfirmTitle")}
           </Text>
         </Modal.Section>
       </Modal>
@@ -1005,14 +1003,16 @@ export default function TemplatesPage() {
             <div className="template-preview-modal__header">
               <div>
                 <s-heading id="template-preview-title">
-                  {previewTemplate.name}
+                  {templatesPresetName(language, previewTemplate.name)}
                 </s-heading>
                 <s-paragraph color="subdued">
-                  {activeDocument.label} template preview
+                  {templatesTf(language, "tpl.previewSubtitle", {
+                    type: activeTypeLabel,
+                  })}
                 </s-paragraph>
               </div>
               <button
-                aria-label="Close preview"
+                aria-label={templatesT(language, "tpl.close")}
                 className="template-preview-modal__close"
                 onClick={() => setPreviewTemplate(null)}
                 type="button"

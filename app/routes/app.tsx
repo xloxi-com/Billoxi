@@ -3,10 +3,9 @@ import type {
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import {
   Outlet,
-  PrefetchPageLinks,
   useLoaderData,
   useLocation,
   useNavigation,
@@ -24,6 +23,16 @@ import {
   isAppPathAllowedWithoutPlan,
   loadShopBillingState,
 } from "../billing-plans";
+import { loadAdminLanguage } from "../setup-guide.server";
+import {
+  adminT,
+  DEFAULT_ADMIN_UI_LANGUAGE,
+  normalizeAdminUiLanguage,
+  type AdminUiLanguage,
+} from "../admin-i18n";
+import { hydrateAdminLocale } from "../admin-locale-store";
+import { loadAdminLocalePack } from "../admin-locale-load.server";
+import { AdminI18nContext } from "../admin-i18n-context";
 
 export const loader = async ({ request, url }: LoaderFunctionArgs) => {
   const { session, admin, billing, redirect } = await requireAdminAuth(request);
@@ -43,12 +52,24 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
     throw redirect("/app/pricing");
   }
 
+  const savedAdminLanguage = await loadAdminLanguage(session.shop);
+  const adminLanguage = normalizeAdminUiLanguage(
+    savedAdminLanguage,
+    DEFAULT_ADMIN_UI_LANGUAGE,
+  );
+  const adminMessages =
+    adminLanguage === DEFAULT_ADMIN_UI_LANGUAGE
+      ? null
+      : loadAdminLocalePack(adminLanguage);
+
   // eslint-disable-next-line no-undef
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     hasActivePlan: billingState.hasActivePlan,
     currentPlanId: billingState.currentPlanId,
     activeSubscriptionId: billingState.activeSubscriptionId,
+    adminLanguage,
+    adminMessages,
   };
 };
 
@@ -72,21 +93,6 @@ export const shouldRevalidate = ({
   return false;
 };
 
-const FULL_APP_NAV_PAGES = [
-  "/app",
-  "/app/sales-order",
-  "/app/invoice",
-  "/app/draft",
-  "/app/return",
-  "/app/credit-note",
-  "/app/packing-slip",
-  "/app/templates",
-  "/app/pricing",
-  "/app/settings",
-] as const;
-
-const FREE_NAV_PAGES = ["/app/pricing"] as const;
-
 function documentSectionBase(pathname: string) {
   const match = pathname.match(
     /^(\/app\/(?:sales-order|invoice|draft|return|credit-note|packing-slip))\/[^/]+$/,
@@ -94,7 +100,7 @@ function documentSectionBase(pathname: string) {
   return match?.[1] ?? null;
 }
 
-function AppNavLoader() {
+function AppNavLoader({ label }: { label: string }) {
   const navigation = useNavigation();
   const location = useLocation();
   const to = navigation.location?.pathname || "";
@@ -124,41 +130,8 @@ function AppNavLoader() {
         background: "color-mix(in srgb, #f6f6f7 78%, transparent)",
       }}
     >
-      <PageLoader label="Loading page" />
+      <PageLoader label={label} />
     </div>
-  );
-}
-
-function AppNavPrefetch({ hasActivePlan }: { hasActivePlan: boolean }) {
-  const location = useLocation();
-  const [pages, setPages] = useState<string[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const timers: number[] = [];
-    const navPages = hasActivePlan ? FULL_APP_NAV_PAGES : FREE_NAV_PAGES;
-    setPages([]);
-    navPages.forEach((page, i) => {
-      timers.push(
-        window.setTimeout(() => {
-          if (cancelled) return;
-          setPages((prev) => (prev.includes(page) ? prev : [...prev, page]));
-        }, 700 + i * 180),
-      );
-    });
-    return () => {
-      cancelled = true;
-      timers.forEach((id) => window.clearTimeout(id));
-    };
-  }, [hasActivePlan]);
-  const current = location.pathname.replace(/\/$/, "") || "/app";
-  return (
-    <>
-      {pages
-        .filter((page) => page !== current)
-        .map((page) => (
-          <PrefetchPageLinks key={page} page={page} />
-        ))}
-    </>
   );
 }
 
@@ -166,50 +139,74 @@ export type AppOutletContext = {
   hasActivePlan: boolean;
   currentPlanId: import("../plan-features").PlanId | null;
   activeSubscriptionId: string | null;
+  adminLanguage: AdminUiLanguage;
 };
 
 export default function App() {
-  const { apiKey, hasActivePlan, currentPlanId, activeSubscriptionId } =
-    useLoaderData<typeof loader>();
+  const {
+    apiKey,
+    hasActivePlan,
+    currentPlanId,
+    activeSubscriptionId,
+    adminLanguage,
+    adminMessages,
+  } = useLoaderData<typeof loader>();
+  if (adminMessages) hydrateAdminLocale(adminLanguage, adminMessages);
+
+  const i18n = useMemo(
+    () => ({
+      language: adminLanguage,
+      t: (key: Parameters<typeof adminT>[1]) => adminT(adminLanguage, key),
+    }),
+    [adminLanguage],
+  );
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <AppNavPrefetch hasActivePlan={hasActivePlan} />
-      <s-app-nav>
-        {/* rel="home" → Billoxi title opens Home; Home link stays hidden from sidebar. */}
-        <s-link
-          href="/app"
-          {...({ rel: "home" } as Record<string, string>)}
-        >
-          Home
-        </s-link>
-        {hasActivePlan ? (
-          <>
-            <s-link href="/app/sales-order">Sales Orders</s-link>
-            <s-link href="/app/invoice">Invoice</s-link>
-            <s-link href="/app/draft">Draft</s-link>
-            <s-link href="/app/return">Return</s-link>
-            <s-link href="/app/credit-note">Credit Note</s-link>
-            <s-link href="/app/packing-slip">Packing Slip</s-link>
-            <s-link href="/app/templates">Templates</s-link>
-          </>
-        ) : null}
-        <s-link href="/app/pricing">Pricing</s-link>
-        {hasActivePlan ? (
-          <s-link href="/app/settings">Settings</s-link>
-        ) : null}
-      </s-app-nav>
-      <AppNavLoader />
-      <Outlet
-        context={
-          {
-            hasActivePlan,
-            currentPlanId,
-            activeSubscriptionId,
-          } satisfies AppOutletContext
-        }
-      />
-      <TawkChat />
+      <AdminI18nContext.Provider value={i18n}>
+        <s-app-nav>
+          {/* rel="home" → Billoxi title opens Home; Home link stays hidden from sidebar. */}
+          <s-link
+            href="/app"
+            {...({ rel: "home" } as Record<string, string>)}
+          >
+            {i18n.t("nav.home")}
+          </s-link>
+          {hasActivePlan ? (
+            <>
+              <s-link href="/app/sales-order">
+                {i18n.t("nav.salesOrders")}
+              </s-link>
+              <s-link href="/app/invoice">{i18n.t("nav.invoice")}</s-link>
+              <s-link href="/app/draft">{i18n.t("nav.draft")}</s-link>
+              <s-link href="/app/return">{i18n.t("nav.return")}</s-link>
+              <s-link href="/app/credit-note">
+                {i18n.t("nav.creditNote")}
+              </s-link>
+              <s-link href="/app/packing-slip">
+                {i18n.t("nav.packingSlip")}
+              </s-link>
+              <s-link href="/app/templates">{i18n.t("nav.templates")}</s-link>
+              <s-link href="/app/settings">{i18n.t("nav.settings")}</s-link>
+              <s-link href="/app/pricing">{i18n.t("nav.pricing")}</s-link>
+            </>
+          ) : (
+            <s-link href="/app/pricing">{i18n.t("nav.pricing")}</s-link>
+          )}
+        </s-app-nav>
+        <AppNavLoader label={i18n.t("nav.loadingPage")} />
+        <Outlet
+          context={
+            {
+              hasActivePlan,
+              currentPlanId,
+              activeSubscriptionId,
+              adminLanguage,
+            } satisfies AppOutletContext
+          }
+        />
+        <TawkChat />
+      </AdminI18nContext.Provider>
     </AppProvider>
   );
 }

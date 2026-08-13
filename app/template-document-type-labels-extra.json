@@ -1,0 +1,3922 @@
+{
+  "credit": {
+    "ak": {
+      "documentTitle": "CREDIT NKYERƐKYERƐMU",
+      "orderNumber": "Credit Nkyekyɛm#",
+      "date": "Credit Note Date a Wɔde Kyerɛw",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Credit Total a Wɔde Ma",
+      "itemsInTotalLabel": "Nneɛma a Wɔka Kyerɛ",
+      "refundedAmountLabel": "Sika a Wɔde Bɔ Bosea",
+      "notes": "Credit a wɔde mae wɔ invoice a wɔatwe adwene asi so no so.",
+      "terms": "Wobetumi de saa credit krataa yi adi dwuma wɔ nneɛma a wɔbɛtɔ daakye ho anaasɛ wɔbɛsan de ama sɛnea wɔpene so no."
+    },
+    "af": {
+      "documentTitle": "KREDIETNOTA",
+      "orderNumber": "Kredietnota#",
+      "date": "Kredietnota Datum",
+      "reference": "Faktuurverwysing#",
+      "totalLabel": "Krediet Totaal",
+      "itemsInTotalLabel": "Items in totaal",
+      "refundedAmountLabel": "Kredietbedrag",
+      "notes": "Krediet uitgereik teen die verwysde faktuur.",
+      "terms": "Hierdie kredietnota kan toegepas word op toekomstige aankope of terugbetaal word soos ooreengekom."
+    },
+    "am": {
+      "documentTitle": "ክሬዲት ማስታወሻ",
+      "orderNumber": "የብድር ማስታወሻ#",
+      "date": "የብድር ማስታወሻ ቀን",
+      "reference": "የክፍያ መጠየቂያ ሪፍ#",
+      "totalLabel": "የክሬዲት ጠቅላላ",
+      "itemsInTotalLabel": "እቃዎች በጠቅላላ",
+      "refundedAmountLabel": "የብድር መጠን",
+      "notes": "በተጠቀሰው ደረሰኝ ላይ ክሬዲት የተሰጠ።",
+      "terms": "ይህ የክሬዲት ማስታወሻ ለወደፊት ግዢዎች ሊተገበር ወይም በተስማማው መሰረት ገንዘቡ ሊመለስ ይችላል።"
+    },
+    "as": {
+      "documentTitle": "ক্রেডিট নোট",
+      "orderNumber": "ক্রেডিট নোট#",
+      "date": "ক্রেডিট নোট তারিখ",
+      "reference": "চালান রেফারেন্স#",
+      "totalLabel": "ক্রেডিট মোট",
+      "itemsInTotalLabel": "মোট আইটেম",
+      "refundedAmountLabel": "ক্রেডিট পরিমাণ",
+      "notes": "উল্লেখিত চালানের বিপরীতে জারি করা ক্রেডিট।",
+      "terms": "এই ক্রেডিট নোট ভবিষ্যত কেনাকাটায় প্রয়োগ করা যেতে পারে বা সম্মতি অনুযায়ী ফেরত দেওয়া হতে পারে।"
+    },
+    "az": {
+      "documentTitle": "KREDİT QEYDİ",
+      "orderNumber": "Kredit Qeydi#",
+      "date": "Kredit Qeydinin Tarixi",
+      "reference": "Faktura Ref#",
+      "totalLabel": "Kredit cəmi",
+      "itemsInTotalLabel": "Cəmi maddələr",
+      "refundedAmountLabel": "Kredit məbləği",
+      "notes": "İstinad edilmiş fakturaya qarşı kredit verilmişdir.",
+      "terms": "Bu kredit qeydi gələcək alışlara tətbiq oluna və ya razılaşdırıldığı kimi geri qaytarıla bilər."
+    },
+    "bm": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "bn": {
+      "documentTitle": "ক্রেডিট নোট",
+      "orderNumber": "ক্রেডিট নোট#",
+      "date": "ক্রেডিট নোট তারিখ",
+      "reference": "চালান রেফারেন্স#",
+      "totalLabel": "ক্রেডিট মোট",
+      "itemsInTotalLabel": "মোট আইটেম",
+      "refundedAmountLabel": "ক্রেডিট পরিমাণ",
+      "notes": "উল্লেখিত চালানের বিপরীতে জারি করা ক্রেডিট।",
+      "terms": "এই ক্রেডিট নোট ভবিষ্যত কেনাকাটায় প্রয়োগ করা যেতে পারে বা সম্মতি অনুযায়ী ফেরত দেওয়া হতে পারে।"
+    },
+    "br": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "ce": {
+      "documentTitle": "КРЕДИТНАЯ НОТА",
+      "orderNumber": "Кредитная нота#",
+      "date": "Дата кредит-ноты",
+      "reference": "Номер счета-фактуры",
+      "totalLabel": "Сумма кредита",
+      "itemsInTotalLabel": "Всего предметов",
+      "refundedAmountLabel": "Сумма кредита",
+      "notes": "Кредит выдан против указанного счета-фактуры.",
+      "terms": "Эта кредит-нота может быть использована для будущих покупок или возвращена по согласованию."
+    },
+    "ckb": {
+      "documentTitle": "NOTE KREDÎ",
+      "orderNumber": "Nota krediyê#",
+      "date": "Dîroka Têbînîya Krediyê",
+      "reference": "Refa fatûre#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Tiştên bi tevahî",
+      "refundedAmountLabel": "Heqê Krediyê",
+      "notes": "Krediya li hember fatûreya referanskirî hate dayîn.",
+      "terms": "Dibe ku ev nota krediyê ji bo kirînên paşerojê were sepandin an wekî ku lihevhatî were vegerandin."
+    },
+    "bo": {
+      "documentTitle": "信用证",
+      "orderNumber": "贷方票据#",
+      "date": "贷方票据日期",
+      "reference": "发票参考号#",
+      "totalLabel": "信用总额",
+      "itemsInTotalLabel": "总计项目",
+      "refundedAmountLabel": "信用金额",
+      "notes": "根据参考发票开具信用证。",
+      "terms": "该贷方票据可用于将来的购买或按约定退款。"
+    },
+    "dz": {
+      "documentTitle": "CREDIT NOTE",
+      "orderNumber": "Credit Note#",
+      "date": "Credit Note Date",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Items in Total",
+      "refundedAmountLabel": "Credit Amount",
+      "notes": "Credit issued against the referenced invoice.",
+      "terms": "This credit note may be applied to future purchases or refunded as agreed."
+    },
+    "ee": {
+      "documentTitle": "NYA SIWO WOÐO BE WOAXƆ ƑE NUÐEÐEŊUTI",
+      "orderNumber": "Gaxɔgbalẽvi#",
+      "date": "Ɣletiŋkeke si dzi woŋlɔ gaxɔgbalẽvi",
+      "reference": "Adzɔxegbalẽvi ƒe Ref# .",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Nusiwo Le Wo Katã Me",
+      "refundedAmountLabel": "Ga home si Woaxɔ",
+      "notes": "Gaxɔgbalẽvi si woɖe ɖe go ɖe adzɔxegbalẽvi si ŋu woƒo nu tsoe ŋu.",
+      "terms": "Woate ŋu azã gaxɔgbalẽvi sia ɖe nusiwo nàƒle le etsɔme ŋu alo agbugbɔe ana abe alesi wolɔ̃ ɖe edzi ene."
+    },
+    "eo": {
+      "documentTitle": "KREDITONOTO",
+      "orderNumber": "Kreditnoto #",
+      "date": "Kredita Noto Dato",
+      "reference": "Fakturo Ref#",
+      "totalLabel": "Sumo de kredito",
+      "itemsInTotalLabel": "Eroj en Totalo",
+      "refundedAmountLabel": "Kredita Sumo",
+      "notes": "Kredito eldonita kontraŭ la referencita fakturo.",
+      "terms": "Ĉi tiu kreditnoto povas esti aplikata al estontaj aĉetoj aŭ repagata laŭ interkonsento."
+    },
+    "fa": {
+      "documentTitle": "یادداشت اعتباری",
+      "orderNumber": "یادداشت اعتباری#",
+      "date": "تاریخ یادداشت اعتباری",
+      "reference": "شماره فاکتور",
+      "totalLabel": "کل اعتبار",
+      "itemsInTotalLabel": "اقلام در مجموع",
+      "refundedAmountLabel": "مقدار اعتبار",
+      "notes": "اعتبار صادر شده در برابر فاکتور ارجاع شده.",
+      "terms": "این یادداشت اعتباری ممکن است برای خریدهای آینده اعمال شود یا طبق توافق بازپرداخت شود."
+    },
+    "ff": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "fo": {
+      "documentTitle": "KREDITNOTA",
+      "orderNumber": "Kreditnota#",
+      "date": "Kreditnota Dato",
+      "reference": "Faktura ref.",
+      "totalLabel": "Kredit i alt",
+      "itemsInTotalLabel": "Varer i alt",
+      "refundedAmountLabel": "Kreditbeløb",
+      "notes": "Kredit udstedt mod den refererede faktura.",
+      "terms": "Denne kreditnota kan anvendes på fremtidige køb eller refunderes som aftalt."
+    },
+    "fy": {
+      "documentTitle": "KREDIT NOTA",
+      "orderNumber": "Kredytnota #",
+      "date": "Credit Note Datum",
+      "reference": "Faktura Ref #",
+      "totalLabel": "Credit Totaal",
+      "itemsInTotalLabel": "Items yn totaal",
+      "refundedAmountLabel": "Kredytbedrach",
+      "notes": "Kredyt útjûn tsjin de ferwiisde faktuer.",
+      "terms": "Dizze kredytnota kin tapast wurde op takomstige oankeapen of werombetelle as ôfpraat."
+    },
+    "fil": {
+      "documentTitle": "CREDIT NOTE",
+      "orderNumber": "Credit Note#",
+      "date": "Petsa ng Credit Note",
+      "reference": "Ref# ng Invoice",
+      "totalLabel": "Kabuuan ng Credit",
+      "itemsInTotalLabel": "Mga item sa Kabuuan",
+      "refundedAmountLabel": "Halaga ng Credit",
+      "notes": "Ibinigay ang kredito laban sa isinangguni na invoice.",
+      "terms": "Maaaring ilapat ang credit note na ito sa mga pagbili sa hinaharap o i-refund ayon sa napagkasunduan."
+    },
+    "gu": {
+      "documentTitle": "ક્રેડિટ નોંધ",
+      "orderNumber": "ક્રેડિટ નોંધ#",
+      "date": "ક્રેડિટ નોટ તારીખ",
+      "reference": "ઇન્વોઇસ સંદર્ભ#",
+      "totalLabel": "કુલ ક્રેડિટ",
+      "itemsInTotalLabel": "કુલ વસ્તુઓ",
+      "refundedAmountLabel": "ક્રેડિટ રકમ",
+      "notes": "સંદર્ભિત ઇન્વૉઇસ સામે ક્રેડિટ જારી કરવામાં આવી છે.",
+      "terms": "આ ક્રેડિટ નોટ ભવિષ્યની ખરીદીઓ પર લાગુ થઈ શકે છે અથવા સંમત થયા મુજબ રિફંડ થઈ શકે છે."
+    },
+    "gd": {
+      "documentTitle": "NOTA CREIDEAMH",
+      "orderNumber": "Nota Creideis #",
+      "date": "Ceann-latha nota creideas",
+      "reference": "Àireamh an fhàirdeis#",
+      "totalLabel": "Creideas Iomlan",
+      "itemsInTotalLabel": "Nithean gu h-iomlan",
+      "refundedAmountLabel": "Suim creideis",
+      "notes": "Creideas air a thoirt seachad mu choinneamh an fhàirdeal ainmichte.",
+      "terms": "Faodar an nota creideas seo a chuir an sàs ann an ceannach san àm ri teachd no a phàigheadh ​​air ais mar a chaidh aontachadh."
+    },
+    "gv": {
+      "documentTitle": "NÓTA CREIDMHEASA",
+      "orderNumber": "Nóta Creidmheasa#",
+      "date": "Dáta Nóta Creidmheasa",
+      "reference": "Uimhir Thag an tSonraisc",
+      "totalLabel": "Iomlán Creidmheasa",
+      "itemsInTotalLabel": "Míreanna san Iomlán",
+      "refundedAmountLabel": "Méid Creidmheasa",
+      "notes": "Creidmheas eisithe i gcoinne an tsonraisc thagartha.",
+      "terms": "Féadfar an nóta creidmheasa seo a chur i bhfeidhm ar cheannacháin amach anseo nó é a aisíoc mar a aontaítear."
+    },
+    "ha": {
+      "documentTitle": "NOTE CREDIT",
+      "orderNumber": "Bayanan Kiredit#",
+      "date": "Kwanan Bayanan Kiredit",
+      "reference": "Daftari Ref#",
+      "totalLabel": "Jimlar Kiredit",
+      "itemsInTotalLabel": "Abubuwa a cikin Jima'i",
+      "refundedAmountLabel": "Adadin Kiredit",
+      "notes": "An bayar da ƙima a kan daftarin da aka ambata.",
+      "terms": "Ana iya amfani da wannan bayanin kula ga sayayya na gaba ko mayar da kuɗi kamar yadda aka amince."
+    },
+    "hy": {
+      "documentTitle": "ԱՊԱՌԻԿ ՆՇՈՒՄ",
+      "orderNumber": "Վարկային նշում #",
+      "date": "Վարկային գրության ամսաթիվ",
+      "reference": "Հաշիվ-ապրանքագրի թիվ",
+      "totalLabel": "Վարկի ընդհանուր",
+      "itemsInTotalLabel": "Նյութերը Ընդամենը",
+      "refundedAmountLabel": "Վարկի գումար",
+      "notes": "Հղված հաշիվ-ապրանքագրի դիմաց տրված վարկ:",
+      "terms": "Այս վարկային նշումը կարող է կիրառվել ապագա գնումների համար կամ վերադարձվել՝ համաձայն համաձայնեցվածի:"
+    },
+    "ia": {
+      "documentTitle": "CREDIT NOTE",
+      "orderNumber": "Credit Note#",
+      "date": "Credit Note Date",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Items in Total",
+      "refundedAmountLabel": "Credit Amount",
+      "notes": "Credit issued against the referenced invoice.",
+      "terms": "This credit note may be applied to future purchases or refunded as agreed."
+    },
+    "ig": {
+      "documentTitle": "Ndeba kredit",
+      "orderNumber": "Ndeba kredit #",
+      "date": "Ụbọchị ndetu kredit",
+      "reference": "Akwụkwọ ọnụahịa Ref#",
+      "totalLabel": "Ọnụ ego kredit",
+      "itemsInTotalLabel": "Ihe dị na mkpokọta",
+      "refundedAmountLabel": "Ọnụ ego kredit",
+      "notes": "Enyere kredit megide akwụkwọ ọnụahịa etinyere.",
+      "terms": "Enwere ike itinye akwụkwọ kredit a maka ịzụrụ n'ọdịnihu ma ọ bụ nyeghachi ya dịka ekwenyere."
+    },
+    "ii": {
+      "documentTitle": "信用证",
+      "orderNumber": "贷方票据#",
+      "date": "贷方票据日期",
+      "reference": "发票参考号#",
+      "totalLabel": "信用总额",
+      "itemsInTotalLabel": "总计项目",
+      "refundedAmountLabel": "信用金额",
+      "notes": "根据参考发票开具信用证。",
+      "terms": "该贷方票据可用于将来的购买或按约定退款。"
+    },
+    "jv": {
+      "documentTitle": "CATETAN KREDIT",
+      "orderNumber": "Cathetan Kredit#",
+      "date": "Tanggal Cathetan Kredit",
+      "reference": "Referensi Invoice#",
+      "totalLabel": "Total Kredit",
+      "itemsInTotalLabel": "Item ing Total",
+      "refundedAmountLabel": "Jumlah Kredit",
+      "notes": "Kredit ditanggepi marang invoice referensi.",
+      "terms": "Cathetan kredit iki bisa ditrapake kanggo tuku mbesuk utawa dibalekake kaya sing disepakati."
+    },
+    "ka": {
+      "documentTitle": "საკრედიტო შენიშვნა",
+      "orderNumber": "საკრედიტო შენიშვნა #",
+      "date": "საკრედიტო შენიშვნის თარიღი",
+      "reference": "ინვოისის კოდი #",
+      "totalLabel": "კრედიტი სულ",
+      "itemsInTotalLabel": "ნივთები სულ",
+      "refundedAmountLabel": "საკრედიტო თანხა",
+      "notes": "მითითებულ ინვოისზე გაცემული კრედიტი.",
+      "terms": "ეს საკრედიტო შენიშვნა შეიძლება გამოყენებულ იქნას მომავალ შესყიდვებზე ან დაბრუნდეს შეთანხმების მიხედვით."
+    },
+    "ki": {
+      "documentTitle": "KUMBUKA YA CREDIT",
+      "orderNumber": "Ujumbe wa mkopo#",
+      "date": "Tarehe ya Kumbuka ya Mkopo",
+      "reference": "Rejea ya ankara#",
+      "totalLabel": "Jumla ya Mikopo",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "refundedAmountLabel": "Kiasi cha Mkopo",
+      "notes": "Salio lililotolewa dhidi ya ankara iliyorejelewa.",
+      "terms": "Dokezo hili la mkopo linaweza kutumika kwa ununuzi wa siku zijazo au kurejeshewa pesa kama ilivyokubaliwa."
+    },
+    "kk": {
+      "documentTitle": "Кредиттік жазба",
+      "orderNumber": "Несиелік жазба#",
+      "date": "Несиелік ескерту күні",
+      "reference": "Шот-фактура анықтамасы №",
+      "totalLabel": "Несиенің жалпы сомасы",
+      "itemsInTotalLabel": "Барлығындағы элементтер",
+      "refundedAmountLabel": "Несие сомасы",
+      "notes": "Сілтеме берілген шот-фактураға қарсы берілген несие.",
+      "terms": "Бұл несиелік жазба болашақ сатып алуларға қолданылуы мүмкін немесе келісілгендей қайтарылуы мүмкін."
+    },
+    "kl": {
+      "documentTitle": "KREDITNOTA",
+      "orderNumber": "Kreditnota#",
+      "date": "Kreditnota Dato",
+      "reference": "Faktura ref.",
+      "totalLabel": "Kredit i alt",
+      "itemsInTotalLabel": "Varer i alt",
+      "refundedAmountLabel": "Kreditbeløb",
+      "notes": "Kredit udstedt mod den refererede faktura.",
+      "terms": "Denne kreditnota kan anvendes på fremtidige køb eller refunderes som aftalt."
+    },
+    "km": {
+      "documentTitle": "កំណត់ចំណាំឥណទាន",
+      "orderNumber": "កំណត់សម្គាល់ឥណទាន#",
+      "date": "កាលបរិច្ឆេទកំណត់ចំណាំឥណទាន",
+      "reference": "វិក្កយបត្រយោង#",
+      "totalLabel": "ឥណទានសរុប",
+      "itemsInTotalLabel": "ធាតុនៅក្នុងសរុប",
+      "refundedAmountLabel": "ចំនួនទឹកប្រាក់ឥណទាន",
+      "notes": "ឥណទានដែលចេញទល់នឹងវិក្កយបត្រយោង។",
+      "terms": "កំណត់ចំណាំឥណទាននេះអាចត្រូវបានអនុវត្តចំពោះការទិញនាពេលអនាគត ឬបង្វិលសងវិញតាមការព្រមព្រៀង។"
+    },
+    "kn": {
+      "documentTitle": "ಕ್ರೆಡಿಟ್ ಟಿಪ್ಪಣಿ",
+      "orderNumber": "ಕ್ರೆಡಿಟ್ ನೋಟ್#",
+      "date": "ಕ್ರೆಡಿಟ್ ನೋಟ್ ದಿನಾಂಕ",
+      "reference": "ಸರಕುಪಟ್ಟಿ ಉಲ್ಲೇಖ#",
+      "totalLabel": "ಕ್ರೆಡಿಟ್ ಒಟ್ಟು",
+      "itemsInTotalLabel": "ಒಟ್ಟು ಐಟಂಗಳು",
+      "refundedAmountLabel": "ಕ್ರೆಡಿಟ್ ಮೊತ್ತ",
+      "notes": "ಉಲ್ಲೇಖಿತ ಸರಕುಪಟ್ಟಿ ವಿರುದ್ಧ ಕ್ರೆಡಿಟ್ ನೀಡಲಾಗಿದೆ.",
+      "terms": "ಈ ಕ್ರೆಡಿಟ್ ಟಿಪ್ಪಣಿಯನ್ನು ಭವಿಷ್ಯದ ಖರೀದಿಗಳಿಗೆ ಅನ್ವಯಿಸಬಹುದು ಅಥವಾ ಒಪ್ಪಿಕೊಂಡಂತೆ ಮರುಪಾವತಿ ಮಾಡಬಹುದು."
+    },
+    "ks": {
+      "documentTitle": "کریڈٹ نوٹ",
+      "orderNumber": "کریڈٹ نوٹ#",
+      "date": "کریڈٹ نوٹ کی تاریخ",
+      "reference": "انوائس ریفری#",
+      "totalLabel": "کریڈٹ ٹوٹل",
+      "itemsInTotalLabel": "کل میں آئٹمز",
+      "refundedAmountLabel": "کریڈٹ کی رقم",
+      "notes": "حوالہ شدہ انوائس کے خلاف جاری کردہ کریڈٹ۔",
+      "terms": "یہ کریڈٹ نوٹ مستقبل کی خریداریوں پر لاگو کیا جا سکتا ہے یا اتفاق رائے کے مطابق واپس کیا جا سکتا ہے۔"
+    },
+    "ku": {
+      "documentTitle": "NOTE KREDÎ",
+      "orderNumber": "Nota krediyê#",
+      "date": "Dîroka Têbînîya Krediyê",
+      "reference": "Refa fatûre#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Tiştên bi tevahî",
+      "refundedAmountLabel": "Heqê Krediyê",
+      "notes": "Krediya li hember fatûreya referanskirî hate dayîn.",
+      "terms": "Dibe ku ev nota krediyê ji bo kirînên paşerojê were sepandin an wekî ku lihevhatî were vegerandin."
+    },
+    "kw": {
+      "documentTitle": "NODYN CREDYD",
+      "orderNumber": "Nodyn Credyd#",
+      "date": "Dyddiad Nodyn Credyd",
+      "reference": "Cyfeirnod Anfoneb#",
+      "totalLabel": "Cyfanswm Credyd",
+      "itemsInTotalLabel": "Eitemau mewn Cyfanswm",
+      "refundedAmountLabel": "Swm Credyd",
+      "notes": "Credyd a roddwyd yn erbyn yr anfoneb gyfeirnod.",
+      "terms": "Gall y nodyn credyd hwn gael ei gymhwyso i bryniannau yn y dyfodol neu ei ad-dalu fel y cytunwyd."
+    },
+    "ky": {
+      "documentTitle": "Кредиттик эскертүү",
+      "orderNumber": "Кредиттик жазуу#",
+      "date": "Кредиттик жазуу датасы",
+      "reference": "Эсеп-фактура №",
+      "totalLabel": "Кредиттин жалпы суммасы",
+      "itemsInTotalLabel": "Бардыгы болгон нерселер",
+      "refundedAmountLabel": "Кредиттин суммасы",
+      "notes": "Шилтеме берилген эсеп-фактурага каршы берилген кредит.",
+      "terms": "Бул кредиттик нота келечектеги сатып алууларга колдонулушу мүмкүн же макулдашылгандай кайтарылып берилиши мүмкүн."
+    },
+    "lg": {
+      "documentTitle": "KUMBUKA YA CREDIT",
+      "orderNumber": "Ujumbe wa mkopo#",
+      "date": "Tarehe ya Kumbuka ya Mkopo",
+      "reference": "Rejea ya ankara#",
+      "totalLabel": "Jumla ya Mikopo",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "refundedAmountLabel": "Kiasi cha Mkopo",
+      "notes": "Salio lililotolewa dhidi ya ankara iliyorejelewa.",
+      "terms": "Dokezo hili la mkopo linaweza kutumika kwa ununuzi wa siku zijazo au kurejeshewa pesa kama ilivyokubaliwa."
+    },
+    "ln": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "lo": {
+      "documentTitle": "ຫມາຍເຫດສິນເຊື່ອ",
+      "orderNumber": "ຫມາຍເຫດເຄຣດິດ#",
+      "date": "ວັນທີບັນທຶກສິນເຊື່ອ",
+      "reference": "ໃບແຈ້ງໜີ້ Ref#",
+      "totalLabel": "ສິນເຊື່ອທັງໝົດ",
+      "itemsInTotalLabel": "ລາຍການທັງໝົດ",
+      "refundedAmountLabel": "ຈໍານວນສິນເຊື່ອ",
+      "notes": "ສິນເຊື່ອທີ່ອອກຕໍ່ກັບໃບແຈ້ງໜີ້ທີ່ອ້າງອີງ.",
+      "terms": "ບັນທຶກສິນເຊື່ອນີ້ອາດຈະຖືກນຳໃຊ້ກັບການຊື້ໃນອະນາຄົດ ຫຼືຄືນເງິນຕາມທີ່ໄດ້ຕົກລົງກັນ."
+    },
+    "lu": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "mg": {
+      "documentTitle": "FANAMARIHANA",
+      "orderNumber": "#\nnaoty crédit#",
+      "date": "#\nDaty fanamarihana crédit",
+      "reference": "#\nFaktiora Ref#",
+      "totalLabel": "#\nCredit Total",
+      "itemsInTotalLabel": "#\nZavatra ao amin'ny Total",
+      "refundedAmountLabel": "#\nHaben'ny trosa",
+      "notes": "#\nNavoaka tamin'ny faktiora voalaza.",
+      "terms": "#\nIty taratasim-bola ity dia azo ampiharina amin'ny fividianana ho avy na averina araka izay nifanarahana."
+    },
+    "mi": {
+      "documentTitle": "FAKATOKANGA WAHI",
+      "orderNumber": "Tuhipoka nama #",
+      "date": "Te Ra Panui Nama",
+      "reference": "nama nama",
+      "totalLabel": "Tapeke nama",
+      "itemsInTotalLabel": "Tuemi i roto i te Tapeke",
+      "refundedAmountLabel": "Te moni nama",
+      "notes": "I tukuna he nama ki runga i te nama tohutoro.",
+      "terms": "Ka whakamahia pea tenei nama nama ki nga hoko a muri ake nei ka whakahokia mai ranei i runga i te whakaaetanga."
+    },
+    "ml": {
+      "documentTitle": "ക്രെഡിറ്റ് നോട്ട്",
+      "orderNumber": "കടപ്പാട്#",
+      "date": "ക്രെഡിറ്റ് നോട്ട് തീയതി",
+      "reference": "ഇൻവോയ്സ് റെഫ്#",
+      "totalLabel": "ക്രെഡിറ്റ് ആകെ",
+      "itemsInTotalLabel": "ആകെയുള്ള ഇനങ്ങൾ",
+      "refundedAmountLabel": "ക്രെഡിറ്റ് തുക",
+      "notes": "പരാമർശിച്ച ഇൻവോയ്‌സിനെതിരെ ക്രെഡിറ്റ് ഇഷ്യൂ ചെയ്‌തു.",
+      "terms": "ഈ ക്രെഡിറ്റ് നോട്ട് ഭാവിയിലെ വാങ്ങലുകൾക്ക് ബാധകമാക്കാം അല്ലെങ്കിൽ സമ്മതിച്ചതുപോലെ റീഫണ്ട് നൽകാം."
+    },
+    "mn": {
+      "documentTitle": "ЗЭЭЛИЙН ТАЙЛБАР",
+      "orderNumber": "Зээлийн тэмдэглэл#",
+      "date": "Зээлийн тэмдэглэлийн огноо",
+      "reference": "Нэхэмжлэхийн лавлагаа#",
+      "totalLabel": "Зээлийн нийт",
+      "itemsInTotalLabel": "Нийт доторх зүйлс",
+      "refundedAmountLabel": "Зээлийн хэмжээ",
+      "notes": "Заасан нэхэмжлэхийн эсрэг олгосон кредит.",
+      "terms": "Энэхүү зээлийн тэмдэглэлийг ирээдүйн худалдан авалтад ашиглах эсвэл тохиролцсоны дагуу буцаан олгох боломжтой."
+    },
+    "mr": {
+      "documentTitle": "क्रेडिट टीप",
+      "orderNumber": "क्रेडिट नोट#",
+      "date": "क्रेडिट नोट तारीख",
+      "reference": "चलन संदर्भ#",
+      "totalLabel": "क्रेडिट एकूण",
+      "itemsInTotalLabel": "एकूण आयटम",
+      "refundedAmountLabel": "क्रेडिट रक्कम",
+      "notes": "संदर्भित इनव्हॉइसवर जारी केलेले क्रेडिट.",
+      "terms": "ही क्रेडिट नोट भविष्यातील खरेदीवर लागू केली जाऊ शकते किंवा सहमतीनुसार परतावा दिला जाऊ शकतो."
+    },
+    "my": {
+      "documentTitle": "ခရက်ဒစ်မှတ်ချက်",
+      "orderNumber": "ခရက်ဒစ်မှတ်စု#",
+      "date": "ခရက်ဒစ်မှတ်ချက်ရက်စွဲ",
+      "reference": "ပြေစာ Ref#",
+      "totalLabel": "ခရက်ဒစ်စုစုပေါင်း",
+      "itemsInTotalLabel": "စုစုပေါင်းရှိပစ္စည်းများ",
+      "refundedAmountLabel": "ခရက်ဒစ်ပမာဏ",
+      "notes": "ကိုးကားထားသော ပြေစာနှင့်ဆန့်ကျင်ဘက်ထုတ်ပေးသော ခရက်ဒစ်။",
+      "terms": "ဤခရက်ဒစ်မှတ်စုကို နောင်ဝယ်ယူမှုများတွင် အသုံးချနိုင်သည် သို့မဟုတ် သဘောတူထားသည့်အတိုင်း ပြန်အမ်းနိုင်သည်။"
+    },
+    "nb": {
+      "documentTitle": "KREDITT NOTAT",
+      "orderNumber": "Kredittnota#",
+      "date": "Dato for kreditnota",
+      "reference": "Faktura ref.",
+      "totalLabel": "Kreditt totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "refundedAmountLabel": "Kredittbeløp",
+      "notes": "Kreditt utstedt mot den refererte fakturaen.",
+      "terms": "Denne kreditnotaen kan brukes på fremtidige kjøp eller refunderes som avtalt."
+    },
+    "nd": {
+      "documentTitle": "I-CREDIT NOTE",
+      "orderNumber": "Inothi lesikweletu#",
+      "date": "Idethi ye-Credit Note",
+      "reference": "I-invoyisi Ref#",
+      "totalLabel": "Isamba Sesikweletu",
+      "itemsInTotalLabel": "Izinto Eziphelele",
+      "refundedAmountLabel": "Inani Lesikweletu",
+      "notes": "Ikhredithi ikhishwe ngokumelene ne-invoyisi ebaluliwe.",
+      "terms": "Leli nothi lesikweletu lingase lisetshenziswe ekuthengeni esikhathini esizayo noma libuyiselwe njengoba kuvunyelwene."
+    },
+    "ne": {
+      "documentTitle": "क्रेडिट नोट",
+      "orderNumber": "क्रेडिट नोट#",
+      "date": "क्रेडिट नोट मिति",
+      "reference": "इनभ्वाइस सन्दर्भ #",
+      "totalLabel": "कुल क्रेडिट",
+      "itemsInTotalLabel": "कुलमा वस्तुहरू",
+      "refundedAmountLabel": "क्रेडिट रकम",
+      "notes": "सन्दर्भ इनभ्वाइस विरुद्ध जारी क्रेडिट।",
+      "terms": "यो क्रेडिट नोट भविष्यका खरिदहरूमा लागू गर्न सकिन्छ वा सहमति अनुसार फिर्ता गर्न सकिन्छ।"
+    },
+    "nn": {
+      "documentTitle": "KREDITT NOTAT",
+      "orderNumber": "Kredittnota#",
+      "date": "Dato for kreditnota",
+      "reference": "Faktura ref.",
+      "totalLabel": "Kreditt totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "refundedAmountLabel": "Kredittbeløp",
+      "notes": "Kreditt utstedt mot den refererte fakturaen.",
+      "terms": "Denne kreditnotaen kan brukes på fremtidige kjøp eller refunderes som avtalt."
+    },
+    "os": {
+      "documentTitle": "КРЕДИТНАЯ НОТА",
+      "orderNumber": "Кредитная нота#",
+      "date": "Дата кредит-ноты",
+      "reference": "Номер счета-фактуры",
+      "totalLabel": "Сумма кредита",
+      "itemsInTotalLabel": "Всего предметов",
+      "refundedAmountLabel": "Сумма кредита",
+      "notes": "Кредит выдан против указанного счета-фактуры.",
+      "terms": "Эта кредит-нота может быть использована для будущих покупок или возвращена по согласованию."
+    },
+    "om": {
+      "documentTitle": "HUBACHIISA LIQII",
+      "orderNumber": "Hubachiisa Liqii#",
+      "date": "Guyyaa Yaadannoo Liqii",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Waliigala Liqii",
+      "itemsInTotalLabel": "Wantoota Waliigalaan",
+      "refundedAmountLabel": "Hanga Liqii",
+      "notes": "Liqii invoice wabii ta’e irratti kenname.",
+      "terms": "Yaadannoo liqii kun bittaa gara fuula duraa irratti hojiirra ooluu ykn akka waliigalteetti deebi’uu ni danda’a."
+    },
+    "pa": {
+      "documentTitle": "ਕ੍ਰੈਡਿਟ ਨੋਟ",
+      "orderNumber": "ਕ੍ਰੈਡਿਟ ਨੋਟ#",
+      "date": "ਕ੍ਰੈਡਿਟ ਨੋਟ ਦੀ ਮਿਤੀ",
+      "reference": "ਇਨਵੌਇਸ ਰੈਫਰੀ#",
+      "totalLabel": "ਕ੍ਰੈਡਿਟ ਕੁੱਲ",
+      "itemsInTotalLabel": "ਕੁੱਲ ਵਿੱਚ ਆਈਟਮਾਂ",
+      "refundedAmountLabel": "ਕ੍ਰੈਡਿਟ ਰਕਮ",
+      "notes": "ਹਵਾਲਾ ਦਿੱਤੇ ਇਨਵੌਇਸ ਦੇ ਵਿਰੁੱਧ ਕ੍ਰੈਡਿਟ ਜਾਰੀ ਕੀਤਾ ਗਿਆ ਹੈ।",
+      "terms": "ਇਹ ਕ੍ਰੈਡਿਟ ਨੋਟ ਭਵਿੱਖ ਦੀਆਂ ਖਰੀਦਾਂ 'ਤੇ ਲਾਗੂ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ ਜਾਂ ਸਹਿਮਤੀ ਅਨੁਸਾਰ ਰਿਫੰਡ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।"
+    },
+    "or": {
+      "documentTitle": "କ୍ରେଡିଟ୍ ଟିପ୍ପଣୀ |",
+      "orderNumber": "କ୍ରେଡିଟ୍ ନୋଟ୍ #",
+      "date": "କ୍ରେଡିଟ୍ ନୋଟ୍ ତାରିଖ |",
+      "reference": "ଇନଭଏସ୍ ରେଫ୍ #",
+      "totalLabel": "କ୍ରେଡିଟ୍ ମୋଟ",
+      "itemsInTotalLabel": "ସମୁଦାୟ ଆଇଟମ୍ |",
+      "refundedAmountLabel": "କ୍ରେଡିଟ୍ ରାଶି",
+      "notes": "ରେଫରେନ୍ସ ହୋଇଥିବା ଇନଭଏସ୍ ବିରୋଧରେ କ୍ରେଡିଟ୍ ପ୍ରଦାନ କରାଯାଇଛି |",
+      "terms": "ଭବିଷ୍ୟତରେ କ୍ରୟ ପାଇଁ ଏହି କ୍ରେଡିଟ୍ ନୋଟ୍ ପ୍ରୟୋଗ ହୋଇପାରେ କିମ୍ବା ରାଜି ଅନୁଯାୟୀ ଫେରସ୍ତ କରାଯାଇପାରେ |"
+    },
+    "ps": {
+      "documentTitle": "د کریډیټ یادښت",
+      "orderNumber": "د اعتبار یادښت#",
+      "date": "د کریډیټ نوټ نیټه",
+      "reference": "د رسید ریفر #",
+      "totalLabel": "د کریډیټ مجموعه",
+      "itemsInTotalLabel": "په مجموع کې توکي",
+      "refundedAmountLabel": "د کریډیټ اندازه",
+      "notes": "کریډیټ د راجع شوي رسید په وړاندې صادر شوی.",
+      "terms": "دا کریډیټ یادښت ممکن په راتلونکو پیرودونو کې پلي شي یا د موافقې سره سم بیرته ورکړل شي."
+    },
+    "qu": {
+      "documentTitle": "NOTA DE CRÉDITO",
+      "orderNumber": "Nota de crédito#",
+      "date": "Fecha de la nota de crédito",
+      "reference": "Número de referencia de factura",
+      "totalLabel": "Crédito Total",
+      "itemsInTotalLabel": "Artículos en total",
+      "refundedAmountLabel": "Monto del crédito",
+      "notes": "Crédito emitido contra la factura referenciada.",
+      "terms": "Esta nota de crédito podrá aplicarse a compras futuras o reembolsarse según lo acordado."
+    },
+    "rm": {
+      "documentTitle": "Gutschriftshinweis",
+      "orderNumber": "Gutschrift#",
+      "date": "Datum der Gutschrift",
+      "reference": "Rechnungsreferenznummer",
+      "totalLabel": "Kreditsumme",
+      "itemsInTotalLabel": "Artikel insgesamt",
+      "refundedAmountLabel": "Kreditbetrag",
+      "notes": "Gutschrift auf die angegebene Rechnung ausgestellt.",
+      "terms": "Diese Gutschrift kann auf zukünftige Einkäufe angerechnet oder nach Vereinbarung zurückerstattet werden."
+    },
+    "rn": {
+      "documentTitle": "ICYITONDERWA",
+      "orderNumber": "Icyitonderwa cy'inguzanyo #",
+      "date": "Itariki y'inguzanyo",
+      "reference": "Inyemezabuguzi Ref #",
+      "totalLabel": "Inguzanyo yose",
+      "itemsInTotalLabel": "Ibintu Byose",
+      "refundedAmountLabel": "Umubare w'inguzanyo",
+      "notes": "Inguzanyo yatanzwe kuri fagitire yerekanwe.",
+      "terms": "Iyi nyandiko yinguzanyo irashobora gukoreshwa mubiguzi bizaza cyangwa gusubizwa nkuko byumvikanyweho."
+    },
+    "sa": {
+      "documentTitle": "क्रेडिट नोट",
+      "orderNumber": "क्रेडिट नोट#",
+      "date": "क्रेडिट नोट दिनांक",
+      "reference": "चालान संदर्भ#",
+      "totalLabel": "कुल क्रेडिट",
+      "itemsInTotalLabel": "कुल आइटम",
+      "refundedAmountLabel": "क्रेडिट राशि",
+      "notes": "संदर्भित चालान के विरुद्ध जारी किया गया क्रेडिट.",
+      "terms": "यह क्रेडिट नोट भविष्य की खरीदारी पर लागू किया जा सकता है या सहमति के अनुसार वापस किया जा सकता है।"
+    },
+    "rw": {
+      "documentTitle": "ICYITONDERWA",
+      "orderNumber": "Icyitonderwa cy'inguzanyo #",
+      "date": "Itariki y'inguzanyo",
+      "reference": "Inyemezabuguzi Ref #",
+      "totalLabel": "Inguzanyo yose",
+      "itemsInTotalLabel": "Ibintu Byose",
+      "refundedAmountLabel": "Umubare w'inguzanyo",
+      "notes": "Inguzanyo yatanzwe kuri fagitire yerekanwe.",
+      "terms": "Iyi nyandiko yinguzanyo irashobora gukoreshwa mubiguzi bizaza cyangwa gusubizwa nkuko byumvikanyweho."
+    },
+    "sc": {
+      "documentTitle": "NOTA DI CREDITO",
+      "orderNumber": "Nota di credito n.",
+      "date": "Data della nota di credito",
+      "reference": "N. rif. fattura",
+      "totalLabel": "Totale credito",
+      "itemsInTotalLabel": "Articoli in totale",
+      "refundedAmountLabel": "Importo del credito",
+      "notes": "Credito emesso a fronte della fattura di riferimento.",
+      "terms": "Questa nota di credito potrà essere applicata ad acquisti futuri o rimborsata come concordato."
+    },
+    "sg": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "se": {
+      "documentTitle": "KREDITT NOTAT",
+      "orderNumber": "Kredittnota#",
+      "date": "Dato for kreditnota",
+      "reference": "Faktura ref.",
+      "totalLabel": "Kreditt totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "refundedAmountLabel": "Kredittbeløp",
+      "notes": "Kreditt utstedt mot den refererte fakturaen.",
+      "terms": "Denne kreditnotaen kan brukes på fremtidige kjøp eller refunderes som avtalt."
+    },
+    "sd": {
+      "documentTitle": "ڪريڊٽ نوٽ",
+      "orderNumber": "ڪريڊٽ نوٽ#",
+      "date": "ڪريڊٽ نوٽ جي تاريخ",
+      "reference": "انوائس Ref#",
+      "totalLabel": "ڪريڊٽ ڪل",
+      "itemsInTotalLabel": "مجموعي ۾ شيون",
+      "refundedAmountLabel": "ڪريڊٽ جي رقم",
+      "notes": "حوالي ڪيل انوائس جي خلاف جاري ڪيل ڪريڊٽ.",
+      "terms": "اهو ڪريڊٽ نوٽ مستقبل جي خريداري تي لاڳو ٿي سگهي ٿو يا اتفاق سان واپس ڪيو وڃي."
+    },
+    "si": {
+      "documentTitle": "ණය සටහන",
+      "orderNumber": "ණය සටහන#",
+      "date": "ණය සටහන් දිනය",
+      "reference": "ඉන්වොයිස් යොමු#",
+      "totalLabel": "ණය එකතුව",
+      "itemsInTotalLabel": "සමස්තයක් ලෙස අයිතම",
+      "refundedAmountLabel": "ණය මුදල",
+      "notes": "යොමු කරන ලද ඉන්වොයිසියට එරෙහිව නිකුත් කරන ලද ණය.",
+      "terms": "මෙම ණය සටහන අනාගත මිලදී ගැනීම් සඳහා යෙදිය හැකිය හෝ එකඟ වූ පරිදි ආපසු ගෙවිය හැකිය."
+    },
+    "sn": {
+      "documentTitle": "CREDIT NOTE",
+      "orderNumber": "Chirevo chechikwereti#",
+      "date": "Credit Note Date",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Zvinhu mu Total",
+      "refundedAmountLabel": "Mari Yechikwereti",
+      "notes": "Chikwereti chakapihwa maringe neinvoice yakanyorwa.",
+      "terms": "Ichi chinyorwa chechikwereti chinogona kushandiswa kune zvichazotengwa mune ramangwana kana kudzoserwa mari sezvakabvumiranwa."
+    },
+    "so": {
+      "documentTitle": "XUSUUSINTA Deynta",
+      "orderNumber": "Ogeysiiska amaahda #",
+      "date": "Taariikhda Xusuusta Deynta",
+      "reference": "Kharash Tixraac #",
+      "totalLabel": "Wadarta Daynta",
+      "itemsInTotalLabel": "Walxaha ku jira Wadarta",
+      "refundedAmountLabel": "Qadarka amaahda",
+      "notes": "Amaahda laga soo saaray ka dhanka ah qaansheegta la tixraacay.",
+      "terms": "Ogeysiiska deynta waxaa laga yaabaa in lagu dabaqo wax iibsiga mustaqbalka ama dib loogu soo celiyo sidii lagu heshiiyey."
+    },
+    "su": {
+      "documentTitle": "CATETAN KREDIT",
+      "orderNumber": "Catetan Kiridit#",
+      "date": "Tanggal Catetan Kiridit",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Jumlah kiridit",
+      "itemsInTotalLabel": "Item dina Total",
+      "refundedAmountLabel": "Jumlah kiridit",
+      "notes": "Kiridit dikaluarkeun ngalawan invoice referenced.",
+      "terms": "Catetan kiridit ieu tiasa diterapkeun kana pameseran ka hareup atanapi dibalikeun deui sakumaha anu disatujuan."
+    },
+    "sw": {
+      "documentTitle": "KUMBUKA YA CREDIT",
+      "orderNumber": "Ujumbe wa mkopo#",
+      "date": "Tarehe ya Kumbuka ya Mkopo",
+      "reference": "Rejea ya ankara#",
+      "totalLabel": "Jumla ya Mikopo",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "refundedAmountLabel": "Kiasi cha Mkopo",
+      "notes": "Salio lililotolewa dhidi ya ankara iliyorejelewa.",
+      "terms": "Dokezo hili la mkopo linaweza kutumika kwa ununuzi wa siku zijazo au kurejeshewa pesa kama ilivyokubaliwa."
+    },
+    "te": {
+      "documentTitle": "క్రెడిట్ నోట్",
+      "orderNumber": "క్రెడిట్ నోట్#",
+      "date": "క్రెడిట్ నోట్ తేదీ",
+      "reference": "ఇన్వాయిస్ రెఫ్#",
+      "totalLabel": "క్రెడిట్ మొత్తం",
+      "itemsInTotalLabel": "మొత్తంలో అంశాలు",
+      "refundedAmountLabel": "క్రెడిట్ మొత్తం",
+      "notes": "సూచించిన ఇన్‌వాయిస్‌కు వ్యతిరేకంగా క్రెడిట్ జారీ చేయబడింది.",
+      "terms": "ఈ క్రెడిట్ నోట్ భవిష్యత్తులో కొనుగోళ్లకు వర్తించవచ్చు లేదా అంగీకరించినట్లుగా రీఫండ్ చేయబడవచ్చు."
+    },
+    "tg": {
+      "documentTitle": "ЭЗОҲ Кредит",
+      "orderNumber": "Эзоҳ №",
+      "date": "Санаи қайди кредитӣ",
+      "reference": "Ҳисобнома-фактура №",
+      "totalLabel": "Маблағи қарз",
+      "itemsInTotalLabel": "Ададҳо дар маҷмӯъ",
+      "refundedAmountLabel": "Маблағи қарз",
+      "notes": "Кредит бар зидди ҳисобнома-фактураи истинодшуда дода шудааст.",
+      "terms": "Ин ёддошти кредитӣ метавонад ба харидҳои оянда татбиқ карда шавад ё тибқи мувофиқа баргардонида шавад."
+    },
+    "ti": {
+      "documentTitle": "ክሬዲት ማስታወሻ",
+      "orderNumber": "የብድር ማስታወሻ#",
+      "date": "የብድር ማስታወሻ ቀን",
+      "reference": "የክፍያ መጠየቂያ ሪፍ#",
+      "totalLabel": "የክሬዲት ጠቅላላ",
+      "itemsInTotalLabel": "እቃዎች በጠቅላላ",
+      "refundedAmountLabel": "የብድር መጠን",
+      "notes": "በተጠቀሰው ደረሰኝ ላይ ክሬዲት የተሰጠ።",
+      "terms": "ይህ የክሬዲት ማስታወሻ ለወደፊት ግዢዎች ሊተገበር ወይም በተስማማው መሰረት ገንዘቡ ሊመለስ ይችላል።"
+    },
+    "tk": {
+      "documentTitle": "KREDİ NOTU",
+      "orderNumber": "Kredi Notu#",
+      "date": "Kredi Dekontu Tarihi",
+      "reference": "Fatura Referans Numarası",
+      "totalLabel": "Kredi Toplamı",
+      "itemsInTotalLabel": "Toplam Öğeler",
+      "refundedAmountLabel": "Kredi Tutarı",
+      "notes": "Referans verilen fatura karşılığında verilen kredi.",
+      "terms": "Bu kredi dekontu gelecekteki satın alma işlemlerine uygulanabilir veya kararlaştırıldığı şekilde iade edilebilir."
+    },
+    "to": {
+      "documentTitle": "CREDIT NOTE",
+      "orderNumber": "Credit Note#",
+      "date": "Credit Note Date",
+      "reference": "Invoice Ref#",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "Items in Total",
+      "refundedAmountLabel": "Credit Amount",
+      "notes": "Credit issued against the referenced invoice.",
+      "terms": "This credit note may be applied to future purchases or refunded as agreed."
+    },
+    "tt": {
+      "documentTitle": "КРЕДИТНАЯ НОТА",
+      "orderNumber": "Кредитная нота#",
+      "date": "Дата кредит-ноты",
+      "reference": "Номер счета-фактуры",
+      "totalLabel": "Сумма кредита",
+      "itemsInTotalLabel": "Всего предметов",
+      "refundedAmountLabel": "Сумма кредита",
+      "notes": "Кредит выдан против указанного счета-фактуры.",
+      "terms": "Эта кредит-нота может быть использована для будущих покупок или возвращена по согласованию."
+    },
+    "ur": {
+      "documentTitle": "کریڈٹ نوٹ",
+      "orderNumber": "کریڈٹ نوٹ#",
+      "date": "کریڈٹ نوٹ کی تاریخ",
+      "reference": "انوائس ریفری#",
+      "totalLabel": "کریڈٹ ٹوٹل",
+      "itemsInTotalLabel": "کل میں آئٹمز",
+      "refundedAmountLabel": "کریڈٹ کی رقم",
+      "notes": "حوالہ شدہ انوائس کے خلاف جاری کردہ کریڈٹ۔",
+      "terms": "یہ کریڈٹ نوٹ مستقبل کی خریداریوں پر لاگو کیا جا سکتا ہے یا اتفاق رائے کے مطابق واپس کیا جا سکتا ہے۔"
+    },
+    "wo": {
+      "documentTitle": "NOTE DE CRÉDIT",
+      "orderNumber": "Note de crédit#",
+      "date": "Date de la note de crédit",
+      "reference": "Numéro de référence de la facture",
+      "totalLabel": "Crédit Total",
+      "itemsInTotalLabel": "Articles au total",
+      "refundedAmountLabel": "Montant du crédit",
+      "notes": "Crédit émis contre la facture référencée.",
+      "terms": "Cet avoir pourra être appliqué sur de futurs achats ou remboursé comme convenu."
+    },
+    "ug": {
+      "documentTitle": "CREDIT ئەسكەرتىش",
+      "orderNumber": "ئىناۋەت نومۇرى #",
+      "date": "ئىناۋەتلىك خاتىرە ۋاقتى",
+      "reference": "تالون رېف #",
+      "totalLabel": "Credit Total",
+      "itemsInTotalLabel": "ئومۇمىي تۈرلەر",
+      "refundedAmountLabel": "ئىناۋەتلىك سومما",
+      "notes": "پايدىلانغان تالونغا قارشى ئىناۋەتلىك قەرز.",
+      "terms": "بۇ ئىناۋەتلىك خاتىرە كەلگۈسىدىكى سېتىۋېلىشقا ياكى پۈتۈشكىنى بويىچە قايتۇرۇلىدۇ."
+    },
+    "uz": {
+      "documentTitle": "KREDIT YOQTI",
+      "orderNumber": "Kredit eslatmasi#",
+      "date": "Kredit eslatma sanasi",
+      "reference": "Invoys Ref#",
+      "totalLabel": "Jami kredit",
+      "itemsInTotalLabel": "Jami ob'ektlar",
+      "refundedAmountLabel": "Kredit miqdori",
+      "notes": "Ko'rsatilgan hisob-fakturaga nisbatan berilgan kredit.",
+      "terms": "Ushbu kredit eslatmasi kelajakdagi xaridlarga qo'llanilishi yoki kelishilgan holda qaytarilishi mumkin."
+    },
+    "xh": {
+      "documentTitle": "INQAKU LWETYALA",
+      "orderNumber": "Inqaku letyala#",
+      "date": "Umhla weNqaku letyala",
+      "reference": "IsiBonelelo se-invoyisi#",
+      "totalLabel": "Ityala lilonke",
+      "itemsInTotalLabel": "Izinto kwiTotali",
+      "refundedAmountLabel": "Imali yetyala",
+      "notes": "Ityala likhutshiwe ngokuchasene ne-invoyisi ekubhekiselwa kuyo.",
+      "terms": "Eli nqaku lekhredithi linokusetyenziswa kwiintengo zexesha elizayo okanye ukubuyiselwa imali njengoko kuvunyelwene."
+    },
+    "yi": {
+      "documentTitle": "קרעדיט נאָטיץ",
+      "orderNumber": "קרעדיט נאטיץ #",
+      "date": "קרעדיט באַמערקונג טאָג",
+      "reference": "רעפערענץ נומער",
+      "totalLabel": "קרעדיט גאַנץ",
+      "itemsInTotalLabel": "ייטאַמז אין גאַנץ",
+      "refundedAmountLabel": "קרעדיט סכום",
+      "notes": "קרעדיט ארויס קעגן די רעפעראַנסט ינווויס.",
+      "terms": "דער קרעדיט נאָטיץ קען זיין געווענדט צו צוקונפֿט פּערטשאַסאַז אָדער ריפאַנדיד ווי מסכים."
+    },
+    "yo": {
+      "documentTitle": "AKIYESI Krẹdit",
+      "orderNumber": "Akọsilẹ Kirẹditi#",
+      "date": "Kirẹditi Akọsilẹ Ọjọ",
+      "reference": "Iwe-owo Ref#",
+      "totalLabel": "Kirẹditi Lapapọ",
+      "itemsInTotalLabel": "Awọn nkan ni Total",
+      "refundedAmountLabel": "Ike Iye",
+      "notes": "Kirẹditi ti jade lodi si risiti itọkasi.",
+      "terms": "Akọsilẹ kirẹditi yii le jẹ lilo si awọn rira ọjọ iwaju tabi sanpada bi a ti gba."
+    },
+    "zu": {
+      "documentTitle": "I-CREDIT NOTE",
+      "orderNumber": "Inothi lesikweletu#",
+      "date": "Idethi ye-Credit Note",
+      "reference": "I-invoyisi Ref#",
+      "totalLabel": "Isamba Sesikweletu",
+      "itemsInTotalLabel": "Izinto Eziphelele",
+      "refundedAmountLabel": "Inani Lesikweletu",
+      "notes": "Ikhredithi ikhishwe ngokumelene ne-invoyisi ebaluliwe.",
+      "terms": "Leli nothi lesikweletu lingase lisetshenziswe ekuthengeni esikhathini esizayo noma libuyiselwe njengoba kuvunyelwene."
+    }
+  },
+  "packing": {
+    "ak": {
+      "documentTitle": "PACKING SLIP A WƆDE GU NSƐM",
+      "orderNumber": "Nneɛma a wɔde kyekyere nneɛma ho Slip#",
+      "date": "Date a Wɔde Bɛhyehyɛ Nneɛma",
+      "reference": "Order Ref# .",
+      "totalLabel": "Nneɛma a Wɔaboaboa Ano Total",
+      "itemsInTotalLabel": "Nneɛma a wɔahyɛ no ma",
+      "notes": "Yɛsrɛ sɛ hwɛ emu nsɛm no toto saa packing slip yi ho.",
+      "terms": "Bɔ nneɛma a ayera anaa asɛe ho amanneɛ wɔ nnɔnhwerew 48 akyi bere a wɔde amena no."
+    },
+    "am": {
+      "documentTitle": "የማሸጊያ ስሊፕ",
+      "orderNumber": "የማሸጊያ ስሊፕ#",
+      "date": "የማሸጊያ ቀን",
+      "reference": "Ref# ይዘዙ",
+      "totalLabel": "የታሸገ ጠቅላላ",
+      "itemsInTotalLabel": "የታሸጉ ዕቃዎች",
+      "notes": "እባክዎን ይዘቱን ከዚህ የማሸጊያ ወረቀት ጋር ያረጋግጡ።",
+      "terms": "በ48 ሰአታት ውስጥ የጎደሉትን ወይም የተበላሹ ነገሮችን ሪፖርት ያድርጉ።"
+    },
+    "af": {
+      "documentTitle": "PAK STROKIE",
+      "orderNumber": "Pakstrokie#",
+      "date": "Verpakkingsdatum",
+      "reference": "Bestelverw.#",
+      "totalLabel": "Gepakte Totaal",
+      "itemsInTotalLabel": "Items verpak",
+      "notes": "Kontroleer asseblief die inhoud teen hierdie pakstrokie.",
+      "terms": "Rapporteer vermiste of beskadigde items binne 48 uur na aflewering."
+    },
+    "as": {
+      "documentTitle": "প্যাকিং স্লিপ",
+      "orderNumber": "প্যাকিং স্লিপ#",
+      "date": "প্যাকিং তারিখ",
+      "reference": "অর্ডার রেফারেন্স#",
+      "totalLabel": "প্যাক করা মোট",
+      "itemsInTotalLabel": "আইটেম বস্তাবন্দী",
+      "notes": "এই প্যাকিং স্লিপ বিরুদ্ধে বিষয়বস্তু চেক করুন.",
+      "terms": "প্রসবের 48 ঘন্টার মধ্যে অনুপস্থিত বা ক্ষতিগ্রস্ত আইটেম রিপোর্ট করুন।"
+    },
+    "bm": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "az": {
+      "documentTitle": "QABLAMA SLIP",
+      "orderNumber": "Qablaşdırma vərəqəsi#",
+      "date": "Qablaşdırma tarixi",
+      "reference": "Sifariş Ref#",
+      "totalLabel": "Qablaşdırılmış cəmi",
+      "itemsInTotalLabel": "Əşyalar qablaşdırılıb",
+      "notes": "Zəhmət olmasa məzmunu bu qablaşdırma vərəqəsinə uyğun yoxlayın.",
+      "terms": "Çatdırılmadan sonra 48 saat ərzində çatışmayan və ya zədələnmiş əşyaları bildirin."
+    },
+    "bn": {
+      "documentTitle": "প্যাকিং স্লিপ",
+      "orderNumber": "প্যাকিং স্লিপ#",
+      "date": "প্যাকিং তারিখ",
+      "reference": "অর্ডার রেফারেন্স#",
+      "totalLabel": "প্যাক করা মোট",
+      "itemsInTotalLabel": "আইটেম বস্তাবন্দী",
+      "notes": "এই প্যাকিং স্লিপ বিরুদ্ধে বিষয়বস্তু চেক করুন.",
+      "terms": "প্রসবের 48 ঘন্টার মধ্যে অনুপস্থিত বা ক্ষতিগ্রস্ত আইটেম রিপোর্ট করুন।"
+    },
+    "br": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "ckb": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Pelê pakkirinê#",
+      "date": "Dîroka pakkirinê",
+      "reference": "Siparîş bike Ref#",
+      "totalLabel": "Tevahiya pakkirî",
+      "itemsInTotalLabel": "Tiştên pakkirî",
+      "notes": "Ji kerema xwe naverokê li hember vê pelika pakkirinê kontrol bikin.",
+      "terms": "Di nav 48 demjimêran piştî radestkirinê de tiştên winda an zirarê rapor bikin."
+    },
+    "ce": {
+      "documentTitle": "УПАКОВОЧНАЯ ИНФОРМАЦИЯ",
+      "orderNumber": "Упаковочный лист#",
+      "date": "Дата упаковки",
+      "reference": "Номер заказа",
+      "totalLabel": "Всего упаковано",
+      "itemsInTotalLabel": "Товары упакованы",
+      "notes": "Пожалуйста, проверьте содержимое по этой упаковочной накладной.",
+      "terms": "Сообщите о недостающих или поврежденных товарах в течение 48 часов с момента доставки."
+    },
+    "bo": {
+      "documentTitle": "装箱单",
+      "orderNumber": "装箱单#",
+      "date": "装箱日期",
+      "reference": "订单编号#",
+      "totalLabel": "包装总数",
+      "itemsInTotalLabel": "物品已包装好",
+      "notes": "请对照装箱单检查内容。",
+      "terms": "在交货后 48 小时内报告物品丢失或损坏。"
+    },
+    "dz": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Packing Slip#",
+      "date": "Packing Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Packed Total",
+      "itemsInTotalLabel": "Items packed",
+      "notes": "Please check contents against this packing slip.",
+      "terms": "Report missing or damaged items within 48 hours of delivery."
+    },
+    "ee": {
+      "documentTitle": "PACKING SLIP ƑE NUÐEÐEŊUTI",
+      "orderNumber": "Packing Slip# .",
+      "date": "Ɣletiŋkeke si dzi Woatsɔ Nuwo Bablae",
+      "reference": "Nudɔdɔ Ref# .",
+      "totalLabel": "Packed Total",
+      "itemsInTotalLabel": "Nusiwo wobla ɖe agba me",
+      "notes": "Taflatse lé ŋku ɖe emenyawo ŋu ne wotsɔe sɔ kple nubablɛ sia.",
+      "terms": "Gblɔ nusiwo bu alo nusiwo gblẽ le gaƒoƒo 48 me tso esime wotsɔ wo vɛ."
+    },
+    "eo": {
+      "documentTitle": "PAKAJ SLIPO",
+      "orderNumber": "Pakado #",
+      "date": "Dato de Pakado",
+      "reference": "Mendo Ref#",
+      "totalLabel": "Plenplena Totalo",
+      "itemsInTotalLabel": "Eroj pakitaj",
+      "notes": "Bonvolu kontroli la enhavon ĉe ĉi tiu pakaĵrakonto.",
+      "terms": "Raportu mankantajn aŭ difektitajn aĵojn ene de 48 horoj post livero."
+    },
+    "fa": {
+      "documentTitle": "نوار بسته بندی",
+      "orderNumber": "برگه بسته بندی#",
+      "date": "تاریخ بسته بندی",
+      "reference": "شماره شماره سفارش",
+      "totalLabel": "کل بسته بندی شده",
+      "itemsInTotalLabel": "اقلام بسته بندی شده",
+      "notes": "لطفاً محتویات را در برابر این برگه بسته بندی بررسی کنید.",
+      "terms": "موارد مفقود یا آسیب دیده را ظرف 48 ساعت پس از تحویل گزارش دهید."
+    },
+    "ff": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "fy": {
+      "documentTitle": "PAKKE SLIP",
+      "orderNumber": "Pakslip #",
+      "date": "Packing Datum",
+      "reference": "Order Ref #",
+      "totalLabel": "Ynpakt Totaal",
+      "itemsInTotalLabel": "Items ynpakt",
+      "notes": "Kontrolearje asjebleaft ynhâld tsjin dizze pakslút.",
+      "terms": "Meld ûntbrekkende of beskeadige items binnen 48 oeren nei levering."
+    },
+    "fo": {
+      "documentTitle": "PAKKESEDDEL",
+      "orderNumber": "Pakkeseddel#",
+      "date": "Pakkedato",
+      "reference": "Ordre ref. nr.",
+      "totalLabel": "Pakket i alt",
+      "itemsInTotalLabel": "Varer pakket",
+      "notes": "Tjek venligst indholdet mod denne følgeseddel.",
+      "terms": "Rapportér manglende eller beskadigede varer inden for 48 timer efter levering."
+    },
+    "fil": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Packing Slip#",
+      "date": "Petsa ng Pag-iimpake",
+      "reference": "Order Ref#",
+      "totalLabel": "Naka-pack na Kabuuan",
+      "itemsInTotalLabel": "Naka-pack na mga item",
+      "notes": "Pakisuri ang mga nilalaman laban sa packing slip na ito.",
+      "terms": "Iulat ang nawawala o nasira na mga item sa loob ng 48 oras ng paghahatid."
+    },
+    "gu": {
+      "documentTitle": "પૅકિંગ સ્લિપ",
+      "orderNumber": "પેકિંગ સ્લિપ#",
+      "date": "પેકિંગ તારીખ",
+      "reference": "ઓર્ડર રેફ#",
+      "totalLabel": "પેક્ડ ટોટલ",
+      "itemsInTotalLabel": "વસ્તુઓ પેક",
+      "notes": "કૃપા કરીને આ પેકિંગ સ્લિપ સામે સામગ્રીઓ તપાસો.",
+      "terms": "ડિલિવરીના 48 કલાકની અંદર ગુમ થયેલ અથવા ક્ષતિગ્રસ્ત વસ્તુઓની જાણ કરો."
+    },
+    "gd": {
+      "documentTitle": "SLABHRAIDH PHACAIDH",
+      "orderNumber": "Slip pacaidh #",
+      "date": "Ceann-latha pacaidh",
+      "reference": "Òrdugh Ref#",
+      "totalLabel": "Iomlan pacaichte",
+      "itemsInTotalLabel": "Nithean pacaichte",
+      "notes": "Feuch an toir thu sùil air susbaint an aghaidh a’ bhileag pacaidh seo.",
+      "terms": "Dèan aithris air nithean a tha a dhìth no air am milleadh taobh a-staigh 48 uairean bho lìbhrigeadh."
+    },
+    "gv": {
+      "documentTitle": "SLIP PACÁISTIÚ",
+      "orderNumber": "Duillín Pacála#",
+      "date": "Dáta Pacáil",
+      "reference": "Ord Uimh.",
+      "totalLabel": "Iomlán Pacáilte",
+      "itemsInTotalLabel": "Míreanna pacáilte",
+      "notes": "Seiceáil an t-ábhar le do thoil in aghaidh an duillín pacála seo.",
+      "terms": "Déan tuairisc ar earraí atá ar iarraidh nó millte laistigh de 48 uair an chloig tar éis iad a sheachadadh."
+    },
+    "hy": {
+      "documentTitle": "ՓԱԹԵԹՈՒՄ ՍՂԻՊ",
+      "orderNumber": "Փաթեթավորման կտրոն#",
+      "date": "Փաթեթավորման ամսաթիվ",
+      "reference": "Պատվերի թիվ",
+      "totalLabel": "Փաթեթավորված Ընդամենը",
+      "itemsInTotalLabel": "Ապրանքներ փաթեթավորված",
+      "notes": "Խնդրում ենք ստուգել բովանդակությունը այս փաթեթավորման կտրոնում:",
+      "terms": "Հաղորդեք անհայտ կորած կամ վնասված իրերի մասին առաքումից հետո 48 ժամվա ընթացքում:"
+    },
+    "ha": {
+      "documentTitle": "CUTAR AZUMI",
+      "orderNumber": "Shiryawa Zamewa#",
+      "date": "Kwanan Shirya",
+      "reference": "oda Ref#",
+      "totalLabel": "Cikakkun Jumla",
+      "itemsInTotalLabel": "An cika abubuwa",
+      "notes": "Da fatan za a bincika abubuwan da ke ciki a kan wannan takardar tattarawa.",
+      "terms": "Bayar da bacewar abubuwan da suka lalace ko suka lalace cikin awanni 48 da isarwa."
+    },
+    "ia": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Packing Slip#",
+      "date": "Packing Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Packed Total",
+      "itemsInTotalLabel": "Items packed",
+      "notes": "Please check contents against this packing slip.",
+      "terms": "Report missing or damaged items within 48 hours of delivery."
+    },
+    "ig": {
+      "documentTitle": "MGBE MGBE",
+      "orderNumber": "Nkwakọ ngwaahịa #",
+      "date": "Ụbọchị nkwakọ ngwaahịa",
+      "reference": "Nye iwu Ref#",
+      "totalLabel": "Mkpokọta ngwugwu",
+      "itemsInTotalLabel": "Akwajuru ihe",
+      "notes": "Biko lelee ọdịnaya megide mpempe akwụkwọ nkwakọ ngwaahịa a.",
+      "terms": "Kpesa ihe efu ma ọ bụ mebiri emebi n'ime awa 48 nke nnyefe."
+    },
+    "ii": {
+      "documentTitle": "装箱单",
+      "orderNumber": "装箱单#",
+      "date": "装箱日期",
+      "reference": "订单编号#",
+      "totalLabel": "包装总数",
+      "itemsInTotalLabel": "物品已包装好",
+      "notes": "请对照装箱单检查内容。",
+      "terms": "在交货后 48 小时内报告物品丢失或损坏。"
+    },
+    "ka": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "შესაფუთი ფურცელი#",
+      "date": "შეფუთვის თარიღი",
+      "reference": "შეკვეთის ნომერი",
+      "totalLabel": "შეფუთული სულ",
+      "itemsInTotalLabel": "ნივთები შეფუთულია",
+      "notes": "გთხოვთ, შეამოწმოთ შიგთავსი ამ შეფუთვის ფურცელთან.",
+      "terms": "შეატყობინეთ დაკარგული ან დაზიანებული ნივთების მიწოდებიდან 48 საათის განმავლობაში."
+    },
+    "jv": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Slip packing#",
+      "date": "Tanggal Packing",
+      "reference": "Order Ref#",
+      "totalLabel": "Paket Total",
+      "itemsInTotalLabel": "Item dikempalken",
+      "notes": "Mangga priksa isi ing slip packing iki.",
+      "terms": "Laporan barang sing ilang utawa rusak sajrone 48 jam sawise dikirim."
+    },
+    "ki": {
+      "documentTitle": "KITABU CHA KUFUNGA",
+      "orderNumber": "Kipande cha Kupakia#",
+      "date": "Tarehe ya Kufunga",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla Iliyofungwa",
+      "itemsInTotalLabel": "Vipengee vimefungwa",
+      "notes": "Tafadhali angalia yaliyomo kwenye karatasi hii ya kufunga.",
+      "terms": "Ripoti vitu vilivyopotea au kuharibiwa ndani ya saa 48 baada ya kujifungua."
+    },
+    "kk": {
+      "documentTitle": "ОРАМАЛУ СЛИП",
+      "orderNumber": "Қаптама №",
+      "date": "Қаптама күні",
+      "reference": "Тапсырыс №",
+      "totalLabel": "Жинақталған жалпы",
+      "itemsInTotalLabel": "Заттар оралған",
+      "notes": "Мазмұнды осы орау қағазымен салыстырыңыз.",
+      "terms": "Жеткізуден кейін 48 сағат ішінде жетіспейтін немесе зақымдалған заттарды хабарлаңыз."
+    },
+    "kl": {
+      "documentTitle": "PAKKESEDDEL",
+      "orderNumber": "Pakkeseddel#",
+      "date": "Pakkedato",
+      "reference": "Ordre ref. nr.",
+      "totalLabel": "Pakket i alt",
+      "itemsInTotalLabel": "Varer pakket",
+      "notes": "Tjek venligst indholdet mod denne følgeseddel.",
+      "terms": "Rapportér manglende eller beskadigede varer inden for 48 timer efter levering."
+    },
+    "kn": {
+      "documentTitle": "ಪ್ಯಾಕಿಂಗ್ ಸ್ಲಿಪ್",
+      "orderNumber": "ಪ್ಯಾಕಿಂಗ್ ಸ್ಲಿಪ್#",
+      "date": "ಪ್ಯಾಕಿಂಗ್ ದಿನಾಂಕ",
+      "reference": "ಆರ್ಡರ್ Ref#",
+      "totalLabel": "ಪ್ಯಾಕ್ ಮಾಡಿದ ಒಟ್ಟು",
+      "itemsInTotalLabel": "ಐಟಂಗಳನ್ನು ಪ್ಯಾಕ್ ಮಾಡಲಾಗಿದೆ",
+      "notes": "ದಯವಿಟ್ಟು ಈ ಪ್ಯಾಕಿಂಗ್ ಸ್ಲಿಪ್ ವಿರುದ್ಧ ವಿಷಯಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.",
+      "terms": "ವಿತರಣೆಯ 48 ಗಂಟೆಗಳ ಒಳಗೆ ಕಾಣೆಯಾದ ಅಥವಾ ಹಾನಿಗೊಳಗಾದ ವಸ್ತುಗಳನ್ನು ವರದಿ ಮಾಡಿ."
+    },
+    "km": {
+      "documentTitle": "ការវេចខ្ចប់",
+      "orderNumber": "ប័ណ្ណវេចខ្ចប់#",
+      "date": "កាលបរិច្ឆេទវេចខ្ចប់",
+      "reference": "បញ្ជាទិញ Ref#",
+      "totalLabel": "កញ្ចប់សរុប",
+      "itemsInTotalLabel": "ទំនិញខ្ចប់",
+      "notes": "សូមពិនិត្យមើលខ្លឹមសារដែលប្រឆាំងនឹងសន្លឹកវេចខ្ចប់នេះ។",
+      "terms": "រាយការណ៍អំពីវត្ថុដែលបាត់ ឬខូចខាតក្នុងរយៈពេល 48 ម៉ោងបន្ទាប់ពីការចែកចាយ។"
+    },
+    "ku": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Pelê pakkirinê#",
+      "date": "Dîroka pakkirinê",
+      "reference": "Siparîş bike Ref#",
+      "totalLabel": "Tevahiya pakkirî",
+      "itemsInTotalLabel": "Tiştên pakkirî",
+      "notes": "Ji kerema xwe naverokê li hember vê pelika pakkirinê kontrol bikin.",
+      "terms": "Di nav 48 demjimêran piştî radestkirinê de tiştên winda an zirarê rapor bikin."
+    },
+    "ks": {
+      "documentTitle": "پیکنگ پرچی",
+      "orderNumber": "پیکنگ سلپ#",
+      "date": "پیکنگ کی تاریخ",
+      "reference": "آرڈر ریفری#",
+      "totalLabel": "پیکڈ ٹوٹل",
+      "itemsInTotalLabel": "سامان پیک",
+      "notes": "براہ کرم اس پیکنگ سلپ کے خلاف مواد چیک کریں۔",
+      "terms": "ڈیلیوری کے 48 گھنٹوں کے اندر گمشدہ یا خراب اشیاء کی اطلاع دیں۔"
+    },
+    "kw": {
+      "documentTitle": "SLIP PACIO",
+      "orderNumber": "Slip Pacio#",
+      "date": "Dyddiad Pacio",
+      "reference": "Cyfeirnod Archeb #",
+      "totalLabel": "Cyfanswm llawn",
+      "itemsInTotalLabel": "Eitemau wedi'u pacio",
+      "notes": "Gwiriwch y cynnwys yn erbyn y slip pacio hwn.",
+      "terms": "Rhoi gwybod am eitemau sydd ar goll neu wedi'u difrodi o fewn 48 awr i'w danfon."
+    },
+    "lg": {
+      "documentTitle": "KITABU CHA KUFUNGA",
+      "orderNumber": "Kipande cha Kupakia#",
+      "date": "Tarehe ya Kufunga",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla Iliyofungwa",
+      "itemsInTotalLabel": "Vipengee vimefungwa",
+      "notes": "Tafadhali angalia yaliyomo kwenye karatasi hii ya kufunga.",
+      "terms": "Ripoti vitu vilivyopotea au kuharibiwa ndani ya saa 48 baada ya kujifungua."
+    },
+    "ln": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "ky": {
+      "documentTitle": "ПАКТОО СЛИП",
+      "orderNumber": "Таңгактоо баракчасы#",
+      "date": "Таңгактоо күнү",
+      "reference": "Буйрутма №",
+      "totalLabel": "Топтолгон жалпы",
+      "itemsInTotalLabel": "Буюмдар таңгакталган",
+      "notes": "Сураныч, мазмунду ушул таңгактоочу слип менен текшериңиз.",
+      "terms": "Жеткирилгенден кийин 48 сааттын ичинде жок же бузулган буюмдарды кабарлаңыз."
+    },
+    "lu": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "lo": {
+      "documentTitle": "ໃບເກັບເງິນ",
+      "orderNumber": "ໃບເກັບເງິນ#",
+      "date": "ວັນທີບັນຈຸ",
+      "reference": "ຄໍາ​ສັ່ງ Ref#",
+      "totalLabel": "ບັນຈຸທັງໝົດ",
+      "itemsInTotalLabel": "ລາຍການບັນຈຸ",
+      "notes": "ກະລຸນາກວດເບິ່ງເນື້ອໃນຕໍ່ກັບໃບບັນຈຸນີ້.",
+      "terms": "ແຈ້ງລາຍການທີ່ຂາດຫາຍໄປ ຫຼືເສຍຫາຍພາຍໃນ 48 ຊົ່ວໂມງຫຼັງການຈັດສົ່ງ."
+    },
+    "mg": {
+      "documentTitle": "FOTOANA FOTOANA",
+      "orderNumber": "#\nFonosana Slip#",
+      "date": "#\nDaty fonosana",
+      "reference": "#\nKaomandy Ref#",
+      "totalLabel": "#\nFeno feno",
+      "itemsInTotalLabel": "#\nFeno entana",
+      "notes": "#\nAzafady, jereo ny atiny amin'ity taratasy famonosana ity.",
+      "terms": "#\nMitatitra entana tsy hita na simba ao anatin'ny 48 ora aorian'ny fanaterana."
+    },
+    "ml": {
+      "documentTitle": "പാക്കിംഗ് സ്ലിപ്പ്",
+      "orderNumber": "പാക്കിംഗ് സ്ലിപ്പ്#",
+      "date": "പാക്കിംഗ് തീയതി",
+      "reference": "ഓർഡർ Ref#",
+      "totalLabel": "പാക്ക് ചെയ്ത ആകെ",
+      "itemsInTotalLabel": "സാധനങ്ങൾ പാക്ക് ചെയ്തു",
+      "notes": "ഈ പാക്കിംഗ് സ്ലിപ്പിലെ ഉള്ളടക്കങ്ങൾ പരിശോധിക്കുക.",
+      "terms": "ഡെലിവറി കഴിഞ്ഞ് 48 മണിക്കൂറിനുള്ളിൽ നഷ്ടപ്പെട്ടതോ കേടായതോ ആയ ഇനങ്ങൾ റിപ്പോർട്ട് ചെയ്യുക."
+    },
+    "mi": {
+      "documentTitle": "PAKITANGA PAKI",
+      "orderNumber": "Puka Puka #",
+      "date": "Te Ra Whakapakari",
+      "reference": "Tono Ref#",
+      "totalLabel": "Tapeke Tapeke",
+      "itemsInTotalLabel": "Kua kapi nga taonga",
+      "notes": "Tena koa tirohia nga mea kei runga i tenei pepa kete.",
+      "terms": "Pupurihia nga taonga kua ngaro, kua pakaru ranei i roto i nga haora 48 o te tuku."
+    },
+    "mn": {
+      "documentTitle": "САВАЛДААНЫ ХУЛГАЙ",
+      "orderNumber": "Савлах хуудас#",
+      "date": "Савлах огноо",
+      "reference": "Захиалгын лавлагаа#",
+      "totalLabel": "Савласан нийт",
+      "itemsInTotalLabel": "Савласан зүйлс",
+      "notes": "Энэхүү савлагааны хуудасны агуулгыг шалгана уу.",
+      "terms": "Хүргэлтээс хойш 48 цагийн дотор дутуу, гэмтсэн барааг мэдээлэх."
+    },
+    "mr": {
+      "documentTitle": "पॅकिंग स्लिप",
+      "orderNumber": "पॅकिंग स्लिप#",
+      "date": "पॅकिंगची तारीख",
+      "reference": "ऑर्डर संदर्भ#",
+      "totalLabel": "पॅक केलेले एकूण",
+      "itemsInTotalLabel": "वस्तू पॅक केल्या",
+      "notes": "कृपया या पॅकिंग स्लिपमधील सामग्री तपासा.",
+      "terms": "डिलिव्हरीच्या 48 तासांच्या आत गहाळ किंवा खराब झालेल्या वस्तूंचा अहवाल द्या."
+    },
+    "my": {
+      "documentTitle": "ထုပ်ပိုးစလစ်",
+      "orderNumber": "ထုပ်ပိုးလွှာ#",
+      "date": "ထုပ်ပိုးသည့်နေ့စွဲ",
+      "reference": "မှာယူမှု Ref#",
+      "totalLabel": "စုစုပေါင်းထုပ်ပိုးထားသည်။",
+      "itemsInTotalLabel": "ပစ္စည်းများထုပ်ပိုးထားသည်။",
+      "notes": "ဤထုပ်ပိုးမှုစလစ်နှင့် ပတ်သက်သည့် အကြောင်းအရာများကို စစ်ဆေးပါ။",
+      "terms": "ပေးပို့ပြီး 48 နာရီအတွင်း ပျောက်ဆုံးနေသော သို့မဟုတ် ပျက်စီးနေသောပစ္စည်းများကို သတင်းပို့ပါ။"
+    },
+    "nb": {
+      "documentTitle": "PAKKSEDDEL",
+      "orderNumber": "Pakkseddel#",
+      "date": "Pakkedato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Pakket totalt",
+      "itemsInTotalLabel": "Varer pakket",
+      "notes": "Vennligst sjekk innholdet mot denne pakkseddelen.",
+      "terms": "Rapporter manglende eller skadede varer innen 48 timer etter levering."
+    },
+    "nd": {
+      "documentTitle": "ISILIphu sokupakisha",
+      "orderNumber": "Isiliphu sokupakisha#",
+      "date": "Usuku Lokupakisha",
+      "reference": "I-oda Ref#",
+      "totalLabel": "Ingqikithi Epakishiwe",
+      "itemsInTotalLabel": "Izinto zipakishiwe",
+      "notes": "Sicela uhlole okuqukethwe kulesi siliphu sokupakisha.",
+      "terms": "Bika izinto ezingekho noma ezilimele phakathi namahora angu-48 okulethwa."
+    },
+    "ne": {
+      "documentTitle": "प्याकिङ स्लिप",
+      "orderNumber": "प्याकिङ स्लिप#",
+      "date": "प्याकिङ मिति",
+      "reference": "अर्डर रेफरी #",
+      "totalLabel": "प्याक गरिएको कुल",
+      "itemsInTotalLabel": "सामानहरू प्याक गरियो",
+      "notes": "कृपया यस प्याकिङ स्लिप विरुद्ध सामग्रीहरू जाँच गर्नुहोस्।",
+      "terms": "हराएको वा क्षतिग्रस्त वस्तुहरू डेलिभरीको 48 घण्टा भित्र रिपोर्ट गर्नुहोस्।"
+    },
+    "nn": {
+      "documentTitle": "PAKKSEDDEL",
+      "orderNumber": "Pakkseddel#",
+      "date": "Pakkedato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Pakket totalt",
+      "itemsInTotalLabel": "Varer pakket",
+      "notes": "Vennligst sjekk innholdet mot denne pakkseddelen.",
+      "terms": "Rapporter manglende eller skadede varer innen 48 timer etter levering."
+    },
+    "os": {
+      "documentTitle": "УПАКОВОЧНАЯ ИНФОРМАЦИЯ",
+      "orderNumber": "Упаковочный лист#",
+      "date": "Дата упаковки",
+      "reference": "Номер заказа",
+      "totalLabel": "Всего упаковано",
+      "itemsInTotalLabel": "Товары упакованы",
+      "notes": "Пожалуйста, проверьте содержимое по этой упаковочной накладной.",
+      "terms": "Сообщите о недостающих или поврежденных товарах в течение 48 часов с момента доставки."
+    },
+    "pa": {
+      "documentTitle": "ਪੈਕਿੰਗ ਸਲਿੱਪ",
+      "orderNumber": "ਪੈਕਿੰਗ ਸਲਿੱਪ#",
+      "date": "ਪੈਕਿੰਗ ਦੀ ਮਿਤੀ",
+      "reference": "ਆਰਡਰ ਰੈਫ#",
+      "totalLabel": "ਪੈਕ ਕੀਤਾ ਕੁੱਲ",
+      "itemsInTotalLabel": "ਆਈਟਮਾਂ ਪੈਕ ਕੀਤੀਆਂ",
+      "notes": "ਕਿਰਪਾ ਕਰਕੇ ਇਸ ਪੈਕਿੰਗ ਸਲਿੱਪ ਦੇ ਵਿਰੁੱਧ ਸਮੱਗਰੀ ਦੀ ਜਾਂਚ ਕਰੋ।",
+      "terms": "ਸਪੁਰਦਗੀ ਦੇ 48 ਘੰਟਿਆਂ ਦੇ ਅੰਦਰ ਗੁੰਮ ਜਾਂ ਖਰਾਬ ਆਈਟਮਾਂ ਦੀ ਰਿਪੋਰਟ ਕਰੋ।"
+    },
+    "om": {
+      "documentTitle": "PACKING SLIP jedhamu",
+      "orderNumber": "Slip Paakkii# .",
+      "date": "Guyyaa Kuusaa",
+      "reference": "Ajaja Ref# .",
+      "totalLabel": "Waliigala Packed",
+      "itemsInTotalLabel": "Meeshaaleen kuufaman",
+      "notes": "Maaloo qabiyyee isaa waraqaa paakkii kanaan wal bira qabamee ilaalaa.",
+      "terms": "Meeshaaleen badan ykn miidhaman erga geejjibsiifamanii sa’aatii 48 keessatti gabaasuu."
+    },
+    "ps": {
+      "documentTitle": "د بسته بندۍ سلیپ",
+      "orderNumber": "بسته بندي سلیپ#",
+      "date": "د بسته بندي نیټه",
+      "reference": "د امر حواله #",
+      "totalLabel": "ټول بسته شوي",
+      "itemsInTotalLabel": "بسته بندي شوي توکي",
+      "notes": "مهرباني وکړئ د دې بسته بندۍ سلیپ پروړاندې مینځپانګې چیک کړئ.",
+      "terms": "د ورک شوي یا خراب شوي توکي د سپارلو په 48 ساعتونو کې راپور کړئ."
+    },
+    "or": {
+      "documentTitle": "ପ୍ୟାକିଂ ସ୍ଲିପ୍",
+      "orderNumber": "ସ୍ଲିପ୍ ପ୍ୟାକ୍ କରିବା #",
+      "date": "ପ୍ୟାକ୍ ତାରିଖ |",
+      "reference": "ଅର୍ଡର ରେଫ୍ #",
+      "totalLabel": "ସମୁଦାୟ ପ୍ୟାକ୍ ହୋଇଛି |",
+      "itemsInTotalLabel": "ଆଇଟମ୍ ପ୍ୟାକ୍ ହୋଇଛି |",
+      "notes": "ଦୟାକରି ଏହି ପ୍ୟାକିଂ ସ୍ଲିପ୍ ବିରୁଦ୍ଧରେ ବିଷୟବସ୍ତୁ ଯାଞ୍ଚ କରନ୍ତୁ |",
+      "terms": "ବିତରଣର 48 ଘଣ୍ଟା ମଧ୍ୟରେ ନିଖୋଜ କିମ୍ବା ନଷ୍ଟ ହୋଇଥିବା ଜିନିଷଗୁଡିକ ରିପୋର୍ଟ କରନ୍ତୁ |"
+    },
+    "qu": {
+      "documentTitle": "BOLETÍN DE EMBALAJE",
+      "orderNumber": "Albarán #",
+      "date": "Fecha de embalaje",
+      "reference": "Número de referencia del pedido",
+      "totalLabel": "Total empaquetado",
+      "itemsInTotalLabel": "Artículos embalados",
+      "notes": "Por favor verifique el contenido con este albarán.",
+      "terms": "Informe los artículos faltantes o dañados dentro de las 48 horas posteriores a la entrega."
+    },
+    "rm": {
+      "documentTitle": "Packzettel",
+      "orderNumber": "Packzettel#",
+      "date": "Verpackungsdatum",
+      "reference": "Bestellnr.",
+      "totalLabel": "Insgesamt verpackt",
+      "itemsInTotalLabel": "Artikel verpackt",
+      "notes": "Bitte überprüfen Sie den Inhalt anhand dieses Packzettels.",
+      "terms": "Melden Sie fehlende oder beschädigte Artikel innerhalb von 48 Stunden nach Lieferung."
+    },
+    "sa": {
+      "documentTitle": "पैकिंग पर्ची",
+      "orderNumber": "पैकिंग पर्ची#",
+      "date": "पैकिंग तिथि",
+      "reference": "आदेश संदर्भ#",
+      "totalLabel": "कुल पैक किया गया",
+      "itemsInTotalLabel": "सामान पैक किया गया",
+      "notes": "कृपया इस पैकिंग स्लिप के सामने सामग्री की जांच करें।",
+      "terms": "डिलीवरी के 48 घंटे के भीतर गुम या क्षतिग्रस्त वस्तुओं की रिपोर्ट करें।"
+    },
+    "rn": {
+      "documentTitle": "GUKURIKIRA",
+      "orderNumber": "Gupakira Urupapuro #",
+      "date": "Itariki yo gupakira",
+      "reference": "Tegeka Ref #",
+      "totalLabel": "Yuzuye",
+      "itemsInTotalLabel": "Ibintu bipakiye",
+      "notes": "Nyamuneka reba ibiri kuri iyi mpapuro.",
+      "terms": "Menyesha ibintu byabuze cyangwa byangiritse mugihe cyamasaha 48 yo kubyara."
+    },
+    "rw": {
+      "documentTitle": "GUKURIKIRA",
+      "orderNumber": "Gupakira Urupapuro #",
+      "date": "Itariki yo gupakira",
+      "reference": "Tegeka Ref #",
+      "totalLabel": "Yuzuye",
+      "itemsInTotalLabel": "Ibintu bipakiye",
+      "notes": "Nyamuneka reba ibiri kuri iyi mpapuro.",
+      "terms": "Menyesha ibintu byabuze cyangwa byangiritse mugihe cyamasaha 48 yo kubyara."
+    },
+    "sc": {
+      "documentTitle": "DIstinta di imballaggio",
+      "orderNumber": "Documento di accompagnamento#",
+      "date": "Data di imballaggio",
+      "reference": "N. rif. ordine",
+      "totalLabel": "Totale imballato",
+      "itemsInTotalLabel": "Articoli imballati",
+      "notes": "Si prega di verificare il contenuto confrontandolo con questo documento di trasporto.",
+      "terms": "Segnalare articoli mancanti o danneggiati entro 48 ore dalla consegna."
+    },
+    "se": {
+      "documentTitle": "PAKKSEDDEL",
+      "orderNumber": "Pakkseddel#",
+      "date": "Pakkedato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Pakket totalt",
+      "itemsInTotalLabel": "Varer pakket",
+      "notes": "Vennligst sjekk innholdet mot denne pakkseddelen.",
+      "terms": "Rapporter manglende eller skadede varer innen 48 timer etter levering."
+    },
+    "sg": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "sd": {
+      "documentTitle": "پيڪنگ سلپ",
+      "orderNumber": "پيڪنگ سلپ #",
+      "date": "پيڪنگ جي تاريخ",
+      "reference": "آرڊر جو حوالو #",
+      "totalLabel": "ڀريل کل",
+      "itemsInTotalLabel": "سامان ڀريل",
+      "notes": "مھرباني ڪري ھن پيڪنگ سلپ جي خلاف مواد چيڪ ڪريو.",
+      "terms": "گم ٿيل يا خراب ٿيل شيون پهچائڻ جي 48 ڪلاڪن اندر رپورٽ ڪريو."
+    },
+    "si": {
+      "documentTitle": "ඇසුරුම් ස්ලිප්",
+      "orderNumber": "ඇසුරුම් ස්ලිප්#",
+      "date": "ඇසුරුම් දිනය",
+      "reference": "ref# ඇණවුම් කරන්න",
+      "totalLabel": "ඇසුරුම් කළ එකතුව",
+      "itemsInTotalLabel": "භාණ්ඩ ඇසුරුම් කර ඇත",
+      "notes": "කරුණාකර මෙම ඇසුරුම් පත්‍රයට එරෙහිව අන්තර්ගතය පරීක්ෂා කරන්න.",
+      "terms": "බෙදාහැරීමෙන් පැය 48 ක් ඇතුළත නැතිවූ හෝ හානි වූ අයිතම වාර්තා කරන්න."
+    },
+    "sn": {
+      "documentTitle": "PAKISHA SLIP",
+      "orderNumber": "Packing Slip#",
+      "date": "Packing Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Packed Total",
+      "itemsInTotalLabel": "Zvinhu zvakarongedzwa",
+      "notes": "Ndokumbira utarise zvirimo uchipikisa packing slip.",
+      "terms": "Taura zvinhu zvakashaikwa kana kukuvara mukati meawa makumi mana nemasere ekuburitswa."
+    },
+    "so": {
+      "documentTitle": "XIDHIIDHKA SLIP",
+      "orderNumber": "Xirmooyinka Xirmada#",
+      "date": "Taariikhda Xidhmada",
+      "reference": "Dalbo Tixraac #",
+      "totalLabel": "Baakad wadarta",
+      "itemsInTotalLabel": "Alaabta la soo buuxiyay",
+      "notes": "Fadlan ka hubi waxa ku jira warqaddan xirxiran.",
+      "terms": "Ka warbixi alaabta maqan ama dhaawacan 48 saacadood gudahooda markaad keento"
+    },
+    "sw": {
+      "documentTitle": "KITABU CHA KUFUNGA",
+      "orderNumber": "Kipande cha Kupakia#",
+      "date": "Tarehe ya Kufunga",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla Iliyofungwa",
+      "itemsInTotalLabel": "Vipengee vimefungwa",
+      "notes": "Tafadhali angalia yaliyomo kwenye karatasi hii ya kufunga.",
+      "terms": "Ripoti vitu vilivyopotea au kuharibiwa ndani ya saa 48 baada ya kujifungua."
+    },
+    "su": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Bungkusan Slip#",
+      "date": "Tanggal bungkusan",
+      "reference": "Pemesanan Ref#",
+      "totalLabel": "Dipak Total",
+      "itemsInTotalLabel": "Barang dipak",
+      "notes": "Punten parios eusi kana slip bungkusan ieu.",
+      "terms": "Laporkeun barang anu leungit atanapi ruksak dina 48 jam saatos pangiriman."
+    },
+    "te": {
+      "documentTitle": "ప్యాకింగ్ స్లిప్",
+      "orderNumber": "ప్యాకింగ్ స్లిప్#",
+      "date": "ప్యాకింగ్ తేదీ",
+      "reference": "ఆర్డర్ Ref#",
+      "totalLabel": "ప్యాక్ చేసిన మొత్తం",
+      "itemsInTotalLabel": "వస్తువులు ప్యాక్ చేయబడ్డాయి",
+      "notes": "దయచేసి ఈ ప్యాకింగ్ స్లిప్‌కు వ్యతిరేకంగా కంటెంట్‌లను తనిఖీ చేయండి.",
+      "terms": "డెలివరీ అయిన 48 గంటలలోపు తప్పిపోయిన లేదా దెబ్బతిన్న వస్తువులను నివేదించండి."
+    },
+    "ti": {
+      "documentTitle": "የማሸጊያ ስሊፕ",
+      "orderNumber": "የማሸጊያ ስሊፕ#",
+      "date": "የማሸጊያ ቀን",
+      "reference": "Ref# ይዘዙ",
+      "totalLabel": "የታሸገ ጠቅላላ",
+      "itemsInTotalLabel": "የታሸጉ ዕቃዎች",
+      "notes": "እባክዎን ይዘቱን ከዚህ የማሸጊያ ወረቀት ጋር ያረጋግጡ።",
+      "terms": "በ48 ሰአታት ውስጥ የጎደሉትን ወይም የተበላሹ ነገሮችን ሪፖርት ያድርጉ።"
+    },
+    "tg": {
+      "documentTitle": "СЛИПИ ПАНЧТАБИ",
+      "orderNumber": "Варақаи бастабандӣ #",
+      "date": "Санаи бастабандӣ",
+      "reference": "Ref # фармоиш",
+      "totalLabel": "Маҷмӯи басташуда",
+      "itemsInTotalLabel": "Маҳсулот басташуда",
+      "notes": "Лутфан мундариҷаро бо ин варақаи бастабандӣ тафтиш кунед.",
+      "terms": "Дар давоми 48 соати расонидани ашёи гумшуда ё вайроншуда гузориш диҳед."
+    },
+    "tk": {
+      "documentTitle": "AMBALAJ FİŞİ",
+      "orderNumber": "Ambalaj Fişi#",
+      "date": "Paketleme Tarihi",
+      "reference": "Sipariş Referans Numarası",
+      "totalLabel": "Paketlenmiş Toplam",
+      "itemsInTotalLabel": "Paketlenmiş ürünler",
+      "notes": "Lütfen içeriğini bu sevk irsaliyesine göre kontrol edin.",
+      "terms": "Eksik veya hasarlı ürünleri teslimattan sonraki 48 saat içinde bildirin."
+    },
+    "to": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "Packing Slip#",
+      "date": "Packing Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Packed Total",
+      "itemsInTotalLabel": "Items packed",
+      "notes": "Please check contents against this packing slip.",
+      "terms": "Report missing or damaged items within 48 hours of delivery."
+    },
+    "tt": {
+      "documentTitle": "УПАКОВОЧНАЯ ИНФОРМАЦИЯ",
+      "orderNumber": "Упаковочный лист#",
+      "date": "Дата упаковки",
+      "reference": "Номер заказа",
+      "totalLabel": "Всего упаковано",
+      "itemsInTotalLabel": "Товары упакованы",
+      "notes": "Пожалуйста, проверьте содержимое по этой упаковочной накладной.",
+      "terms": "Сообщите о недостающих или поврежденных товарах в течение 48 часов с момента доставки."
+    },
+    "ur": {
+      "documentTitle": "پیکنگ پرچی",
+      "orderNumber": "پیکنگ سلپ#",
+      "date": "پیکنگ کی تاریخ",
+      "reference": "آرڈر ریفری#",
+      "totalLabel": "پیکڈ ٹوٹل",
+      "itemsInTotalLabel": "سامان پیک",
+      "notes": "براہ کرم اس پیکنگ سلپ کے خلاف مواد چیک کریں۔",
+      "terms": "ڈیلیوری کے 48 گھنٹوں کے اندر گمشدہ یا خراب اشیاء کی اطلاع دیں۔"
+    },
+    "wo": {
+      "documentTitle": "BORDEREAU D'EMBALLAGE",
+      "orderNumber": "Bordereau d'expédition#",
+      "date": "Date d'emballage",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Total emballé",
+      "itemsInTotalLabel": "Articles emballés",
+      "notes": "Veuillez vérifier le contenu par rapport à ce bordereau d'expédition.",
+      "terms": "Signalez les articles manquants ou endommagés dans les 48 heures suivant la livraison."
+    },
+    "uz": {
+      "documentTitle": "QO'DLASH SLIP",
+      "orderNumber": "Qadoqlash varaqasi#",
+      "date": "Qadoqlash sanasi",
+      "reference": "Buyurtma Ref#",
+      "totalLabel": "Jami qadoqlangan",
+      "itemsInTotalLabel": "Mahsulotlar qadoqlangan",
+      "notes": "Iltimos, ushbu qadoqlash qog'ozi tarkibini tekshiring.",
+      "terms": "Yetkazib berilgandan keyin 48 soat ichida etishmayotgan yoki shikastlangan narsalarni xabar qiling."
+    },
+    "ug": {
+      "documentTitle": "PACKING SLIP",
+      "orderNumber": "ئوراپ قاچىلاش #",
+      "date": "ئوراپ قاچىلاش ۋاقتى",
+      "reference": "زاكاز Ref #",
+      "totalLabel": "ئوراپ قاچىلانغان ئومۇمىي",
+      "itemsInTotalLabel": "تۈرلەر قاچىلانغان",
+      "notes": "بۇ ئورالما تالونىغا قارشى مەزمۇنلارنى تەكشۈرۈپ بېقىڭ.",
+      "terms": "يەتكۈزۈلگەندىن كېيىنكى 48 سائەت ئىچىدە يوقاپ كەتكەن ياكى بۇزۇلغان بۇيۇملارنى دوكلات قىلىڭ."
+    },
+    "xh": {
+      "documentTitle": "ISILIphu sokuPkisha",
+      "orderNumber": "Ukupakisha isiliphu#",
+      "date": "Ukupakisha Umhla",
+      "reference": "I-odolo yeRef#",
+      "totalLabel": "Ipakishwe Iyonke",
+      "itemsInTotalLabel": "Izinto zipakishwe",
+      "notes": "Nceda ujonge imixholo ngokuchasene nesiliphu sokupakisha.",
+      "terms": "Xela izinto ezilahlekileyo okanye ezonakalisiweyo kwiiyure ezingama-48 zokuhanjiswa."
+    },
+    "yi": {
+      "documentTitle": "פּאַקינג צעטל",
+      "orderNumber": "פּאַקינג צעטל #",
+      "date": "פּאַקינג טאָג",
+      "reference": "סדר רעפערס #",
+      "totalLabel": "פּאַקט גאַנץ",
+      "itemsInTotalLabel": "זאכן פּאַקט",
+      "notes": "ביטע טשעק אינהאַלט קעגן דעם פּאַקינג צעטל.",
+      "terms": "באריכט פעלנדיק אָדער דאַמידזשד זאכן ין 48 שעה פון עקספּרעס."
+    },
+    "yo": {
+      "documentTitle": "Iṣakojọpọ isokuso",
+      "orderNumber": "Isokuso Iṣakojọpọ#",
+      "date": "Ọjọ Iṣakojọpọ",
+      "reference": "Paṣẹ Ref#",
+      "totalLabel": "Aba ti Lapapọ",
+      "itemsInTotalLabel": "Awọn nkan ti kojọpọ",
+      "notes": "Jọwọ ṣayẹwo awọn akoonu lodi si isokuso iṣakojọpọ yii.",
+      "terms": "Jabọ sonu tabi awọn ohun ti o bajẹ laarin awọn wakati 48 ti ifijiṣẹ."
+    },
+    "zu": {
+      "documentTitle": "ISILIphu sokupakisha",
+      "orderNumber": "Isiliphu sokupakisha#",
+      "date": "Usuku Lokupakisha",
+      "reference": "I-oda Ref#",
+      "totalLabel": "Ingqikithi Epakishiwe",
+      "itemsInTotalLabel": "Izinto zipakishiwe",
+      "notes": "Sicela uhlole okuqukethwe kulesi siliphu sokupakisha.",
+      "terms": "Bika izinto ezingekho noma ezilimele phakathi namahora angu-48 okulethwa."
+    }
+  },
+  "draft": {
+    "ak": {
+      "documentTitle": "NKYERƐKYERƐMU",
+      "orderNumber": "Nsɛm a Wɔahyehyɛ# .",
+      "date": "Da a Wɔde Yɛ Draft",
+      "reference": "Ref# .",
+      "totalLabel": "Ne nyinaa",
+      "itemsInTotalLabel": "Nneɛma a Wɔka Kyerɛ",
+      "notes": "Eyi yɛ krataa a wɔayɛ sɛ wɔbɛsan ahwɛ mu.",
+      "terms": "Saa krataa yi nyɛ sika a wɔde tua ho ka a etwa to na ebetumi asesa ansa na wɔasi so dua."
+    },
+    "af": {
+      "documentTitle": "KONSEP",
+      "orderNumber": "Konsep#",
+      "date": "Konsepdatum",
+      "reference": "Verw #",
+      "totalLabel": "Totaal",
+      "itemsInTotalLabel": "Items in totaal",
+      "notes": "Hierdie is 'n konsepdokument vir hersiening.",
+      "terms": "Hierdie konsep is nie 'n finale faktuur nie en kan voor bevestiging verander."
+    },
+    "am": {
+      "documentTitle": "ረቂቅ",
+      "orderNumber": "ረቂቅ#",
+      "date": "ረቂቅ ቀን",
+      "reference": "ማጣቀሻ#",
+      "totalLabel": "ጠቅላላ",
+      "itemsInTotalLabel": "እቃዎች በጠቅላላ",
+      "notes": "ይህ ለግምገማ የሚሆን ረቂቅ ሰነድ ነው።",
+      "terms": "ይህ ረቂቅ የመጨረሻ ደረሰኝ አይደለም እና ከማረጋገጡ በፊት ሊቀየር ይችላል።"
+    },
+    "as": {
+      "documentTitle": "খসড়া",
+      "orderNumber": "খসড়া#",
+      "date": "খসড়া তারিখ",
+      "reference": "রেফারেন্স#",
+      "totalLabel": "মোট",
+      "itemsInTotalLabel": "মোট আইটেম",
+      "notes": "এটি পর্যালোচনার জন্য একটি খসড়া নথি।",
+      "terms": "এই খসড়াটি একটি চূড়ান্ত চালান নয় এবং নিশ্চিতকরণের আগে পরিবর্তন হতে পারে।"
+    },
+    "bn": {
+      "documentTitle": "খসড়া",
+      "orderNumber": "খসড়া#",
+      "date": "খসড়া তারিখ",
+      "reference": "রেফারেন্স#",
+      "totalLabel": "মোট",
+      "itemsInTotalLabel": "মোট আইটেম",
+      "notes": "এটি পর্যালোচনার জন্য একটি খসড়া নথি।",
+      "terms": "এই খসড়াটি একটি চূড়ান্ত চালান নয় এবং নিশ্চিতকরণের আগে পরিবর্তন হতে পারে।"
+    },
+    "bm": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "az": {
+      "documentTitle": "LAYİHƏ",
+      "orderNumber": "Qaralama#",
+      "date": "Qaralama Tarixi",
+      "reference": "Ref#",
+      "totalLabel": "Cəmi",
+      "itemsInTotalLabel": "Cəmi maddələr",
+      "notes": "Bu nəzərdən keçirilməli olan sənəd layihəsidir.",
+      "terms": "Bu qaralama yekun faktura deyil və təsdiqlənmədən əvvəl dəyişə bilər."
+    },
+    "br": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "ckb": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Pêşnûma#",
+      "date": "Dîroka Pêşnivîsê",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Tiştên bi tevahî",
+      "notes": "Ev pêşnûme belgeyek ji bo vekolînê ye.",
+      "terms": "Ev pêşnûme ne fatûreyek dawîn e û dibe ku berî pejirandinê biguhere."
+    },
+    "ce": {
+      "documentTitle": "ПРОЕКТ",
+      "orderNumber": "Черновик#",
+      "date": "Дата проекта",
+      "reference": "Ссылка#",
+      "totalLabel": "Итого",
+      "itemsInTotalLabel": "Всего предметов",
+      "notes": "Это проект документа для рассмотрения.",
+      "terms": "Этот проект не является окончательным счетом и может измениться до подтверждения."
+    },
+    "dz": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Draft Date",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Items in Total",
+      "notes": "This is a draft document for review.",
+      "terms": "This draft is not a final invoice and may change before confirmation."
+    },
+    "bo": {
+      "documentTitle": "草稿",
+      "orderNumber": "草稿＃",
+      "date": "草案日期",
+      "reference": "参考号#",
+      "totalLabel": "全部的",
+      "itemsInTotalLabel": "总计项目",
+      "notes": "这是一份供审查的文件草案。",
+      "terms": "该草稿不是最终发票，在确认之前可能会发生变化。"
+    },
+    "ee": {
+      "documentTitle": "DRAFT ƑE NUKPƆKPƆ",
+      "orderNumber": "Draft# .",
+      "date": "Ɣletiŋkeke si dzi woŋlɔe",
+      "reference": "Ref# .",
+      "totalLabel": "Wo katã ƒe xexlẽme",
+      "itemsInTotalLabel": "Nusiwo Le Wo Katã Me",
+      "notes": "Esia nye nuŋlɔɖi si wowɔ be woalé ŋku ɖe eŋu.",
+      "terms": "Nuŋlɔɖi sia menye gaxɔgbalẽvi mamlɛtɔ o eye ate ŋu atrɔ hafi woaɖo kpe edzi."
+    },
+    "eo": {
+      "documentTitle": "SLIZO",
+      "orderNumber": "Malneto#",
+      "date": "Malneta Dato",
+      "reference": "Ref#",
+      "totalLabel": "Entute",
+      "itemsInTotalLabel": "Eroj en Totalo",
+      "notes": "Ĉi tio estas skiza dokumento por revizio.",
+      "terms": "Ĉi tiu malneto ne estas fina fakturo kaj povas ŝanĝiĝi antaŭ konfirmo."
+    },
+    "fa": {
+      "documentTitle": "پیش نویس",
+      "orderNumber": "پیش نویس#",
+      "date": "تاریخ پیش نویس",
+      "reference": "کد شماره",
+      "totalLabel": "مجموع",
+      "itemsInTotalLabel": "اقلام در مجموع",
+      "notes": "این پیش نویس سند برای بررسی است.",
+      "terms": "این پیش نویس یک فاکتور نهایی نیست و ممکن است قبل از تأیید تغییر کند."
+    },
+    "ff": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "fo": {
+      "documentTitle": "UDKAST",
+      "orderNumber": "Udkast #",
+      "date": "Udkast dato",
+      "reference": "Ref#",
+      "totalLabel": "I alt",
+      "itemsInTotalLabel": "Varer i alt",
+      "notes": "Dette er et udkast til dokument til gennemsyn.",
+      "terms": "Dette udkast er ikke en endelig faktura og kan ændres før bekræftelse."
+    },
+    "fy": {
+      "documentTitle": "ONTWERP",
+      "orderNumber": "Untwerp#",
+      "date": "Draft Datum",
+      "reference": "Ref#",
+      "totalLabel": "Totaal",
+      "itemsInTotalLabel": "Items yn totaal",
+      "notes": "Dit is in konseptdokumint foar beoardieling.",
+      "terms": "Dit konsept is gjin definitive faktuer en kin feroarje foar befêstiging."
+    },
+    "gu": {
+      "documentTitle": "ડ્રાફ્ટ",
+      "orderNumber": "ડ્રાફ્ટ#",
+      "date": "ડ્રાફ્ટ તારીખ",
+      "reference": "સંદર્ભ#",
+      "totalLabel": "કુલ",
+      "itemsInTotalLabel": "કુલ વસ્તુઓ",
+      "notes": "આ સમીક્ષા માટેનો ડ્રાફ્ટ દસ્તાવેજ છે.",
+      "terms": "આ ડ્રાફ્ટ અંતિમ ઇન્વૉઇસ નથી અને કન્ફર્મેશન પહેલાં બદલાઈ શકે છે."
+    },
+    "fil": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Petsa ng Draft",
+      "reference": "Ref#",
+      "totalLabel": "Kabuuan",
+      "itemsInTotalLabel": "Mga item sa Kabuuan",
+      "notes": "Ito ay isang draft na dokumento para sa pagsusuri.",
+      "terms": "Ang draft na ito ay hindi panghuling invoice at maaaring magbago bago ang kumpirmasyon."
+    },
+    "gd": {
+      "documentTitle": "DREUCHD",
+      "orderNumber": "Dreach #",
+      "date": "Ceann-latha Dreach",
+      "reference": "Ref#",
+      "totalLabel": "Iomlan",
+      "itemsInTotalLabel": "Nithean gu h-iomlan",
+      "notes": "Is e dreachd sgrìobhainn a tha seo airson ath-sgrùdadh.",
+      "terms": "Chan e fàirdeal deireannach a tha san dreach seo agus faodaidh e atharrachadh mus tèid a dhearbhadh."
+    },
+    "gv": {
+      "documentTitle": "DRÉACHT",
+      "orderNumber": "Dréacht#",
+      "date": "Dréacht-Dháta",
+      "reference": "Tag#",
+      "totalLabel": "Iomlán",
+      "itemsInTotalLabel": "Míreanna san Iomlán",
+      "notes": "Is dréachtcháipéis é seo le hathbhreithniú.",
+      "terms": "Ní sonrasc deiridh é an dréacht seo agus féadfaidh sé athrú sula ndearbhaítear é."
+    },
+    "hy": {
+      "documentTitle": "ՆԱԽԱԳԻԾ",
+      "orderNumber": "Սևագիր #",
+      "date": "Նախագիծ Ամսաթիվ",
+      "reference": "Հղում #",
+      "totalLabel": "Ընդամենը",
+      "itemsInTotalLabel": "Նյութերը Ընդամենը",
+      "notes": "Սա վերանայման փաստաթղթի նախագիծ է։",
+      "terms": "Այս նախագիծը վերջնական հաշիվ-ապրանքագիր չէ և կարող է փոխվել մինչև հաստատումը:"
+    },
+    "ia": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Draft Date",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Items in Total",
+      "notes": "This is a draft document for review.",
+      "terms": "This draft is not a final invoice and may change before confirmation."
+    },
+    "ha": {
+      "documentTitle": "DAFATAR",
+      "orderNumber": "Daftari#",
+      "date": "Kwanan Zafi",
+      "reference": "Ref#",
+      "totalLabel": "Jimlar",
+      "itemsInTotalLabel": "Abubuwa a cikin Jima'i",
+      "notes": "Wannan daftarin aiki ne don dubawa.",
+      "terms": "Wannan daftarin ba daftari ba ne na ƙarshe kuma yana iya canzawa kafin tabbatarwa."
+    },
+    "ig": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Ụbọchị edepụta",
+      "reference": "Ref#",
+      "totalLabel": "Mkpokọta",
+      "itemsInTotalLabel": "Ihe dị na mkpokọta",
+      "notes": "Nke a bụ akwụkwọ maka nyocha.",
+      "terms": "Akwụkwọ a abụghị akwụkwọ ọnụahịa ikpeazụ ma nwee ike ịgbanwe tupu nkwenye."
+    },
+    "ii": {
+      "documentTitle": "草稿",
+      "orderNumber": "草稿＃",
+      "date": "草案日期",
+      "reference": "参考号#",
+      "totalLabel": "全部的",
+      "itemsInTotalLabel": "总计项目",
+      "notes": "这是一份供审查的文件草案。",
+      "terms": "该草稿不是最终发票，在确认之前可能会发生变化。"
+    },
+    "ka": {
+      "documentTitle": "დრაფტი",
+      "orderNumber": "მონახაზი#",
+      "date": "პროექტის თარიღი",
+      "reference": "Ref#",
+      "totalLabel": "სულ",
+      "itemsInTotalLabel": "ნივთები სულ",
+      "notes": "ეს არის დოკუმენტის პროექტი განსახილველად.",
+      "terms": "ეს მონახაზი არ არის საბოლოო ინვოისი და შეიძლება შეიცვალოს დადასტურებამდე."
+    },
+    "jv": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Draf Tanggal",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Item ing Total",
+      "notes": "Iki minangka draf dokumen kanggo ditinjau.",
+      "terms": "Konsep iki dudu invoice pungkasan lan bisa diganti sadurunge konfirmasi."
+    },
+    "ki": {
+      "documentTitle": "RASIMU",
+      "orderNumber": "Rasimu#",
+      "date": "Tarehe ya Rasimu",
+      "reference": "Ref#",
+      "totalLabel": "Jumla",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "notes": "Hii ni rasimu ya hati ya kukaguliwa.",
+      "terms": "Rasimu hii si ankara ya mwisho na inaweza kubadilika kabla ya uthibitishaji."
+    },
+    "kl": {
+      "documentTitle": "UDKAST",
+      "orderNumber": "Udkast #",
+      "date": "Udkast dato",
+      "reference": "Ref#",
+      "totalLabel": "I alt",
+      "itemsInTotalLabel": "Varer i alt",
+      "notes": "Dette er et udkast til dokument til gennemsyn.",
+      "terms": "Dette udkast er ikke en endelig faktura og kan ændres før bekræftelse."
+    },
+    "kk": {
+      "documentTitle": "ЖОБА",
+      "orderNumber": "нобай#",
+      "date": "Жоба күні",
+      "reference": "Анықтама №",
+      "totalLabel": "Барлығы",
+      "itemsInTotalLabel": "Барлығындағы элементтер",
+      "notes": "Бұл қарауға арналған құжат жобасы.",
+      "terms": "Бұл нобай соңғы шот-фактура емес және расталғанға дейін өзгеруі мүмкін."
+    },
+    "kn": {
+      "documentTitle": "ಡ್ರಾಫ್ಟ್",
+      "orderNumber": "ಕರಡು#",
+      "date": "ಕರಡು ದಿನಾಂಕ",
+      "reference": "ಉಲ್ಲೇಖ#",
+      "totalLabel": "ಒಟ್ಟು",
+      "itemsInTotalLabel": "ಒಟ್ಟು ಐಟಂಗಳು",
+      "notes": "ಇದು ಪರಿಶೀಲನೆಗಾಗಿ ಕರಡು ದಾಖಲೆಯಾಗಿದೆ.",
+      "terms": "ಈ ಡ್ರಾಫ್ಟ್ ಅಂತಿಮ ಸರಕುಪಟ್ಟಿ ಅಲ್ಲ ಮತ್ತು ದೃಢೀಕರಣದ ಮೊದಲು ಬದಲಾಗಬಹುದು."
+    },
+    "ku": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Pêşnûma#",
+      "date": "Dîroka Pêşnivîsê",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Tiştên bi tevahî",
+      "notes": "Ev pêşnûme belgeyek ji bo vekolînê ye.",
+      "terms": "Ev pêşnûme ne fatûreyek dawîn e û dibe ku berî pejirandinê biguhere."
+    },
+    "km": {
+      "documentTitle": "សេចក្តីព្រាង",
+      "orderNumber": "សេចក្តីព្រាង#",
+      "date": "កាលបរិច្ឆេទព្រាង",
+      "reference": "យោង#",
+      "totalLabel": "សរុប",
+      "itemsInTotalLabel": "ធាតុនៅក្នុងសរុប",
+      "notes": "នេះជាឯកសារព្រាងសម្រាប់ពិនិត្យ។",
+      "terms": "សេចក្តីព្រាងនេះមិនមែនជាវិក្កយបត្រចុងក្រោយទេ ហើយអាចផ្លាស់ប្តូរមុនពេលបញ្ជាក់។"
+    },
+    "ks": {
+      "documentTitle": "ڈرافٹ",
+      "orderNumber": "مسودہ#",
+      "date": "ڈرافٹ کی تاریخ",
+      "reference": "حوالہ#",
+      "totalLabel": "کل",
+      "itemsInTotalLabel": "کل میں آئٹمز",
+      "notes": "یہ جائزہ کے لیے ایک مسودہ دستاویز ہے۔",
+      "terms": "یہ مسودہ حتمی رسید نہیں ہے اور تصدیق سے پہلے تبدیل ہو سکتا ہے۔"
+    },
+    "lg": {
+      "documentTitle": "RASIMU",
+      "orderNumber": "Rasimu#",
+      "date": "Tarehe ya Rasimu",
+      "reference": "Ref#",
+      "totalLabel": "Jumla",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "notes": "Hii ni rasimu ya hati ya kukaguliwa.",
+      "terms": "Rasimu hii si ankara ya mwisho na inaweza kubadilika kabla ya uthibitishaji."
+    },
+    "kw": {
+      "documentTitle": "DRAFFT",
+      "orderNumber": "Drafft #",
+      "date": "Dyddiad Drafft",
+      "reference": "Cyf#",
+      "totalLabel": "Cyfanswm",
+      "itemsInTotalLabel": "Eitemau mewn Cyfanswm",
+      "notes": "Mae hon yn ddogfen ddrafft i'w hadolygu.",
+      "terms": "Nid yw'r drafft hwn yn anfoneb derfynol a gall newid cyn ei chadarnhau."
+    },
+    "ln": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "ky": {
+      "documentTitle": "ДОЛООМ",
+      "orderNumber": "Долбоор#",
+      "date": "Долбоор күнү",
+      "reference": "Ref#",
+      "totalLabel": "Бардыгы",
+      "itemsInTotalLabel": "Бардыгы болгон нерселер",
+      "notes": "Бул текшерүү үчүн документтин долбоору.",
+      "terms": "Бул долбоор акыркы эсеп-фактура эмес жана ырасталганга чейин өзгөрүшү мүмкүн."
+    },
+    "lu": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "lo": {
+      "documentTitle": "ຮ່າງ",
+      "orderNumber": "ຮ່າງ#",
+      "date": "ວັນທີສະບັບຮ່າງ",
+      "reference": "ອ້າງອີງ#",
+      "totalLabel": "ທັງໝົດ",
+      "itemsInTotalLabel": "ລາຍການທັງໝົດ",
+      "notes": "ນີ້ແມ່ນເອກະສານສະບັບຮ່າງເພື່ອທົບທວນ.",
+      "terms": "ສະບັບຮ່າງນີ້ບໍ່ແມ່ນໃບແຈ້ງໜີ້ສຸດທ້າຍ ແລະອາດຈະມີການປ່ຽນແປງກ່ອນການຢືນຢັນ."
+    },
+    "mg": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "#\nDrafitra#",
+      "date": "#\nDaty drafitra",
+      "reference": "#\nRef#",
+      "totalLabel": "#\nTotal",
+      "itemsInTotalLabel": "#\nZavatra ao amin'ny Total",
+      "notes": "#\nDrafitra hodinihina ity.",
+      "terms": "#\nIty drafitra ity dia tsy faktiora farany ary mety hiova alohan'ny fanamafisana."
+    },
+    "ml": {
+      "documentTitle": "ഡ്രാഫ്റ്റ്",
+      "orderNumber": "ഡ്രാഫ്റ്റ്#",
+      "date": "ഡ്രാഫ്റ്റ് തീയതി",
+      "reference": "റഫറൻസ്#",
+      "totalLabel": "ആകെ",
+      "itemsInTotalLabel": "ആകെയുള്ള ഇനങ്ങൾ",
+      "notes": "ഇത് അവലോകനത്തിനുള്ള കരട് രേഖയാണ്.",
+      "terms": "ഈ ഡ്രാഫ്റ്റ് അന്തിമ ഇൻവോയ്‌സ് അല്ല, സ്ഥിരീകരണത്തിന് മുമ്പ് ഇത് മാറിയേക്കാം."
+    },
+    "mi": {
+      "documentTitle": "WHAKATOKANGA",
+      "orderNumber": "Hukituhi#",
+      "date": "Te Ra Huka",
+      "reference": "Ref#",
+      "totalLabel": "Tapeke",
+      "itemsInTotalLabel": "Tuemi i roto i te Tapeke",
+      "notes": "He tuhinga tauira tenei hei arotake.",
+      "terms": "Ehara tenei tauira i te nama whakamutunga ka huri pea i mua i te whakamanatanga."
+    },
+    "mr": {
+      "documentTitle": "मसुदा",
+      "orderNumber": "मसुदा#",
+      "date": "मसुदा तारीख",
+      "reference": "संदर्भ#",
+      "totalLabel": "एकूण",
+      "itemsInTotalLabel": "एकूण आयटम",
+      "notes": "हे पुनरावलोकनासाठी एक मसुदा दस्तऐवज आहे.",
+      "terms": "हा मसुदा अंतिम बीजक नाही आणि पुष्टीकरणापूर्वी बदलू शकतो."
+    },
+    "mn": {
+      "documentTitle": "ТӨСӨЛ",
+      "orderNumber": "Ноорог#",
+      "date": "Төслийн огноо",
+      "reference": "Ref#",
+      "totalLabel": "Нийт",
+      "itemsInTotalLabel": "Нийт доторх зүйлс",
+      "notes": "Энэ бол хянан үзэх баримт бичгийн төсөл юм.",
+      "terms": "Энэ ноорог эцсийн нэхэмжлэх биш бөгөөд баталгаажуулахаас өмнө өөрчлөгдөж болно."
+    },
+    "my": {
+      "documentTitle": "ကြမ်း",
+      "orderNumber": "မူကြမ်း#",
+      "date": "Draft Date",
+      "reference": "Ref#",
+      "totalLabel": "စုစုပေါင်း",
+      "itemsInTotalLabel": "စုစုပေါင်းရှိပစ္စည်းများ",
+      "notes": "ဤသည်မှာ ပြန်လည်သုံးသပ်ရန်အတွက် မူကြမ်းစာရွက်စာတမ်းတစ်ခုဖြစ်သည်။",
+      "terms": "ဤမူကြမ်းသည် နောက်ဆုံးငွေတောင်းခံလွှာမဟုတ်ပါ၊ အတည်ပြုခြင်းမပြုမီ ပြောင်းလဲနိုင်သည်။"
+    },
+    "nb": {
+      "documentTitle": "UTKAST",
+      "orderNumber": "Utkast#",
+      "date": "Utkast dato",
+      "reference": "Ref#",
+      "totalLabel": "Totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "notes": "Dette er et utkast til dokument for gjennomgang.",
+      "terms": "Dette utkastet er ikke en endelig faktura og kan endres før bekreftelse."
+    },
+    "nd": {
+      "documentTitle": "ISAKHIWO",
+      "orderNumber": "Okusalungiswa#",
+      "date": "Idethi Esalungiswa",
+      "reference": "Ref#",
+      "totalLabel": "Isamba",
+      "itemsInTotalLabel": "Izinto Eziphelele",
+      "notes": "Lona umbhalo osalungiswa ozobuyekezwa.",
+      "terms": "Lokhu okusalungiswa akuyona i-invoyisi yokugcina futhi ingase ishintshe ngaphambi kokuqinisekiswa."
+    },
+    "ne": {
+      "documentTitle": "ड्राफ्ट",
+      "orderNumber": "मस्यौदा#",
+      "date": "मस्यौदा मिति",
+      "reference": "सन्दर्भ #",
+      "totalLabel": "कुल",
+      "itemsInTotalLabel": "कुलमा वस्तुहरू",
+      "notes": "यो समीक्षाको लागि मस्यौदा कागजात हो।",
+      "terms": "यो मस्यौदा अन्तिम बीजक होइन र पुष्टि हुनु अघि परिवर्तन हुन सक्छ।"
+    },
+    "nn": {
+      "documentTitle": "UTKAST",
+      "orderNumber": "Utkast#",
+      "date": "Utkast dato",
+      "reference": "Ref#",
+      "totalLabel": "Totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "notes": "Dette er et utkast til dokument for gjennomgang.",
+      "terms": "Dette utkastet er ikke en endelig faktura og kan endres før bekreftelse."
+    },
+    "os": {
+      "documentTitle": "ПРОЕКТ",
+      "orderNumber": "Черновик#",
+      "date": "Дата проекта",
+      "reference": "Ссылка#",
+      "totalLabel": "Итого",
+      "itemsInTotalLabel": "Всего предметов",
+      "notes": "Это проект документа для рассмотрения.",
+      "terms": "Этот проект не является окончательным счетом и может измениться до подтверждения."
+    },
+    "pa": {
+      "documentTitle": "ਡਰਾਫਟ",
+      "orderNumber": "ਡਰਾਫਟ#",
+      "date": "ਡਰਾਫਟ ਮਿਤੀ",
+      "reference": "ਹਵਾਲਾ #",
+      "totalLabel": "ਕੁੱਲ",
+      "itemsInTotalLabel": "ਕੁੱਲ ਵਿੱਚ ਆਈਟਮਾਂ",
+      "notes": "ਇਹ ਸਮੀਖਿਆ ਲਈ ਇੱਕ ਡਰਾਫਟ ਦਸਤਾਵੇਜ਼ ਹੈ।",
+      "terms": "ਇਹ ਡਰਾਫਟ ਇੱਕ ਅੰਤਮ ਇਨਵੌਇਸ ਨਹੀਂ ਹੈ ਅਤੇ ਪੁਸ਼ਟੀ ਤੋਂ ਪਹਿਲਾਂ ਬਦਲ ਸਕਦਾ ਹੈ।"
+    },
+    "om": {
+      "documentTitle": "WIXINEEFFAMA",
+      "orderNumber": "Wixinee#",
+      "date": "Wixinee Guyyaa",
+      "reference": "Ref#",
+      "totalLabel": "Waliigala",
+      "itemsInTotalLabel": "Wantoota Waliigalaan",
+      "notes": "Kun wixinee sanada gamaaggamaaf qophaa’eedha.",
+      "terms": "Wixineen kun invoice dhumaa waan hin taaneef osoo hin mirkanaa’iin dura jijjiiramuu danda’a."
+    },
+    "ps": {
+      "documentTitle": "مسوده",
+      "orderNumber": "مسوده#",
+      "date": "د مسودې نیټه",
+      "reference": "حواله#",
+      "totalLabel": "ټول",
+      "itemsInTotalLabel": "په مجموع کې توکي",
+      "notes": "دا د بیاکتنې لپاره د سند مسوده ده.",
+      "terms": "دا مسوده وروستی رسید نه دی او ممکن د تایید دمخه بدل شي."
+    },
+    "qu": {
+      "documentTitle": "BORRADOR",
+      "orderNumber": "Borrador#",
+      "date": "Fecha del borrador",
+      "reference": "Número de referencia",
+      "totalLabel": "totales",
+      "itemsInTotalLabel": "Artículos en total",
+      "notes": "Este es un borrador de documento para revisión.",
+      "terms": "Este borrador no es una factura final y puede cambiar antes de la confirmación."
+    },
+    "or": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "ଡ୍ରାଫ୍ଟ #",
+      "date": "ଡ୍ରାଫ୍ଟ ତାରିଖ",
+      "reference": "ରେଫ #",
+      "totalLabel": "ସମୁଦାୟ",
+      "itemsInTotalLabel": "ସମୁଦାୟ ଆଇଟମ୍ |",
+      "notes": "ସମୀକ୍ଷା ପାଇଁ ଏହା ଏକ ଡ୍ରାଫ୍ଟ ଡକ୍ୟୁମେଣ୍ଟ୍ |",
+      "terms": "ଏହି ଡ୍ରାଫ୍ଟ ଏକ ଅନ୍ତିମ ଇନଭାଇସ୍ ନୁହେଁ ଏବଂ ନିଶ୍ଚିତକରଣ ପୂର୍ବରୁ ପରିବର୍ତ୍ତନ ହୋଇପାରେ |"
+    },
+    "rm": {
+      "documentTitle": "ENTWURF",
+      "orderNumber": "Entwurf#",
+      "date": "Entwurfsdatum",
+      "reference": "Ref#",
+      "totalLabel": "Insgesamt",
+      "itemsInTotalLabel": "Artikel insgesamt",
+      "notes": "Dies ist ein Dokumententwurf zur Überprüfung.",
+      "terms": "Dieser Entwurf ist keine endgültige Rechnung und kann sich vor der Bestätigung ändern."
+    },
+    "sa": {
+      "documentTitle": "ड्राफ्ट",
+      "orderNumber": "ड्राफ्ट#",
+      "date": "ड्राफ्ट दिनांक",
+      "reference": "संदर्भ#",
+      "totalLabel": "कुल",
+      "itemsInTotalLabel": "कुल आइटम",
+      "notes": "यह समीक्षा के लिए एक मसौदा दस्तावेज़ है.",
+      "terms": "यह ड्राफ्ट अंतिम चालान नहीं है और पुष्टि से पहले बदल सकता है।"
+    },
+    "rn": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Inyandiko #",
+      "date": "Umushinga w'itariki",
+      "reference": "Ref #",
+      "totalLabel": "Igiteranyo",
+      "itemsInTotalLabel": "Ibintu Byose",
+      "notes": "Numushinga winyandiko yo gusuzuma.",
+      "terms": "Iyi nteguro ntabwo ari fagitire yanyuma kandi irashobora guhinduka mbere yo kwemezwa."
+    },
+    "rw": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Inyandiko #",
+      "date": "Umushinga w'itariki",
+      "reference": "Ref #",
+      "totalLabel": "Igiteranyo",
+      "itemsInTotalLabel": "Ibintu Byose",
+      "notes": "Numushinga winyandiko yo gusuzuma.",
+      "terms": "Iyi nteguro ntabwo ari fagitire yanyuma kandi irashobora guhinduka mbere yo kwemezwa."
+    },
+    "sc": {
+      "documentTitle": "PROGETTO",
+      "orderNumber": "Bozza#",
+      "date": "Data della bozza",
+      "reference": "Rif#",
+      "totalLabel": "Totale",
+      "itemsInTotalLabel": "Articoli in totale",
+      "notes": "Questa è una bozza di documento da rivedere.",
+      "terms": "Questa bozza non è una fattura finale e può cambiare prima della conferma."
+    },
+    "se": {
+      "documentTitle": "UTKAST",
+      "orderNumber": "Utkast#",
+      "date": "Utkast dato",
+      "reference": "Ref#",
+      "totalLabel": "Totalt",
+      "itemsInTotalLabel": "Varer i totalt",
+      "notes": "Dette er et utkast til dokument for gjennomgang.",
+      "terms": "Dette utkastet er ikke en endelig faktura og kan endres før bekreftelse."
+    },
+    "sg": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "sd": {
+      "documentTitle": "ڊرافٽ",
+      "orderNumber": "مسودو#",
+      "date": "مسودي جي تاريخ",
+      "reference": "حوالو#",
+      "totalLabel": "ڪُل",
+      "itemsInTotalLabel": "مجموعي ۾ شيون",
+      "notes": "هي جائزو وٺڻ لاءِ هڪ مسودو دستاويز آهي.",
+      "terms": "هي مسودو حتمي انوائس ناهي ۽ تصديق کان اڳ تبديل ٿي سگهي ٿو."
+    },
+    "si": {
+      "documentTitle": "කෙටුම්පත",
+      "orderNumber": "කෙටුම්පත#",
+      "date": "කෙටුම්පත් දිනය",
+      "reference": "යොමු#",
+      "totalLabel": "මුළු",
+      "itemsInTotalLabel": "සමස්තයක් ලෙස අයිතම",
+      "notes": "මෙය සමාලෝචනය සඳහා කෙටුම්පත් ලේඛනයකි.",
+      "terms": "මෙම කෙටුම්පත අවසන් ඉන්වොයිසියක් නොවන අතර තහවුරු කිරීමට පෙර වෙනස් විය හැක."
+    },
+    "sn": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Chinyorwa#",
+      "date": "Draft Date",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Zvinhu mu Total",
+      "notes": "Iri igwaro rakanyorwa kuti riongororwe.",
+      "terms": "Iyi dhizaini haisi invoice yekupedzisira uye inogona kuchinja isati yasimbiswa."
+    },
+    "so": {
+      "documentTitle": "QABYO",
+      "orderNumber": "Qabyo#",
+      "date": "Taariikhda Qabyo Qoraalka",
+      "reference": "Tixraac #",
+      "totalLabel": "Wadarta",
+      "itemsInTotalLabel": "Walxaha ku jira Wadarta",
+      "notes": "Kani waa dukumeenti qabyo ah oo dib loo eegayo.",
+      "terms": "Qabyo-qoraalkan maaha qaansheeg kama dambeys ah waxaana laga yaabaa in la beddelo ka hor inta aan la xaqiijin."
+    },
+    "sw": {
+      "documentTitle": "RASIMU",
+      "orderNumber": "Rasimu#",
+      "date": "Tarehe ya Rasimu",
+      "reference": "Ref#",
+      "totalLabel": "Jumla",
+      "itemsInTotalLabel": "Vipengee katika Jumla",
+      "notes": "Hii ni rasimu ya hati ya kukaguliwa.",
+      "terms": "Rasimu hii si ankara ya mwisho na inaweza kubadilika kabla ya uthibitishaji."
+    },
+    "te": {
+      "documentTitle": "డ్రాఫ్ట్",
+      "orderNumber": "డ్రాఫ్ట్#",
+      "date": "డ్రాఫ్ట్ తేదీ",
+      "reference": "Ref#",
+      "totalLabel": "మొత్తం",
+      "itemsInTotalLabel": "మొత్తంలో అంశాలు",
+      "notes": "ఇది సమీక్ష కోసం డ్రాఫ్ట్ డాక్యుమెంట్.",
+      "terms": "ఈ డ్రాఫ్ట్ తుది ఇన్‌వాయిస్ కాదు మరియు నిర్ధారణకు ముందు మారవచ్చు."
+    },
+    "su": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draf#",
+      "date": "Draf Tanggal",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Item dina Total",
+      "notes": "Ieu mangrupikeun draf dokumén pikeun ditinjau.",
+      "terms": "Draf ieu sanés invoice ahir sareng tiasa robih sateuacan konfirmasi."
+    },
+    "ti": {
+      "documentTitle": "ረቂቅ",
+      "orderNumber": "ረቂቅ#",
+      "date": "ረቂቅ ቀን",
+      "reference": "ማጣቀሻ#",
+      "totalLabel": "ጠቅላላ",
+      "itemsInTotalLabel": "እቃዎች በጠቅላላ",
+      "notes": "ይህ ለግምገማ የሚሆን ረቂቅ ሰነድ ነው።",
+      "terms": "ይህ ረቂቅ የመጨረሻ ደረሰኝ አይደለም እና ከማረጋገጡ በፊት ሊቀየር ይችላል።"
+    },
+    "tg": {
+      "documentTitle": "ЛОИХА",
+      "orderNumber": "Лоиҳа#",
+      "date": "Санаи лоиҳа",
+      "reference": "Ref#",
+      "totalLabel": "Ҳамагӣ",
+      "itemsInTotalLabel": "Ададҳо дар маҷмӯъ",
+      "notes": "Ин лоиҳаи ҳуҷҷат барои баррасӣ аст.",
+      "terms": "Ин лоиҳа ҳисобнома-фактураи ниҳоӣ нест ва метавонад пеш аз тасдиқ тағир ёбад."
+    },
+    "to": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "Draft#",
+      "date": "Draft Date",
+      "reference": "Ref#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Items in Total",
+      "notes": "This is a draft document for review.",
+      "terms": "This draft is not a final invoice and may change before confirmation."
+    },
+    "tt": {
+      "documentTitle": "ПРОЕКТ",
+      "orderNumber": "Черновик#",
+      "date": "Дата проекта",
+      "reference": "Ссылка#",
+      "totalLabel": "Итого",
+      "itemsInTotalLabel": "Всего предметов",
+      "notes": "Это проект документа для рассмотрения.",
+      "terms": "Этот проект не является окончательным счетом и может измениться до подтверждения."
+    },
+    "tk": {
+      "documentTitle": "TASLAK",
+      "orderNumber": "Taslak #",
+      "date": "Taslak Tarihi",
+      "reference": "Referans#",
+      "totalLabel": "Toplam",
+      "itemsInTotalLabel": "Toplam Öğeler",
+      "notes": "Bu incelenecek bir taslak belgedir.",
+      "terms": "Bu taslak nihai bir fatura değildir ve onaylanmadan önce değişebilir."
+    },
+    "ur": {
+      "documentTitle": "ڈرافٹ",
+      "orderNumber": "مسودہ#",
+      "date": "ڈرافٹ کی تاریخ",
+      "reference": "حوالہ#",
+      "totalLabel": "کل",
+      "itemsInTotalLabel": "کل میں آئٹمز",
+      "notes": "یہ جائزہ کے لیے ایک مسودہ دستاویز ہے۔",
+      "terms": "یہ مسودہ حتمی رسید نہیں ہے اور تصدیق سے پہلے تبدیل ہو سکتا ہے۔"
+    },
+    "wo": {
+      "documentTitle": "PROJET",
+      "orderNumber": "Brouillon#",
+      "date": "Date de rédaction",
+      "reference": "Réf#",
+      "totalLabel": "Total",
+      "itemsInTotalLabel": "Articles au total",
+      "notes": "Il s’agit d’une ébauche de document à examiner.",
+      "terms": "Ce projet n'est pas une facture définitive et peut changer avant confirmation."
+    },
+    "uz": {
+      "documentTitle": "LOSHA",
+      "orderNumber": "qoralama#",
+      "date": "Loyiha sanasi",
+      "reference": "Ref#",
+      "totalLabel": "Jami",
+      "itemsInTotalLabel": "Jami ob'ektlar",
+      "notes": "Bu ko'rib chiqish uchun hujjat loyihasi.",
+      "terms": "Bu qoralama yakuniy hisob-faktura emas va tasdiqlashdan oldin oʻzgarishi mumkin."
+    },
+    "xh": {
+      "documentTitle": "UYILO",
+      "orderNumber": "Uyilo#",
+      "date": "Umhla woYilo",
+      "reference": "Ref#",
+      "totalLabel": "Iyonke",
+      "itemsInTotalLabel": "Izinto kwiTotali",
+      "notes": "Olu luxwebhu oluyilwayo oluza kuphononongwa.",
+      "terms": "Olu yilo aluyiyo invoyisi yokugqibela kwaye lunokutshintsha ngaphambi kokuqinisekiswa."
+    },
+    "ug": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "لايىھە #",
+      "date": "لايىھە ۋاقتى",
+      "reference": "Ref #",
+      "totalLabel": "ئومۇمىي",
+      "itemsInTotalLabel": "ئومۇمىي تۈرلەر",
+      "notes": "بۇ تەكشۈرۈشنىڭ ھۆججىتى.",
+      "terms": "بۇ لايىھە ئاخىرقى تالون ئەمەس ، جەزملەشتۈرۈشتىن بۇرۇن ئۆزگىرىشى مۇمكىن."
+    },
+    "zu": {
+      "documentTitle": "ISAKHIWO",
+      "orderNumber": "Okusalungiswa#",
+      "date": "Idethi Esalungiswa",
+      "reference": "Ref#",
+      "totalLabel": "Isamba",
+      "itemsInTotalLabel": "Izinto Eziphelele",
+      "notes": "Lona umbhalo osalungiswa ozobuyekezwa.",
+      "terms": "Lokhu okusalungiswa akuyona i-invoyisi yokugcina futhi ingase ishintshe ngaphambi kokuqinisekiswa."
+    },
+    "yo": {
+      "documentTitle": "AKIYESI",
+      "orderNumber": "Akọpamọ#",
+      "date": "Akọpamọ Ọjọ",
+      "reference": "Ref#",
+      "totalLabel": "Lapapọ",
+      "itemsInTotalLabel": "Awọn nkan ni Total",
+      "notes": "Eyi jẹ iwe apẹrẹ fun atunyẹwo.",
+      "terms": "Akọpamọ yii kii ṣe iwe-owo ikẹhin ati pe o le yipada ṣaaju ijẹrisi."
+    },
+    "yi": {
+      "documentTitle": "DRAFT",
+      "orderNumber": "פּלאַן #",
+      "date": "פּלאַן טאָג",
+      "reference": "רעפעראט #",
+      "totalLabel": "גאַנץ",
+      "itemsInTotalLabel": "ייטאַמז אין גאַנץ",
+      "notes": "דאָס איז אַ פּלאַן דאָקומענט פֿאַר אָפּשאַצונג.",
+      "terms": "דער פּלאַן איז נישט אַ לעצט ינווויס און קען טוישן איידער באַשטעטיקונג."
+    }
+  },
+  "return": {
+    "ak": {
+      "documentTitle": "SAN SAN SAN",
+      "orderNumber": "San kɔ#",
+      "date": "Da a Wɔbɛsan Aba",
+      "reference": "Order Ref# .",
+      "totalLabel": "San kɔ Total no mu",
+      "itemsInTotalLabel": "Nneɛma a wɔde san bae",
+      "notes": "Yɛsrɛ sɛ hwɛ nneɛma a wɔasan de aba no de atoto krataa yi ho.",
+      "terms": "Bɔ nsɛm a ɛne ne ho nhyia ho amanneɛ wɔ nnɔnhwerew 48 akyi bere a wo nsa aka sankɔhwɛ no."
+    },
+    "af": {
+      "documentTitle": "TERUGKEER",
+      "orderNumber": "Terugkeer#",
+      "date": "Terugkeerdatum",
+      "reference": "Bestelverw.#",
+      "totalLabel": "Opbrengs Totaal",
+      "itemsInTotalLabel": "Items teruggestuur",
+      "notes": "Kontroleer asseblief terugbesorgde items teen hierdie dokument.",
+      "terms": "Rapporteer teenstrydighede binne 48 uur nadat die opgawe ontvang is."
+    },
+    "am": {
+      "documentTitle": "ተመለስ",
+      "orderNumber": "ተመለስ#",
+      "date": "የመመለሻ ቀን",
+      "reference": "Ref# ይዘዙ",
+      "totalLabel": "ጠቅላላ መመለሻ",
+      "itemsInTotalLabel": "እቃዎች ተመልሰዋል።",
+      "notes": "እባክዎ የተመለሱትን እቃዎች ከዚህ ሰነድ ጋር ያረጋግጡ።",
+      "terms": "መመለሻው በደረሰ በ 48 ሰዓታት ውስጥ አለመግባባቶችን ሪፖርት ያድርጉ።"
+    },
+    "as": {
+      "documentTitle": "রিটার্ন",
+      "orderNumber": "প্রত্যাবর্তন#",
+      "date": "ফেরার তারিখ",
+      "reference": "অর্ডার রেফারেন্স#",
+      "totalLabel": "মোট রিটার্ন",
+      "itemsInTotalLabel": "আইটেম ফিরে",
+      "notes": "এই নথির বিপরীতে ফিরে আইটেম চেক করুন.",
+      "terms": "রিটার্ন প্রাপ্তির 48 ঘন্টার মধ্যে অসঙ্গতির প্রতিবেদন করুন।"
+    },
+    "bn": {
+      "documentTitle": "রিটার্ন",
+      "orderNumber": "প্রত্যাবর্তন#",
+      "date": "ফেরার তারিখ",
+      "reference": "অর্ডার রেফারেন্স#",
+      "totalLabel": "মোট রিটার্ন",
+      "itemsInTotalLabel": "আইটেম ফিরে",
+      "notes": "এই নথির বিপরীতে ফিরে আইটেম চেক করুন.",
+      "terms": "রিটার্ন প্রাপ্তির 48 ঘন্টার মধ্যে অসঙ্গতির প্রতিবেদন করুন।"
+    },
+    "bm": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "br": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "az": {
+      "documentTitle": "GERİ DÖNÜŞ",
+      "orderNumber": "Qayıdın#",
+      "date": "Qayıdış tarixi",
+      "reference": "Sifariş Ref#",
+      "totalLabel": "Cəmi qaytarın",
+      "itemsInTotalLabel": "Əşyalar geri qaytarıldı",
+      "notes": "Lütfən, geri qaytarılmış əşyaları bu sənədlə yoxlayın.",
+      "terms": "Bəyanat alındıqdan sonra 48 saat ərzində uyğunsuzluqları bildirin."
+    },
+    "ckb": {
+      "documentTitle": "VEGERA",
+      "orderNumber": "Vegere#",
+      "date": "Dîroka Vegerê",
+      "reference": "Siparîş bike Ref#",
+      "totalLabel": "Vegere Total",
+      "itemsInTotalLabel": "Tiştên vegeriyan",
+      "notes": "Ji kerema xwe tiştên ku hatine vegerandin li hember vê belgeyê kontrol bikin.",
+      "terms": "Di nav 48 demjimêran de piştî wergirtina vegerê nakokiyan rapor bikin."
+    },
+    "dz": {
+      "documentTitle": "RETURN",
+      "orderNumber": "Return#",
+      "date": "Return Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Return Total",
+      "itemsInTotalLabel": "Items returned",
+      "notes": "Please check returned items against this document.",
+      "terms": "Report discrepancies within 48 hours of the return being received."
+    },
+    "ce": {
+      "documentTitle": "ВОЗВРАТ",
+      "orderNumber": "Возврат#",
+      "date": "Дата возвращения",
+      "reference": "Номер заказа",
+      "totalLabel": "Общий возврат",
+      "itemsInTotalLabel": "Товары возвращены",
+      "notes": "Пожалуйста, проверьте возвращенные товары по этому документу.",
+      "terms": "Сообщите о несоответствиях в течение 48 часов с момента получения возврата."
+    },
+    "bo": {
+      "documentTitle": "返回",
+      "orderNumber": "返回＃",
+      "date": "返回日期",
+      "reference": "订单编号#",
+      "totalLabel": "回报总额",
+      "itemsInTotalLabel": "退回的物品",
+      "notes": "请对照本文件检查退回的物品。",
+      "terms": "收到退货后 48 小时内报告差异。"
+    },
+    "ee": {
+      "documentTitle": "TRƆ GBƆ",
+      "orderNumber": "Trɔ yi#",
+      "date": "Ɣletiŋkeke si dzi woatrɔ ayi",
+      "reference": "Nudɔdɔ Ref# .",
+      "totalLabel": "Trɔ yi Total",
+      "itemsInTotalLabel": "Nuawo trɔ gbɔ",
+      "notes": "Taflatse lé ŋku ɖe nusiwo wogbugbɔ tsɔ vɛ ŋu kple agbalẽ sia.",
+      "terms": "Gblɔ nya siwo mesɔ o le gaƒoƒo 48 me tso esime woxɔ agbalẽa."
+    },
+    "eo": {
+      "documentTitle": "REVENO",
+      "orderNumber": "Revenu#",
+      "date": "Revendato",
+      "reference": "Mendo Ref#",
+      "totalLabel": "Reveno Sumo",
+      "itemsInTotalLabel": "Eroj revenis",
+      "notes": "Bonvolu kontroli la redonitajn erojn kun ĉi tiu dokumento.",
+      "terms": "Raportu diferencojn ene de 48 horoj post la ricevo de la reveno."
+    },
+    "ff": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "fa": {
+      "documentTitle": "بازگشت",
+      "orderNumber": "برگشت #",
+      "date": "تاریخ برگشت",
+      "reference": "شماره شماره سفارش",
+      "totalLabel": "برگرداندن کل",
+      "itemsInTotalLabel": "اقلام برگشت داده شد",
+      "notes": "لطفاً موارد برگشتی را با این سند بررسی کنید.",
+      "terms": "عدم تطابق را ظرف 48 ساعت پس از دریافت بازپرداخت گزارش دهید."
+    },
+    "fo": {
+      "documentTitle": "TILBAGE",
+      "orderNumber": "Returnummer",
+      "date": "Returdato",
+      "reference": "Ordre ref. nr.",
+      "totalLabel": "Afkast i alt",
+      "itemsInTotalLabel": "Varer returneres",
+      "notes": "Kontroller venligst returnerede varer i forhold til dette dokument.",
+      "terms": "Rapportér uoverensstemmelser inden for 48 timer efter modtagelsen af returneringen."
+    },
+    "fy": {
+      "documentTitle": "RETURN",
+      "orderNumber": "Return#",
+      "date": "Return Date",
+      "reference": "Order Ref #",
+      "totalLabel": "Return Totaal",
+      "itemsInTotalLabel": "Items werom",
+      "notes": "Kontrolearje asjebleaft weromjûne items tsjin dit dokumint.",
+      "terms": "Rapportearje ôfwikingen binnen 48 oeren nei't it weromkommen is ûntfongen."
+    },
+    "gu": {
+      "documentTitle": "પરત કરો",
+      "orderNumber": "વળતર#",
+      "date": "પરત કરવાની તારીખ",
+      "reference": "ઓર્ડર રેફ#",
+      "totalLabel": "કુલ વળતર",
+      "itemsInTotalLabel": "વસ્તુઓ પરત કરી",
+      "notes": "કૃપા કરીને આ દસ્તાવેજની સામે પરત કરાયેલી વસ્તુઓ તપાસો.",
+      "terms": "રિટર્ન મળ્યાના 48 કલાકની અંદર વિસંગતતાઓની જાણ કરો."
+    },
+    "fil": {
+      "documentTitle": "BUMALIK",
+      "orderNumber": "Return#",
+      "date": "Petsa ng Pagbabalik",
+      "reference": "Order Ref#",
+      "totalLabel": "Ibalik ang Kabuuan",
+      "itemsInTotalLabel": "Ibinalik ang mga item",
+      "notes": "Pakisuri ang mga naibalik na item laban sa dokumentong ito.",
+      "terms": "Mag-ulat ng mga pagkakaiba sa loob ng 48 oras pagkatapos matanggap ang pagbabalik."
+    },
+    "gd": {
+      "documentTitle": "TAISBEANADH",
+      "orderNumber": "Tilleadh #",
+      "date": "Ceann-latha Tilleadh",
+      "reference": "Òrdugh Ref#",
+      "totalLabel": "Tilleadh Iomlan",
+      "itemsInTotalLabel": "Nithean air ais",
+      "notes": "Feuch an toir thu sùil air na nithean a chaidh a thilleadh mu choinneamh na sgrìobhainn seo.",
+      "terms": "Dèan aithris air eadar-dhealachaidhean taobh a-staigh 48 uairean bho gheibhear an tilleadh."
+    },
+    "gv": {
+      "documentTitle": "AR AIS",
+      "orderNumber": "ar ais #",
+      "date": "Dáta Fillte",
+      "reference": "Ord Uimh.",
+      "totalLabel": "Tuairisceán Iomlán",
+      "itemsInTotalLabel": "Míreanna ar ais",
+      "notes": "Seiceáil le do thoil na míreanna a cuireadh ar ais in aghaidh an doiciméid seo.",
+      "terms": "Déan neamhréireachtaí a thuairisciú laistigh de 48 uair an chloig tar éis an tuairisceán a fháil."
+    },
+    "hy": {
+      "documentTitle": "ՎԵՐԱԴԱՐՁ",
+      "orderNumber": "Վերադարձ #",
+      "date": "Վերադարձի ամսաթիվ",
+      "reference": "Պատվերի թիվ",
+      "totalLabel": "Վերադարձի ընդհանուր գումարը",
+      "itemsInTotalLabel": "Ապրանքները վերադարձվել են",
+      "notes": "Խնդրում ենք ստուգել վերադարձված ապրանքները այս փաստաթղթում:",
+      "terms": "Հաղորդեք անհամապատասխանությունների մասին վերադարձը ստանալուց հետո 48 ժամվա ընթացքում:"
+    },
+    "ia": {
+      "documentTitle": "RETURN",
+      "orderNumber": "Return#",
+      "date": "Return Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Return Total",
+      "itemsInTotalLabel": "Items returned",
+      "notes": "Please check returned items against this document.",
+      "terms": "Report discrepancies within 48 hours of the return being received."
+    },
+    "ha": {
+      "documentTitle": "DAWO",
+      "orderNumber": "Komawa#",
+      "date": "Ranar dawowa",
+      "reference": "oda Ref#",
+      "totalLabel": "Jimlar dawowa",
+      "itemsInTotalLabel": "An dawo da abubuwa",
+      "notes": "Da fatan za a bincika abubuwan da aka dawo da wannan takaddar.",
+      "terms": "Bayar da bambance-bambance a cikin sa'o'i 48 daga dawowar da aka samu."
+    },
+    "ig": {
+      "documentTitle": "laghachi",
+      "orderNumber": "laghachi #",
+      "date": "Ụbọchị nloghachi",
+      "reference": "Nye iwu Ref#",
+      "totalLabel": "Ngụkọta nlaghachi",
+      "itemsInTotalLabel": "Eweghachitere ihe",
+      "notes": "Biko lelee ihe eweghachiri megide akwụkwọ a.",
+      "terms": "Kpesa esemokwu n'ime awa 48 nke nloghachi enwetara."
+    },
+    "ii": {
+      "documentTitle": "返回",
+      "orderNumber": "返回＃",
+      "date": "返回日期",
+      "reference": "订单编号#",
+      "totalLabel": "回报总额",
+      "itemsInTotalLabel": "退回的物品",
+      "notes": "请对照本文件检查退回的物品。",
+      "terms": "收到退货后 48 小时内报告差异。"
+    },
+    "ka": {
+      "documentTitle": "დაბრუნება",
+      "orderNumber": "დაბრუნება#",
+      "date": "დაბრუნების თარიღი",
+      "reference": "შეკვეთის ნომერი",
+      "totalLabel": "დაბრუნების სულ",
+      "itemsInTotalLabel": "ნივთები დაბრუნდა",
+      "notes": "გთხოვთ, შეამოწმოთ დაბრუნებული ნივთები ამ დოკუმენტში.",
+      "terms": "შეატყობინეთ შეუსაბამობის შესახებ დაბრუნების მიღებიდან 48 საათის განმავლობაში."
+    },
+    "jv": {
+      "documentTitle": "BALIK",
+      "orderNumber": "bali#",
+      "date": "Tanggal bali",
+      "reference": "Order Ref#",
+      "totalLabel": "Bali Total",
+      "itemsInTotalLabel": "Item bali",
+      "notes": "Mangga dipriksa item bali menyang document iki.",
+      "terms": "Laporan bedo ing 48 jam bali ditampa."
+    },
+    "ki": {
+      "documentTitle": "KURUDI",
+      "orderNumber": "Rudi #",
+      "date": "Tarehe ya Kurudi",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla ya Kurudisha",
+      "itemsInTotalLabel": "Vipengee vimerudishwa",
+      "notes": "Tafadhali angalia vipengee vilivyorejeshwa dhidi ya hati hii.",
+      "terms": "Ripoti tofauti ndani ya saa 48 baada ya kurejesha kupokelewa."
+    },
+    "kl": {
+      "documentTitle": "TILBAGE",
+      "orderNumber": "Returnummer",
+      "date": "Returdato",
+      "reference": "Ordre ref. nr.",
+      "totalLabel": "Afkast i alt",
+      "itemsInTotalLabel": "Varer returneres",
+      "notes": "Kontroller venligst returnerede varer i forhold til dette dokument.",
+      "terms": "Rapportér uoverensstemmelser inden for 48 timer efter modtagelsen af returneringen."
+    },
+    "kk": {
+      "documentTitle": "ҚАЙТАРУ",
+      "orderNumber": "Қайтару#",
+      "date": "Қайтару күні",
+      "reference": "Тапсырыс №",
+      "totalLabel": "Барлығын қайтару",
+      "itemsInTotalLabel": "Заттар қайтарылды",
+      "notes": "Қайтарылған элементтерді осы құжатпен салыстырыңыз.",
+      "terms": "Қайталама алынғаннан кейін 48 сағат ішінде сәйкессіздіктер туралы хабарлаңыз."
+    },
+    "kn": {
+      "documentTitle": "ಹಿಂತಿರುಗಿ",
+      "orderNumber": "ಹಿಂತಿರುಗಿ#",
+      "date": "ಹಿಂತಿರುಗುವ ದಿನಾಂಕ",
+      "reference": "ಆರ್ಡರ್ Ref#",
+      "totalLabel": "ಒಟ್ಟು ಹಿಂತಿರುಗಿ",
+      "itemsInTotalLabel": "ಐಟಂಗಳನ್ನು ಹಿಂತಿರುಗಿಸಲಾಗಿದೆ",
+      "notes": "ದಯವಿಟ್ಟು ಈ ಡಾಕ್ಯುಮೆಂಟ್ ವಿರುದ್ಧ ಹಿಂತಿರುಗಿದ ಐಟಂಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.",
+      "terms": "ರಿಟರ್ನ್ ಸ್ವೀಕರಿಸಿದ 48 ಗಂಟೆಗಳ ಒಳಗೆ ವ್ಯತ್ಯಾಸಗಳನ್ನು ವರದಿ ಮಾಡಿ."
+    },
+    "ku": {
+      "documentTitle": "VEGERA",
+      "orderNumber": "Vegere#",
+      "date": "Dîroka Vegerê",
+      "reference": "Siparîş bike Ref#",
+      "totalLabel": "Vegere Total",
+      "itemsInTotalLabel": "Tiştên vegeriyan",
+      "notes": "Ji kerema xwe tiştên ku hatine vegerandin li hember vê belgeyê kontrol bikin.",
+      "terms": "Di nav 48 demjimêran de piştî wergirtina vegerê nakokiyan rapor bikin."
+    },
+    "km": {
+      "documentTitle": "ត្រឡប់",
+      "orderNumber": "ត្រឡប់#",
+      "date": "កាលបរិច្ឆេទត្រឡប់មកវិញ",
+      "reference": "បញ្ជាទិញ Ref#",
+      "totalLabel": "ត្រឡប់សរុប",
+      "itemsInTotalLabel": "វត្ថុបានត្រឡប់មកវិញ",
+      "notes": "សូមពិនិត្យមើលធាតុដែលបានត្រឡប់មកវិញប្រឆាំងនឹងឯកសារនេះ។",
+      "terms": "រាយការណ៍ពីភាពមិនស្របគ្នាក្នុងរយៈពេល 48 ម៉ោងបន្ទាប់ពីការត្រឡប់មកវិញត្រូវបានទទួល។"
+    },
+    "ks": {
+      "documentTitle": "واپسی",
+      "orderNumber": "واپسی#",
+      "date": "واپسی کی تاریخ",
+      "reference": "آرڈر ریفری#",
+      "totalLabel": "کل واپسی",
+      "itemsInTotalLabel": "اشیاء واپس آ گئیں۔",
+      "notes": "براہ کرم اس دستاویز کے خلاف لوٹے گئے آئٹمز کو چیک کریں۔",
+      "terms": "واپسی موصول ہونے کے 48 گھنٹوں کے اندر اندر تضادات کی اطلاع دیں۔"
+    },
+    "lg": {
+      "documentTitle": "KURUDI",
+      "orderNumber": "Rudi #",
+      "date": "Tarehe ya Kurudi",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla ya Kurudisha",
+      "itemsInTotalLabel": "Vipengee vimerudishwa",
+      "notes": "Tafadhali angalia vipengee vilivyorejeshwa dhidi ya hati hii.",
+      "terms": "Ripoti tofauti ndani ya saa 48 baada ya kurejesha kupokelewa."
+    },
+    "ln": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "kw": {
+      "documentTitle": "DYCHWELYD",
+      "orderNumber": "Dychwelyd #",
+      "date": "Dyddiad Dychwelyd",
+      "reference": "Cyfeirnod Archeb #",
+      "totalLabel": "Cyfanswm Dychwelyd",
+      "itemsInTotalLabel": "Eitemau wedi'u dychwelyd",
+      "notes": "Gwiriwch yr eitemau a ddychwelwyd yn erbyn y ddogfen hon.",
+      "terms": "Rhoi gwybod am anghysondebau o fewn 48 awr o dderbyn y datganiad."
+    },
+    "ky": {
+      "documentTitle": "КАЙТУУ",
+      "orderNumber": "Кайтаруу#",
+      "date": "Кайтуу күнү",
+      "reference": "Буйрутма №",
+      "totalLabel": "Бардыгын кайтаруу",
+      "itemsInTotalLabel": "Буюмдар кайтарылды",
+      "notes": "Сураныч, кайтарылган нерселерди бул документке каршы текшериңиз.",
+      "terms": "Кайрымдуулук алынгандан кийин 48 сааттын ичинде айырмачылыктар жөнүндө кабарлаңыз."
+    },
+    "lu": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "lo": {
+      "documentTitle": "ກັບຄືນ",
+      "orderNumber": "ກັບຄືນ#",
+      "date": "ວັນທີກັບຄືນ",
+      "reference": "ຄໍາ​ສັ່ງ Ref#",
+      "totalLabel": "ກັບຄືນທັງໝົດ",
+      "itemsInTotalLabel": "ລາຍການກັບຄືນ",
+      "notes": "ກະລຸນາກວດເບິ່ງລາຍການທີ່ສົ່ງຄືນກັບເອກະສານນີ້.",
+      "terms": "ລາຍງານຄວາມແຕກຕ່າງພາຍໃນ 48 ຊົ່ວໂມງຫຼັງຈາກໄດ້ຮັບຜົນຕອບແທນ."
+    },
+    "ml": {
+      "documentTitle": "മടങ്ങുക",
+      "orderNumber": "മടങ്ങുക#",
+      "date": "മടങ്ങിവരുന്ന തീയതി",
+      "reference": "ഓർഡർ Ref#",
+      "totalLabel": "റിട്ടേൺ ടോട്ടൽ",
+      "itemsInTotalLabel": "സാധനങ്ങൾ തിരികെ നൽകി",
+      "notes": "ഈ ഡോക്യുമെൻ്റിനെതിരെ മടങ്ങിയ ഇനങ്ങൾ പരിശോധിക്കുക.",
+      "terms": "റിട്ടേൺ ലഭിച്ച് 48 മണിക്കൂറിനുള്ളിൽ പൊരുത്തക്കേടുകൾ റിപ്പോർട്ട് ചെയ്യുക."
+    },
+    "mg": {
+      "documentTitle": "MIVERINA",
+      "orderNumber": "#\nMiverena#",
+      "date": "#\nDaty fiverenana",
+      "reference": "#\nKaomandy Ref#",
+      "totalLabel": "#\nMiverina Total",
+      "itemsInTotalLabel": "#\nNaverina ny entana",
+      "notes": "#\nAzafady, jereo ny entana naverina amin'ity antontan-taratasy ity.",
+      "terms": "#\nMitatitra ny tsy fitoviana ao anatin'ny 48 ora aorian'ny fandraisana ny fiverenana."
+    },
+    "mr": {
+      "documentTitle": "परत करा",
+      "orderNumber": "परतावा#",
+      "date": "परतीची तारीख",
+      "reference": "ऑर्डर संदर्भ#",
+      "totalLabel": "एकूण परतावा",
+      "itemsInTotalLabel": "वस्तू परत केल्या",
+      "notes": "कृपया या दस्तऐवजाच्या विरूद्ध परत आलेले आयटम तपासा.",
+      "terms": "रिटर्न मिळाल्यापासून 48 तासांच्या आत विसंगतींचा अहवाल द्या."
+    },
+    "mn": {
+      "documentTitle": "БУЦАХ",
+      "orderNumber": "Буцах#",
+      "date": "Буцах огноо",
+      "reference": "Захиалгын лавлагаа#",
+      "totalLabel": "Нийт өгөөж",
+      "itemsInTotalLabel": "Барааг буцааж өгсөн",
+      "notes": "Буцаагдсан зүйлсийг энэ баримт бичигтэй тулгаж шалгана уу.",
+      "terms": "Баримт бичгийг хүлээн авснаас хойш 48 цагийн дотор зөрүүг мэдээлнэ үү."
+    },
+    "mi": {
+      "documentTitle": "WHAKAHOKIA",
+      "orderNumber": "Whakahoki#",
+      "date": "Te Ra Whakahoki",
+      "reference": "Tono Ref#",
+      "totalLabel": "Whakahoki Tapeke",
+      "itemsInTotalLabel": "Kua whakahokia mai nga taonga",
+      "notes": "Tena koa tirohia nga mea kua whakahokia mai mo tenei tuhinga.",
+      "terms": "Ripoata i nga rereketanga i roto i nga haora 48 mai i te taenga mai o te hokinga mai."
+    },
+    "my": {
+      "documentTitle": "ပြန်ရန်",
+      "orderNumber": "ပြန်လာ #",
+      "date": "ပြန်လာမည့်ရက်",
+      "reference": "မှာယူမှု Ref#",
+      "totalLabel": "စုစုပေါင်း ပြန်သွားပါ။",
+      "itemsInTotalLabel": "ပစ္စည်းများ ပြန်ပေးသည်။",
+      "notes": "ကျေးဇူးပြု၍ ဤစာရွက်စာတမ်းနှင့် ပတ်သတ်၍ ပြန်ပေးထားသော အရာများကို စစ်ဆေးပါ။",
+      "terms": "ပြန်လည်လက်ခံရရှိပြီး ၄၈ နာရီအတွင်း ကွဲလွဲမှုများကို သတင်းပို့ပါ။"
+    },
+    "nb": {
+      "documentTitle": "TILBAKE",
+      "orderNumber": "Retur#",
+      "date": "Returdato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Retur totalt",
+      "itemsInTotalLabel": "Varer returnert",
+      "notes": "Kontroller returnerte varer mot dette dokumentet.",
+      "terms": "Rapporter avvik innen 48 timer etter at returen er mottatt."
+    },
+    "nd": {
+      "documentTitle": "BUYISA",
+      "orderNumber": "Buyela#",
+      "date": "Idethi Yokubuya",
+      "reference": "I-oda Ref#",
+      "totalLabel": "Buyisela Inani",
+      "itemsInTotalLabel": "Izinto zibuyisiwe",
+      "notes": "Sicela uhlole izinto ezibuyisiwe ngokumelene nale dokhumenti.",
+      "terms": "Bika ukungqubuzana kungakapheli amahora angama-48 ngemuva kokutholwa kwembuyiselo."
+    },
+    "ne": {
+      "documentTitle": "फिर्ता गर्नुहोस्",
+      "orderNumber": "फिर्ता#",
+      "date": "फिर्ता मिति",
+      "reference": "अर्डर रेफरी #",
+      "totalLabel": "कुल फिर्ता गर्नुहोस्",
+      "itemsInTotalLabel": "वस्तुहरू फिर्ता गरियो",
+      "notes": "कृपया यस कागजात विरुद्ध फर्काइएको वस्तुहरू जाँच गर्नुहोस्।",
+      "terms": "रिटर्न प्राप्त भएको 48 घण्टा भित्र विसंगतिहरू रिपोर्ट गर्नुहोस्।"
+    },
+    "nn": {
+      "documentTitle": "TILBAKE",
+      "orderNumber": "Retur#",
+      "date": "Returdato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Retur totalt",
+      "itemsInTotalLabel": "Varer returnert",
+      "notes": "Kontroller returnerte varer mot dette dokumentet.",
+      "terms": "Rapporter avvik innen 48 timer etter at returen er mottatt."
+    },
+    "os": {
+      "documentTitle": "ВОЗВРАТ",
+      "orderNumber": "Возврат#",
+      "date": "Дата возвращения",
+      "reference": "Номер заказа",
+      "totalLabel": "Общий возврат",
+      "itemsInTotalLabel": "Товары возвращены",
+      "notes": "Пожалуйста, проверьте возвращенные товары по этому документу.",
+      "terms": "Сообщите о несоответствиях в течение 48 часов с момента получения возврата."
+    },
+    "pa": {
+      "documentTitle": "ਵਾਪਸੀ",
+      "orderNumber": "ਵਾਪਸੀ#",
+      "date": "ਵਾਪਸੀ ਦੀ ਮਿਤੀ",
+      "reference": "ਆਰਡਰ ਰੈਫ#",
+      "totalLabel": "ਕੁੱਲ ਵਾਪਸੀ",
+      "itemsInTotalLabel": "ਆਈਟਮਾਂ ਵਾਪਸ ਕੀਤੀਆਂ",
+      "notes": "ਕਿਰਪਾ ਕਰਕੇ ਇਸ ਦਸਤਾਵੇਜ਼ ਦੇ ਵਿਰੁੱਧ ਵਾਪਸ ਕੀਤੀਆਂ ਆਈਟਮਾਂ ਦੀ ਜਾਂਚ ਕਰੋ।",
+      "terms": "ਰਿਟਰਨ ਪ੍ਰਾਪਤ ਹੋਣ ਦੇ 48 ਘੰਟਿਆਂ ਦੇ ਅੰਦਰ ਅੰਤਰ ਦੀ ਰਿਪੋਰਟ ਕਰੋ।"
+    },
+    "om": {
+      "documentTitle": "DEEBI'AA",
+      "orderNumber": "Deebi'aa#",
+      "date": "Guyyaa Deebi'uu",
+      "reference": "Ajaja Ref# .",
+      "totalLabel": "Waliigala Deebi'i",
+      "itemsInTotalLabel": "Meeshaaleen deebi'an",
+      "notes": "Maaloo wantoota deebi'an sanada kanaan wal bira qabamee ilaalaa.",
+      "terms": "Garaagarummaa erga deebi’ee dhufee sa’aatii 48 keessatti gabaasuu."
+    },
+    "ps": {
+      "documentTitle": "بیرته راګرځي",
+      "orderNumber": "راستنیدنه#",
+      "date": "د راستنیدو نیټه",
+      "reference": "د امر حواله #",
+      "totalLabel": "ټول بیرته راستنیدل",
+      "itemsInTotalLabel": "توکي بیرته راستانه شول",
+      "notes": "مهرباني وکړئ د دې سند په مقابل کې بیرته راستانه شوي توکي چیک کړئ.",
+      "terms": "د بیرته راستنیدو په 48 ساعتونو کې د توپیرونو راپور ورکړئ."
+    },
+    "qu": {
+      "documentTitle": "VOLVER",
+      "orderNumber": "Volver#",
+      "date": "Fecha de regreso",
+      "reference": "Número de referencia del pedido",
+      "totalLabel": "Total de retorno",
+      "itemsInTotalLabel": "Artículos devueltos",
+      "notes": "Por favor verifique los artículos devueltos con este documento.",
+      "terms": "Informe las discrepancias dentro de las 48 horas posteriores a la recepción de la devolución."
+    },
+    "rm": {
+      "documentTitle": "ZURÜCK",
+      "orderNumber": "Zurück#",
+      "date": "Rückgabedatum",
+      "reference": "Bestellnr.",
+      "totalLabel": "Gesamtrückgabe",
+      "itemsInTotalLabel": "Artikel zurückgegeben",
+      "notes": "Bitte überprüfen Sie die zurückgegebenen Artikel anhand dieses Dokuments.",
+      "terms": "Melden Sie Unstimmigkeiten innerhalb von 48 Stunden nach Erhalt der Rücksendung."
+    },
+    "or": {
+      "documentTitle": "ପ୍ରତ୍ୟାବର୍ତ୍ତନ",
+      "orderNumber": "ଫେରସ୍ତ #",
+      "date": "ଫେରସ୍ତ ତାରିଖ",
+      "reference": "ଅର୍ଡର ରେଫ୍ #",
+      "totalLabel": "ସମୁଦାୟ ଫେରସ୍ତ",
+      "itemsInTotalLabel": "ଆଇଟମ୍ ଫେରିଗଲା |",
+      "notes": "ଦୟାକରି ଏହି ଡକ୍ୟୁମେଣ୍ଟ ବିରୁଦ୍ଧରେ ଫେରସ୍ତ ହୋଇଥିବା ଆଇଟମଗୁଡିକ ଯାଞ୍ଚ କରନ୍ତୁ |",
+      "terms": "ରିଟର୍ଣ୍ଣ ଗ୍ରହଣ ହେବାର 48 ଘଣ୍ଟା ମଧ୍ୟରେ ଅସଙ୍ଗତି ରିପୋର୍ଟ କରନ୍ତୁ |"
+    },
+    "sa": {
+      "documentTitle": "वापसी",
+      "orderNumber": "वापसी#",
+      "date": "वापसी की तारीख",
+      "reference": "आदेश संदर्भ#",
+      "totalLabel": "कुल वापसी",
+      "itemsInTotalLabel": "आइटम वापस कर दिए गए",
+      "notes": "कृपया लौटाए गए आइटम को इस दस्तावेज़ से जांचें।",
+      "terms": "रिटर्न प्राप्त होने के 48 घंटे के भीतर विसंगतियों की रिपोर्ट करें।"
+    },
+    "rn": {
+      "documentTitle": "GARUKA",
+      "orderNumber": "Garuka #",
+      "date": "Itariki yo kugaruka",
+      "reference": "Tegeka Ref #",
+      "totalLabel": "Garuka Byose",
+      "itemsInTotalLabel": "Ibintu byagarutse",
+      "notes": "Nyamuneka reba ibintu byagarutse kuriyi nyandiko.",
+      "terms": "Menyesha ibitandukanye mu masaha 48 uhereye igihe wakiriye."
+    },
+    "rw": {
+      "documentTitle": "GARUKA",
+      "orderNumber": "Garuka #",
+      "date": "Itariki yo kugaruka",
+      "reference": "Tegeka Ref #",
+      "totalLabel": "Garuka Byose",
+      "itemsInTotalLabel": "Ibintu byagarutse",
+      "notes": "Nyamuneka reba ibintu byagarutse kuriyi nyandiko.",
+      "terms": "Menyesha ibitandukanye mu masaha 48 uhereye igihe wakiriye."
+    },
+    "sc": {
+      "documentTitle": "RITORNO",
+      "orderNumber": "Ritorno#",
+      "date": "Data di ritorno",
+      "reference": "N. rif. ordine",
+      "totalLabel": "Rendimento totale",
+      "itemsInTotalLabel": "Articoli restituiti",
+      "notes": "Si prega di verificare gli articoli restituiti confrontandoli con questo documento.",
+      "terms": "Segnalare le discrepanze entro 48 ore dalla ricezione del reso."
+    },
+    "se": {
+      "documentTitle": "TILBAKE",
+      "orderNumber": "Retur#",
+      "date": "Returdato",
+      "reference": "Bestillingsref#",
+      "totalLabel": "Retur totalt",
+      "itemsInTotalLabel": "Varer returnert",
+      "notes": "Kontroller returnerte varer mot dette dokumentet.",
+      "terms": "Rapporter avvik innen 48 timer etter at returen er mottatt."
+    },
+    "sg": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "sd": {
+      "documentTitle": "واپسي",
+      "orderNumber": "واپسي#",
+      "date": "واپسي جي تاريخ",
+      "reference": "آرڊر جو حوالو #",
+      "totalLabel": "مجموعي واپسي",
+      "itemsInTotalLabel": "شيون واپس آيون",
+      "notes": "مھرباني ڪري ھن دستاويز جي خلاف واپس ڪيل شيون چيڪ ڪريو.",
+      "terms": "واپسي جي وصول ٿيڻ جي 48 ڪلاڪن اندر اختلافن جي رپورٽ ڪريو."
+    },
+    "si": {
+      "documentTitle": "ආපසු",
+      "orderNumber": "ආපසු #",
+      "date": "ආපසු පැමිණීමේ දිනය",
+      "reference": "ref# ඇණවුම් කරන්න",
+      "totalLabel": "ආපසු මුළු එකතුව",
+      "itemsInTotalLabel": "අයිතම ආපසු ලබා දෙන ලදී",
+      "notes": "කරුණාකර මෙම ලේඛනයට එරෙහිව ආපසු ලබා දුන් අයිතම පරීක්ෂා කරන්න.",
+      "terms": "ප්‍රතිලාභ ලැබීමෙන් පැය 48ක් ඇතුළත විෂමතා වාර්තා කරන්න."
+    },
+    "sn": {
+      "documentTitle": "DZOKERA",
+      "orderNumber": "Dzoka#",
+      "date": "Return Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Return Total",
+      "itemsInTotalLabel": "Zvinhu zvakadzorerwa",
+      "notes": "Tapota tarisa zvinhu zvadzorerwa uchipikisa gwaro iri.",
+      "terms": "Mhan'ara kusawirirana mukati memaawa makumi mana nemasere ekudzoka kwagamuchirwa."
+    },
+    "sw": {
+      "documentTitle": "KURUDI",
+      "orderNumber": "Rudi #",
+      "date": "Tarehe ya Kurudi",
+      "reference": "Agizo Ref#",
+      "totalLabel": "Jumla ya Kurudisha",
+      "itemsInTotalLabel": "Vipengee vimerudishwa",
+      "notes": "Tafadhali angalia vipengee vilivyorejeshwa dhidi ya hati hii.",
+      "terms": "Ripoti tofauti ndani ya saa 48 baada ya kurejesha kupokelewa."
+    },
+    "so": {
+      "documentTitle": "SOO NOQO",
+      "orderNumber": "Soo noqo#",
+      "date": "Taariikhda soo celinta",
+      "reference": "Dalbo Tixraac #",
+      "totalLabel": "Soo Celinta Wadarta",
+      "itemsInTotalLabel": "Alaabta la soo celiyay",
+      "notes": "Fadlan ka hubi alaabta la soo celiyay dukumeentigan.",
+      "terms": "Ka warbixi khilaafaadyada 48 saacadood gudahood laga bilaabo soo noqoshada."
+    },
+    "te": {
+      "documentTitle": "తిరిగి వెళ్ళు",
+      "orderNumber": "రిటర్న్#",
+      "date": "తిరిగి వచ్చే తేదీ",
+      "reference": "ఆర్డర్ Ref#",
+      "totalLabel": "రిటర్న్ మొత్తం",
+      "itemsInTotalLabel": "వస్తువులు తిరిగి వచ్చాయి",
+      "notes": "దయచేసి ఈ పత్రానికి వ్యతిరేకంగా తిరిగి వచ్చిన అంశాలను తనిఖీ చేయండి.",
+      "terms": "రిటర్న్ అందుకున్న 48 గంటలలోపు వ్యత్యాసాలను నివేదించండి."
+    },
+    "ti": {
+      "documentTitle": "ተመለስ",
+      "orderNumber": "ተመለስ#",
+      "date": "የመመለሻ ቀን",
+      "reference": "Ref# ይዘዙ",
+      "totalLabel": "ጠቅላላ መመለሻ",
+      "itemsInTotalLabel": "እቃዎች ተመልሰዋል።",
+      "notes": "እባክዎ የተመለሱትን እቃዎች ከዚህ ሰነድ ጋር ያረጋግጡ።",
+      "terms": "መመለሻው በደረሰ በ 48 ሰዓታት ውስጥ አለመግባባቶችን ሪፖርት ያድርጉ።"
+    },
+    "su": {
+      "documentTitle": "PULIH",
+      "orderNumber": "Balikkeun#",
+      "date": "Tanggal Balik",
+      "reference": "Pemesanan Ref#",
+      "totalLabel": "Balikkeun Total",
+      "itemsInTotalLabel": "Barang dipulangkeun",
+      "notes": "Punten parios barang anu dipulangkeun kana dokumén ieu.",
+      "terms": "Ngalaporkeun discrepancies dina 48 jam ti mulang keur narima."
+    },
+    "to": {
+      "documentTitle": "RETURN",
+      "orderNumber": "Return#",
+      "date": "Return Date",
+      "reference": "Order Ref#",
+      "totalLabel": "Return Total",
+      "itemsInTotalLabel": "Items returned",
+      "notes": "Please check returned items against this document.",
+      "terms": "Report discrepancies within 48 hours of the return being received."
+    },
+    "tt": {
+      "documentTitle": "ВОЗВРАТ",
+      "orderNumber": "Возврат#",
+      "date": "Дата возвращения",
+      "reference": "Номер заказа",
+      "totalLabel": "Общий возврат",
+      "itemsInTotalLabel": "Товары возвращены",
+      "notes": "Пожалуйста, проверьте возвращенные товары по этому документу.",
+      "terms": "Сообщите о несоответствиях в течение 48 часов с момента получения возврата."
+    },
+    "tg": {
+      "documentTitle": "БОЗГАШТ",
+      "orderNumber": "Бозгашт#",
+      "date": "Санаи бозгашт",
+      "reference": "Ref # фармоиш",
+      "totalLabel": "Бозгашти умумии",
+      "itemsInTotalLabel": "Ададҳо баргардонида шуданд",
+      "notes": "Лутфан ашёи баргардонидашударо бо ин ҳуҷҷат санҷед.",
+      "terms": "Дар бораи ихтилофот дар давоми 48 соат пас аз гирифтани баргардонидан гузориш диҳед."
+    },
+    "tk": {
+      "documentTitle": "DÖNÜŞ",
+      "orderNumber": "Dönüş#",
+      "date": "Dönüş Tarihi",
+      "reference": "Sipariş Referans Numarası",
+      "totalLabel": "Toplam İade",
+      "itemsInTotalLabel": "İade edilen ürünler",
+      "notes": "Lütfen iade edilen ürünleri bu belgeye göre kontrol edin.",
+      "terms": "İade alındıktan sonraki 48 saat içinde tutarsızlıkları bildirin."
+    },
+    "ur": {
+      "documentTitle": "واپسی",
+      "orderNumber": "واپسی#",
+      "date": "واپسی کی تاریخ",
+      "reference": "آرڈر ریفری#",
+      "totalLabel": "کل واپسی",
+      "itemsInTotalLabel": "اشیاء واپس آ گئیں۔",
+      "notes": "براہ کرم اس دستاویز کے خلاف لوٹے گئے آئٹمز کو چیک کریں۔",
+      "terms": "واپسی موصول ہونے کے 48 گھنٹوں کے اندر اندر تضادات کی اطلاع دیں۔"
+    },
+    "wo": {
+      "documentTitle": "RETOUR",
+      "orderNumber": "Retour#",
+      "date": "Date de retour",
+      "reference": "Numéro de référence de la commande",
+      "totalLabel": "Retour total",
+      "itemsInTotalLabel": "Articles retournés",
+      "notes": "Veuillez vérifier les articles retournés par rapport à ce document.",
+      "terms": "Signalez les écarts dans les 48 heures suivant la réception du retour."
+    },
+    "uz": {
+      "documentTitle": "QAYTISH",
+      "orderNumber": "Qaytish#",
+      "date": "Qaytish sanasi",
+      "reference": "Buyurtma Ref#",
+      "totalLabel": "Jami qaytish",
+      "itemsInTotalLabel": "Elementlar qaytarildi",
+      "notes": "Qaytarilgan narsalarni ushbu hujjat bilan tekshiring.",
+      "terms": "Deklaratsiya olinganidan keyin 48 soat ichida nomuvofiqliklar haqida xabar bering."
+    },
+    "xh": {
+      "documentTitle": "BUYELA",
+      "orderNumber": "Buyela#",
+      "date": "Umhla wokuBuyisa",
+      "reference": "I-odolo yeRef#",
+      "totalLabel": "Imbuyekezo iyonke",
+      "itemsInTotalLabel": "Izinto zibuyisiwe",
+      "notes": "Nceda ujonge izinto ezibuyisiweyo ngokuchasene nolu xwebhu.",
+      "terms": "Xela ukungangqinelani kwiiyure ezingama-48 emva kokuba kufunyenwe imbuyekezo."
+    },
+    "ug": {
+      "documentTitle": "قايتىش",
+      "orderNumber": "قايتىش #",
+      "date": "قايتىش ۋاقتى",
+      "reference": "زاكاز Ref #",
+      "totalLabel": "قايتىش ئومۇمىي",
+      "itemsInTotalLabel": "تۈرلەر قايتۇرۇلدى",
+      "notes": "بۇ ھۆججەتكە قارشى قايتۇرۇلغان تۈرلەرنى تەكشۈرۈپ بېقىڭ.",
+      "terms": "قايتۇرۇلغاندىن كېيىنكى 48 سائەت ئىچىدە ئوخشىماسلىقنى دوكلات قىلىڭ."
+    },
+    "zu": {
+      "documentTitle": "BUYISA",
+      "orderNumber": "Buyela#",
+      "date": "Idethi Yokubuya",
+      "reference": "I-oda Ref#",
+      "totalLabel": "Buyisela Inani",
+      "itemsInTotalLabel": "Izinto zibuyisiwe",
+      "notes": "Sicela uhlole izinto ezibuyisiwe ngokumelene nale dokhumenti.",
+      "terms": "Bika ukungqubuzana kungakapheli amahora angama-48 ngemuva kokutholwa kwembuyiselo."
+    },
+    "yo": {
+      "documentTitle": "PADA",
+      "orderNumber": "Pada#",
+      "date": "Ọjọ Ipadabọ",
+      "reference": "Paṣẹ Ref#",
+      "totalLabel": "Pada Lapapọ",
+      "itemsInTotalLabel": "Awọn nkan pada",
+      "notes": "Jọwọ ṣayẹwo awọn ohun ti o pada lodi si iwe-ipamọ yii.",
+      "terms": "Jabọ awọn aiṣedeede laarin awọn wakati 48 ti ipadabọ ti o gba."
+    },
+    "yi": {
+      "documentTitle": "צוריקקומען",
+      "orderNumber": "צוריקקומען#",
+      "date": "צוריקקומען טאָג",
+      "reference": "סדר רעפערס #",
+      "totalLabel": "צוריקקומען גאַנץ",
+      "itemsInTotalLabel": "זאכן אומגעקערט",
+      "notes": "ביטע טשעק צוריק ייטאַמז קעגן דעם דאָקומענט.",
+      "terms": "באַריכט דיסקרעפּאַנסיז ין 48 שעה פון די קריק באקומען."
+    }
+  },
+  "invoice": {
+    "ak": {
+      "documentTitle": "INVOICE HO NSƐM",
+      "orderNumber": "Invoice# a wɔde tua ho ka#",
+      "date": "Invoice Date a Wɔde Bɔ Ka"
+    },
+    "af": {
+      "documentTitle": "FAKTUUR",
+      "orderNumber": "Faktuur#",
+      "date": "Faktuurdatum"
+    },
+    "am": {
+      "documentTitle": "መጠየቂያ",
+      "orderNumber": "ደረሰኝ#",
+      "date": "የክፍያ መጠየቂያ ቀን"
+    },
+    "as": {
+      "documentTitle": "চালান",
+      "orderNumber": "চালান#",
+      "date": "চালানের তারিখ"
+    },
+    "bn": {
+      "documentTitle": "চালান",
+      "orderNumber": "চালান#",
+      "date": "চালানের তারিখ"
+    },
+    "bm": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "br": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "az": {
+      "documentTitle": "QİYMƏT",
+      "orderNumber": "Faktura#",
+      "date": "Faktura Tarixi"
+    },
+    "ckb": {
+      "documentTitle": "BATÛNA",
+      "orderNumber": "fatûre#",
+      "date": "Dîroka fatûre"
+    },
+    "dz": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Invoice Date"
+    },
+    "ce": {
+      "documentTitle": "СЧЕТ",
+      "orderNumber": "Номер счета",
+      "date": "Дата счета"
+    },
+    "bo": {
+      "documentTitle": "发票",
+      "orderNumber": "发票＃",
+      "date": "发票日期"
+    },
+    "ee": {
+      "documentTitle": "INVOICE ƑE NUÐEÐEŊUTI",
+      "orderNumber": "Adzɔxegbalẽvi#",
+      "date": "Ɣletiŋkeke si dzi Woaxe Adzɔxexe"
+    },
+    "ff": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "fa": {
+      "documentTitle": "فاکتور",
+      "orderNumber": "فاکتور شماره",
+      "date": "تاریخ فاکتور"
+    },
+    "eo": {
+      "documentTitle": "FAKTURO",
+      "orderNumber": "Fakturo#",
+      "date": "Dato de Fakturo"
+    },
+    "fo": {
+      "documentTitle": "FAKTURA",
+      "orderNumber": "Faktura nr.",
+      "date": "Fakturadato"
+    },
+    "fy": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Invoice Date"
+    },
+    "gu": {
+      "documentTitle": "ઇન્વોઇસ",
+      "orderNumber": "ઇન્વોઇસ#",
+      "date": "ભરતિયું તારીખ"
+    },
+    "fil": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Petsa ng Invoice"
+    },
+    "gd": {
+      "documentTitle": "FIOSRACHADH",
+      "orderNumber": "Fàirdeal #",
+      "date": "Ceann-latha Fàirdeal"
+    },
+    "hy": {
+      "documentTitle": "ԻՆՎՈՅՍ",
+      "orderNumber": "Հաշիվ-ապրանքագիր #",
+      "date": "Հաշիվ-ապրանքագրի ամսաթիվը"
+    },
+    "ia": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Invoice Date"
+    },
+    "gv": {
+      "documentTitle": "sonrasc",
+      "orderNumber": "Sonrasc #",
+      "date": "Dáta Sonraisc"
+    },
+    "ha": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Daftari#",
+      "date": "Ranar daftari"
+    },
+    "ig": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "akwụkwọ ọnụahịa#",
+      "date": "Ụbọchị akwụkwọ ọnụahịa"
+    },
+    "ii": {
+      "documentTitle": "发票",
+      "orderNumber": "发票＃",
+      "date": "发票日期"
+    },
+    "ka": {
+      "documentTitle": "ინვოისი",
+      "orderNumber": "ინვოისი #",
+      "date": "ინვოისის თარიღი"
+    },
+    "jv": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Tanggal Invoice"
+    },
+    "kl": {
+      "documentTitle": "FAKTURA",
+      "orderNumber": "Faktura nr.",
+      "date": "Fakturadato"
+    },
+    "ki": {
+      "documentTitle": "ankara",
+      "orderNumber": "Ankara#",
+      "date": "Tarehe ya ankara"
+    },
+    "kk": {
+      "documentTitle": "шот-фактура",
+      "orderNumber": "Шот-фактура#",
+      "date": "Шот-фактура күні"
+    },
+    "kn": {
+      "documentTitle": "ಸರಕುಪಟ್ಟಿ",
+      "orderNumber": "ಸರಕುಪಟ್ಟಿ#",
+      "date": "ಸರಕುಪಟ್ಟಿ ದಿನಾಂಕ"
+    },
+    "ku": {
+      "documentTitle": "BATÛNA",
+      "orderNumber": "fatûre#",
+      "date": "Dîroka fatûre"
+    },
+    "km": {
+      "documentTitle": "វិក័យប័ត្រ",
+      "orderNumber": "វិក្កយបត្រ#",
+      "date": "កាលបរិច្ឆេទវិក្កយបត្រ"
+    },
+    "ks": {
+      "documentTitle": "انوائس",
+      "orderNumber": "رسید#",
+      "date": "رسید کی تاریخ"
+    },
+    "lg": {
+      "documentTitle": "ankara",
+      "orderNumber": "Ankara#",
+      "date": "Tarehe ya ankara"
+    },
+    "ln": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "kw": {
+      "documentTitle": "ANFONEB",
+      "orderNumber": "Anfoneb #",
+      "date": "Dyddiad Anfoneb"
+    },
+    "lu": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "ky": {
+      "documentTitle": "ИНВОУС",
+      "orderNumber": "Эсеп-фактура#",
+      "date": "Эсеп-фактура датасы"
+    },
+    "lo": {
+      "documentTitle": "ໃບເກັບເງິນ",
+      "orderNumber": "ໃບເກັບເງິນ#",
+      "date": "ວັນທີໃບແຈ້ງໜີ້"
+    },
+    "ml": {
+      "documentTitle": "ഇൻവോയ്സ്",
+      "orderNumber": "ഇൻവോയ്സ്#",
+      "date": "ഇൻവോയ്സ് തീയതി"
+    },
+    "mg": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "#\nFaktiora#",
+      "date": "#\nDaty faktiora"
+    },
+    "mr": {
+      "documentTitle": "इनव्हॉइस",
+      "orderNumber": "बीजक#",
+      "date": "चलन तारीख"
+    },
+    "mn": {
+      "documentTitle": "Нэхэмжлэх",
+      "orderNumber": "Нэхэмжлэх#",
+      "date": "Нэхэмжлэлийн огноо"
+    },
+    "mi": {
+      "documentTitle": "PUTANGA",
+      "orderNumber": "nama #",
+      "date": "Te Ra Invoice"
+    },
+    "my": {
+      "documentTitle": "ငွေတောင်းခံလွှာ",
+      "orderNumber": "ပြေစာ#",
+      "date": "ပြေစာနေ့စွဲ"
+    },
+    "nb": {
+      "documentTitle": "FAKTURA",
+      "orderNumber": "Fakturanummer",
+      "date": "Fakturadato"
+    },
+    "nn": {
+      "documentTitle": "FAKTURA",
+      "orderNumber": "Fakturanummer",
+      "date": "Fakturadato"
+    },
+    "nd": {
+      "documentTitle": "I-INVOICE",
+      "orderNumber": "I-invoyisi#",
+      "date": "Idethi ye-invoyisi"
+    },
+    "ne": {
+      "documentTitle": "इनभ्वाइस",
+      "orderNumber": "इनभ्वाइस#",
+      "date": "इनभ्वाइस मिति"
+    },
+    "os": {
+      "documentTitle": "СЧЕТ",
+      "orderNumber": "Номер счета",
+      "date": "Дата счета"
+    },
+    "pa": {
+      "documentTitle": "ਇਨਵੌਇਸ",
+      "orderNumber": "ਚਲਾਨ#",
+      "date": "ਇਨਵੌਇਸ ਮਿਤੀ"
+    },
+    "om": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Guyyaa Invoice"
+    },
+    "ps": {
+      "documentTitle": "بلنه",
+      "orderNumber": "رسید#",
+      "date": "د رسید نیټه"
+    },
+    "qu": {
+      "documentTitle": "FACTURA",
+      "orderNumber": "Factura#",
+      "date": "Fecha de factura"
+    },
+    "rm": {
+      "documentTitle": "RECHNUNG",
+      "orderNumber": "Rechnung#",
+      "date": "Rechnungsdatum"
+    },
+    "or": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "ଇନଭଏସ୍ #",
+      "date": "ଇନଭଏସ୍ ତାରିଖ |"
+    },
+    "sa": {
+      "documentTitle": "चालान",
+      "orderNumber": "चालान#",
+      "date": "चालान दिनांक"
+    },
+    "sc": {
+      "documentTitle": "FATTURA",
+      "orderNumber": "Fattura n.",
+      "date": "Data della fattura"
+    },
+    "rw": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Inyemezabuguzi #",
+      "date": "Itariki ya fagitire"
+    },
+    "rn": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Inyemezabuguzi #",
+      "date": "Itariki ya fagitire"
+    },
+    "sg": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "se": {
+      "documentTitle": "FAKTURA",
+      "orderNumber": "Fakturanummer",
+      "date": "Fakturadato"
+    },
+    "sd": {
+      "documentTitle": "انوائس",
+      "orderNumber": "انوائس#",
+      "date": "انوائس جي تاريخ"
+    },
+    "si": {
+      "documentTitle": "ඉන්වොයිසිය",
+      "orderNumber": "ඉන්වොයිසිය#",
+      "date": "ඉන්වොයිසි දිනය"
+    },
+    "sn": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Invoice Date"
+    },
+    "sw": {
+      "documentTitle": "ankara",
+      "orderNumber": "Ankara#",
+      "date": "Tarehe ya ankara"
+    },
+    "so": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "qaansheegta#",
+      "date": "Taariikhda qaansheegta"
+    },
+    "te": {
+      "documentTitle": "ఇన్వాయిస్",
+      "orderNumber": "ఇన్వాయిస్#",
+      "date": "ఇన్వాయిస్ తేదీ"
+    },
+    "ti": {
+      "documentTitle": "መጠየቂያ",
+      "orderNumber": "ደረሰኝ#",
+      "date": "የክፍያ መጠየቂያ ቀን"
+    },
+    "su": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Tanggal invoice"
+    },
+    "to": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Invoice#",
+      "date": "Invoice Date"
+    },
+    "tt": {
+      "documentTitle": "СЧЕТ",
+      "orderNumber": "Номер счета",
+      "date": "Дата счета"
+    },
+    "tg": {
+      "documentTitle": "Ҳисобнома-фактура",
+      "orderNumber": "Ҳисобнома-фактура#",
+      "date": "Санаи ҳисобнома-фактура"
+    },
+    "tk": {
+      "documentTitle": "FATURA",
+      "orderNumber": "Fatura#",
+      "date": "Fatura Tarihi"
+    },
+    "ur": {
+      "documentTitle": "انوائس",
+      "orderNumber": "رسید#",
+      "date": "رسید کی تاریخ"
+    },
+    "wo": {
+      "documentTitle": "FACTURE",
+      "orderNumber": "Numéro de facture",
+      "date": "Date de facture"
+    },
+    "uz": {
+      "documentTitle": "INVOICS",
+      "orderNumber": "Invoys#",
+      "date": "Hisob-faktura sanasi"
+    },
+    "xh": {
+      "documentTitle": "I-INVOICE",
+      "orderNumber": "I-invoyisi#",
+      "date": "Umhla we-invoyisi"
+    },
+    "ug": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "تالون #",
+      "date": "تالون ۋاقتى"
+    },
+    "zu": {
+      "documentTitle": "I-INVOICE",
+      "orderNumber": "I-invoyisi#",
+      "date": "Idethi ye-invoyisi"
+    },
+    "yo": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "Iwe-owo#",
+      "date": "Ọjọ risiti"
+    },
+    "yi": {
+      "documentTitle": "INVOICE",
+      "orderNumber": "ינווויס #",
+      "date": "ינווויס טאָג"
+    }
+  }
+}

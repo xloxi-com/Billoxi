@@ -120,6 +120,16 @@ import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { PageLoader } from "../components/page-loader";
 import { templatePreviewLogoDataUrl } from "../template-preview-logo";
+import { useAdminI18n } from "../admin-i18n-context";
+import {
+  teT,
+  teTf,
+  teSectionTabLabel,
+  teDocumentBreadcrumb,
+  teCustomerFieldLabel,
+  teColumnFieldLabel,
+  type TemplateEditorMessageKey,
+} from "../admin-template-editor-i18n";
 
 const SalesOrderLiveDocument = lazy(() =>
   import("../components/sales-order-live-document").then((mod) => ({
@@ -501,6 +511,7 @@ function AppearanceColorField({
   fallback: string;
   onChange: (next: string) => void;
 }) {
+  const { language } = useAdminI18n();
   const hex = normalizeHexColor(value, fallback);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hsb, setHsb] = useState<HSBAColor>(() => hexToHsba(hex, fallback));
@@ -579,7 +590,7 @@ function AppearanceColorField({
               type="button"
               className="template-editor__color-swatch"
               style={{ backgroundColor: draft }}
-              aria-label={`Pick ${label} color`}
+              aria-label={teTf(language, "te.pickColor", { name: label })}
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((open) => !open)}
             />
@@ -597,7 +608,7 @@ function AppearanceColorField({
                 }}
               />
               <TextField
-                label="Hex"
+                label={teT(language, "te.hex")}
                 labelHidden
                 value={draft}
                 autoComplete="off"
@@ -1933,21 +1944,79 @@ function stopInputShortcutPropagation(
   }
 }
 
-const sectionItems: Array<{
-  id: EditorSection;
-  label: string;
-}> = [
-  { id: "general", label: "General" },
-  { id: "transaction", label: "Transaction Details" },
-  { id: "table", label: "Table" },
-  { id: "total", label: "Total" },
-  { id: "appearance", label: "Appearance" },
-  { id: "other", label: "Other Details" },
+const sectionItems: EditorSection[] = [
+  "general",
+  "transaction",
+  "table",
+  "total",
+  "appearance",
+  "other",
 ];
+
+const PAYMENT_STYLE_LABEL_KEYS: Record<
+  PaymentStatusStyle,
+  TemplateEditorMessageKey
+> = {
+  boxed: "te.payStyle1",
+  underTotal: "te.payStyle2",
+  inTotals: "te.payStyle3",
+  splitPanels: "te.payStyle4",
+  balanceBanner: "te.payStyle5",
+};
+
+const LOGO_POSITION_LABEL_KEYS: Record<
+  SalesOrderLogoPosition,
+  TemplateEditorMessageKey
+> = {
+  left: "te.pos.left",
+  right: "te.pos.right",
+  center: "te.pos.center",
+};
+
+const META_STYLE_LABEL_KEYS: Record<
+  SalesOrderMetaStyle,
+  TemplateEditorMessageKey
+> = {
+  boxed: "te.meta.boxed",
+  outline: "te.meta.outline",
+  plain: "te.meta.plain",
+  strip: "te.meta.strip",
+  card: "te.meta.card",
+  inverted: "te.meta.inverted",
+};
+
+const MARGIN_SIDE_LABEL_KEYS: Record<
+  "top" | "bottom" | "left" | "right",
+  TemplateEditorMessageKey
+> = {
+  top: "te.side.top",
+  bottom: "te.side.bottom",
+  left: "te.side.left",
+  right: "te.side.right",
+};
+
+const ADDRESS_SECTION_TITLE_KEYS: Record<
+  AddressSection,
+  TemplateEditorMessageKey
+> = {
+  billing: "te.tx.billing",
+  shipping: "te.tx.shipping",
+  customer: "te.tx.customer",
+};
+
+const ADDRESS_SECTION_SHOW_KEYS: Record<
+  AddressSection,
+  TemplateEditorMessageKey
+> = {
+  billing: "te.tx.showBilling",
+  shipping: "te.tx.showShipping",
+  customer: "te.tx.showCustomer",
+};
 
 export default function TemplateEditorPage() {
   const data = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const { language } = useAdminI18n();
   const fetcher = useFetcher<typeof action>();
   const customFieldsFetcher = useFetcher<{ sources: CustomFieldSource[] }>();
   const [customFieldSources, setCustomFieldSources] = useState<
@@ -2038,50 +2107,43 @@ export default function TemplateEditorPage() {
     "taxAmount",
     "amount",
   ]);
-  const documentTypeBreadcrumb =
-    (
-      {
-        "sales-order": "SALES ORDER",
-        invoice: "INVOICE",
-        draft: "DRAFT",
-        "credit-note": "CREDIT NOTE",
-        "packing-slip": "PACKING SLIP",
-        return: "RETURN",
-      } as Record<string, string>
-    )[data.documentType] || data.documentType.toUpperCase();
+  const documentTypeBreadcrumb = teDocumentBreadcrumb(
+    language,
+    data.documentType,
+  );
   const paymentStyleOptions = useMemo(() => {
     const allowed = adminCaps.paymentStatusStyles;
-    if (!allowed || allowed.length === 0) return PAYMENT_STATUS_STYLES;
-    return PAYMENT_STATUS_STYLES.filter((style) =>
-      allowed.includes(style.value),
-    );
-  }, [adminCaps.paymentStatusStyles]);
+    const styles =
+      !allowed || allowed.length === 0
+        ? PAYMENT_STATUS_STYLES
+        : PAYMENT_STATUS_STYLES.filter((style) =>
+            allowed.includes(style.value),
+          );
+    return styles.map((style) => ({
+      value: style.value,
+      label: teT(language, PAYMENT_STYLE_LABEL_KEYS[style.value]),
+    }));
+  }, [adminCaps.paymentStatusStyles, language]);
   const logoPositionOptions = useMemo(() => {
     const allowed = adminCaps.logoPositions ?? ["left", "right", "center"];
-    return (
-      [
-        { value: "left" as const, label: "Left" },
-        { value: "right" as const, label: "Right" },
-        { value: "center" as const, label: "Center" },
-      ] as const
-    ).filter((option) => allowed.includes(option.value));
-  }, [adminCaps.logoPositions]);
+    return (["left", "right", "center"] as const)
+      .filter((value) => allowed.includes(value))
+      .map((value) => ({
+        value,
+        label: teT(language, LOGO_POSITION_LABEL_KEYS[value]),
+      }));
+  }, [adminCaps.logoPositions, language]);
   const metaStyleOptions = useMemo(() => {
     const allowed =
       adminCaps.metaStyles ??
       (["boxed", "outline", "plain", "strip", "card", "inverted"] as const);
-    const labels: Record<SalesOrderMetaStyle, string> = {
-      boxed: "Boxed (gray)",
-      outline: "Outline",
-      plain: "Plain",
-      strip: "Accent strip",
-      card: "Card",
-      inverted: "Inverted",
-    };
-    return (Object.keys(labels) as SalesOrderMetaStyle[])
+    return (Object.keys(META_STYLE_LABEL_KEYS) as SalesOrderMetaStyle[])
       .filter((value) => allowed.includes(value))
-      .map((value) => ({ value, label: labels[value] }));
-  }, [adminCaps.metaStyles]);
+      .map((value) => ({
+        value,
+        label: teT(language, META_STYLE_LABEL_KEYS[value]),
+      }));
+  }, [adminCaps.metaStyles, language]);
   const [activeSection, setActiveSection] =
     useState<EditorSection>("general");
   const [settings, setSettings] = useState<TemplateEditorSettings>(() =>
@@ -2143,7 +2205,7 @@ export default function TemplateEditorPage() {
   } | null>(null);
   const isSaving = fetcher.state !== "idle";
   const selectedTab = Math.max(
-    sectionItems.findIndex((section) => section.id === activeSection),
+    sectionItems.findIndex((section) => section === activeSection),
     0,
   );
   const pendingSaveRef = useRef<TemplateEditorSettings | null>(null);
@@ -2247,7 +2309,7 @@ export default function TemplateEditorPage() {
       setSavedSettings(committed);
       setSettings(committed);
       if (typeof shopify !== "undefined" && shopify.toast) {
-        shopify.toast.show("Template settings saved");
+        shopify.toast.show(teT(language, "te.savedToast"));
       }
       try {
         shopify?.saveBar?.hide("template-editor-save-bar");
@@ -2600,7 +2662,7 @@ export default function TemplateEditorPage() {
           <button
             type="button"
             className="template-editor__drag-handle"
-            aria-label={`Drag to reorder ${title}`}
+            aria-label={teTf(language, "te.dragReorder", { name: title })}
             draggable
             onDragStart={(event) => {
               event.stopPropagation();
@@ -2676,7 +2738,7 @@ export default function TemplateEditorPage() {
           <div className="template-editor__accordion-body">
             <BlockStack gap="400">
               <Checkbox
-                label={`Show ${title.toLowerCase()} on document`}
+                label={teT(language, ADDRESS_SECTION_SHOW_KEYS[section])}
                 checked={sectionVisible}
                 onChange={(checked) => {
                   const nextHeader = {
@@ -2697,13 +2759,13 @@ export default function TemplateEditorPage() {
 
               <Text as="p" variant="bodySm" tone="subdued">
                 {section === "customer"
-                  ? "Drag to reorder fields. Expand Phone or Email to set an optional custom label. Customer metafields appear in a separate list below."
-                  : "Drag to reorder fields. Expand Phone or Email to set an optional custom label."}
+                  ? teT(language, "te.tx.dragFieldsCustomer")
+                  : teT(language, "te.tx.dragFields")}
               </Text>
 
               <FormLayout>
                 <TextField
-                  label="Section title"
+                  label={teT(language, "te.tx.sectionTitle")}
                   value={sectionTitleValue}
                   onChange={(value) =>
                     updateSettings({
@@ -2714,7 +2776,7 @@ export default function TemplateEditorPage() {
                     })
                   }
                   autoComplete="off"
-                  helpText="Appears above this block on the document."
+                  helpText={teT(language, "te.tx.sectionTitleHelp")}
                   disabled={!sectionVisible}
                 />
               </FormLayout>
@@ -2760,7 +2822,7 @@ export default function TemplateEditorPage() {
                   >
                     <BlockStack gap="0">
                       {entries.map(({ field, index }, rowIndex) => {
-                        const fieldTitle =
+                        const fieldFallbackTitle =
                           section === "customer"
                             ? customerDetailFieldTitle(
                                 field,
@@ -2769,6 +2831,11 @@ export default function TemplateEditorPage() {
                             : isCustomerDetailKey(field.key)
                               ? customerDetailFallbacks[field.key]
                               : field.label || field.key;
+                        const fieldTitle = teCustomerFieldLabel(
+                          language,
+                          field.key,
+                          fieldFallbackTitle,
+                        );
                         const supportsLabel =
                           customerDetailKeysWithLabel.has(
                             field.key as CustomerDetailKey,
@@ -2846,7 +2913,9 @@ export default function TemplateEditorPage() {
                                       draggable
                                       role="button"
                                       tabIndex={0}
-                                      aria-label={`Drag to reorder ${fieldTitle}`}
+                                      aria-label={teTf(language, "te.dragReorder", {
+                                        name: fieldTitle,
+                                      })}
                                       onDragStart={(event) => {
                                         event.dataTransfer.effectAllowed =
                                           "move";
@@ -2867,7 +2936,9 @@ export default function TemplateEditorPage() {
                                       />
                                     </div>
                                     <Checkbox
-                                      label={`Show ${fieldTitle}`}
+                                      label={teTf(language, "te.showField", {
+                                        name: fieldTitle,
+                                      })}
                                       checked={field.enabled}
                                       onChange={(enabled) =>
                                         updateAddressField(section, index, {
@@ -2886,8 +2957,12 @@ export default function TemplateEditorPage() {
                                       }
                                       accessibilityLabel={
                                         isExpanded
-                                          ? `Hide label for ${fieldTitle}`
-                                          : `Edit label for ${fieldTitle}`
+                                          ? teTf(language, "te.hideLabelFor", {
+                                              name: fieldTitle,
+                                            })
+                                          : teTf(language, "te.editLabelFor", {
+                                              name: fieldTitle,
+                                            })
                                       }
                                       ariaExpanded={isExpanded}
                                       ariaControls={fieldPanelId}
@@ -2911,7 +2986,7 @@ export default function TemplateEditorPage() {
                                     <Box paddingBlockStart="300">
                                       <Bleed marginInline="0">
                                         <TextField
-                                          label="Custom label"
+                                          label={teT(language, "te.tx.customLabel")}
                                           value={field.label}
                                           placeholder={fieldTitle}
                                           onChange={(label) =>
@@ -2922,7 +2997,10 @@ export default function TemplateEditorPage() {
                                             )
                                           }
                                           autoComplete="off"
-                                          helpText="Optional. Leave blank to use the default name."
+                                          helpText={teT(
+                                            language,
+                                            "te.tx.customLabelHelp",
+                                          )}
                                         />
                                       </Bleed>
                                     </Box>
@@ -2942,29 +3020,27 @@ export default function TemplateEditorPage() {
                   <BlockStack gap="400">
                     <BlockStack gap="200">
                       <Text as="h4" variant="headingSm">
-                        Visible fields
+                        {teT(language, "te.tx.visibleFields")}
                       </Text>
                       {renderFieldList(standardEntries)}
                     </BlockStack>
                     {section === "customer" ? (
                       <BlockStack gap="200">
                         <Text as="h4" variant="headingSm">
-                          Customer metafields
+                          {teT(language, "te.tx.customerMetafields")}
                         </Text>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Shopify customer metafields appear here automatically.
-                          Expand a field to set an optional custom label.
+                          {teT(language, "te.tx.customerMetafieldsHelp")}
                         </Text>
                         {customFieldsLoading && metafieldEntries.length === 0 ? (
                           <Text as="p" variant="bodySm" tone="subdued">
-                            Loading customer metafields…
+                            {teT(language, "te.tx.loadingMetafields")}
                           </Text>
                         ) : metafieldEntries.length > 0 ? (
                           renderFieldList(metafieldEntries)
                         ) : customFieldsLoadRequested ? (
                           <Text as="p" variant="bodySm" tone="subdued">
-                            No customer metafields found. Create them in Shopify
-                            Admin under Customer metafield definitions.
+                            {teT(language, "te.tx.noMetafields")}
                           </Text>
                         ) : null}
                       </BlockStack>
@@ -2989,15 +3065,15 @@ export default function TemplateEditorPage() {
           disabled={!isDirty || isSaving || undefined}
           loading={isSaving || undefined}
         >
-          {isSaving ? "Saving…" : "Save"}
+          {isSaving ? teT(language, "te.saving") : teT(language, "te.save")}
         </button>
         <button type="button" onClick={discard} disabled={isSaving || undefined}>
-          Discard
+          {teT(language, "te.discard")}
         </button>
       </SaveBar>
-      <s-page heading="Edit Template" inlineSize="large">
+      <s-page heading={teT(language, "te.pageTitle")} inlineSize="large">
         <s-link slot="breadcrumb-actions" href="/app/templates">
-          Templates
+          {teT(language, "te.breadcrumbTemplates")}
         </s-link>
         <s-link
           slot="breadcrumb-actions"
@@ -3011,14 +3087,14 @@ export default function TemplateEditorPage() {
               <div className="template-editor__tabs">
                 <Tabs
                   tabs={sectionItems.map((section) => ({
-                    id: section.id,
-                    content: section.label,
-                    panelID: `template-editor-panel-${section.id}`,
+                    id: section,
+                    content: teSectionTabLabel(language, section),
+                    panelID: `template-editor-panel-${section}`,
                   }))}
                   selected={selectedTab}
                   onSelect={(index) => {
                     const section = sectionItems[index];
-                    if (section) setActiveSection(section.id);
+                    if (section) setActiveSection(section);
                   }}
                 />
               </div>
@@ -3032,20 +3108,20 @@ export default function TemplateEditorPage() {
                 {activeSection === "general" ? (
                   <BlockStack gap="500">
                     <Text as="h2" variant="headingLg">
-                      Template Properties
+                      {teT(language, "te.general.title")}
                     </Text>
                     <Select
-                      label="Language"
+                      label={teT(language, "te.general.language")}
                       options={TEMPLATE_LANGUAGES.map((entry) => ({
                         value: entry.value,
                         label: entry.label,
                       }))}
                       value={normalizeTemplateLanguage(settings.language)}
                       onChange={changeTemplateLanguage}
-                      helpText="Translates all document labels (Bill To, totals, columns, notes title, and more)."
+                      helpText={teT(language, "te.general.languageHelp")}
                     />
                     <Select
-                      label="Date"
+                      label={teT(language, "te.general.date")}
                       options={TEMPLATE_DATE_FORMATS.map((entry) => ({
                         value: entry.value,
                         label: entry.label,
@@ -3056,10 +3132,10 @@ export default function TemplateEditorPage() {
                           dateFormat: normalizeTemplateDateFormat(dateFormat),
                         })
                       }
-                      helpText="Format used for Order Date and Expected Shipment Date on this template."
+                      helpText={teT(language, "te.general.dateHelp")}
                     />
                     <Select
-                      label="Currency"
+                      label={teT(language, "te.general.currency")}
                       options={TEMPLATE_CURRENCY_DISPLAYS.map((entry) => ({
                         value: entry.value,
                         label: entry.label,
@@ -3073,11 +3149,11 @@ export default function TemplateEditorPage() {
                             normalizeTemplateCurrencyDisplay(currencyDisplay),
                         })
                       }
-                      helpText="Show money as a currency symbol or ISO letters. Works with every Shopify store currency."
+                      helpText={teT(language, "te.general.currencyHelp")}
                     />
                     <BlockStack gap="200">
                       <Text as="h3" variant="headingSm">
-                        Paper Size
+                        {teT(language, "te.general.paperSize")}
                       </Text>
                       <InlineStack gap="400">
                         {(["A5", "A4", "Letter"] as const).map((size) => (
@@ -3094,17 +3170,19 @@ export default function TemplateEditorPage() {
                     </BlockStack>
                     <BlockStack gap="200">
                       <Text as="h3" variant="headingSm">
-                        Orientation
+                        {teT(language, "te.general.orientation")}
                       </Text>
                       <InlineStack gap="400">
                         {(["portrait", "landscape"] as const).map(
                           (orientation) => (
                             <RadioButton
                               key={orientation}
-                              label={
-                                orientation[0].toUpperCase() +
-                                orientation.slice(1)
-                              }
+                              label={teT(
+                                language,
+                                orientation === "portrait"
+                                  ? "te.general.portrait"
+                                  : "te.general.landscape",
+                              )}
                               checked={settings.orientation === orientation}
                               id={`orientation-${orientation}`}
                               name="orientation"
@@ -3118,14 +3196,14 @@ export default function TemplateEditorPage() {
                     </BlockStack>
                     <BlockStack gap="200">
                       <Text as="h3" variant="headingSm">
-                        Margins (in inches)
+                        {teT(language, "te.general.margins")}
                       </Text>
                       <InlineGrid columns={4} gap="300">
                         {(["top", "bottom", "left", "right"] as const).map(
                           (side) => (
                             <TextField
                               key={side}
-                              label={side[0].toUpperCase() + side.slice(1)}
+                              label={teT(language, MARGIN_SIDE_LABEL_KEYS[side])}
                               type="number"
                               value={String(settings.margins[side])}
                               onChange={(value) =>
@@ -3148,11 +3226,11 @@ export default function TemplateEditorPage() {
                 {activeSection === "appearance" ? (
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingLg">
-                      Appearance
+                      {teT(language, "te.appearance.title")}
                     </Text>
                     <BlockStack gap="100">
                       <Text as="p" variant="bodyMd">
-                        Font
+                        {teT(language, "te.appearance.font")}
                       </Text>
                       <Popover
                         active={fontMenuOpen}
@@ -3205,24 +3283,24 @@ export default function TemplateEditorPage() {
                         [
                           {
                             id: "general",
-                            title: "General",
+                            titleKey: "te.appearance.cat.general",
                             sizes: [] as const,
                             colors: [
                               [
                                 "background",
-                                "Background",
+                                "te.color.background",
                                 settings.backgroundColor,
                                 "#ffffff",
                               ],
                               [
                                 "textColor",
-                                "Text",
+                                "te.color.text",
                                 settings.appearance.textColor,
                                 defaultAppearance.textColor,
                               ],
                               [
                                 "mutedColor",
-                                "Muted",
+                                "te.color.muted",
                                 settings.appearance.mutedColor,
                                 defaultAppearance.mutedColor,
                               ],
@@ -3230,22 +3308,34 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "document-title",
-                            title: "Document title",
+                            titleKey: "te.appearance.cat.documentTitle",
                             sizes: [
-                              ["titleFontSize", "Title", 14, 48, 28],
-                              ["orderNumberFontSize", "Order #", 8, 24, 12],
-                              ["metadataFontSize", "Date / Ref#", 7, 18, 12],
+                              ["titleFontSize", "te.sizeLabel.title", 14, 48, 28],
+                              [
+                                "orderNumberFontSize",
+                                "te.sizeLabel.orderNum",
+                                8,
+                                24,
+                                12,
+                              ],
+                              [
+                                "metadataFontSize",
+                                "te.sizeLabel.dateRef",
+                                7,
+                                18,
+                                12,
+                              ],
                             ] as const,
                             colors: [
                               [
                                 "headingColor",
-                                "Heading",
+                                "te.color.heading",
                                 settings.appearance.headingColor,
                                 defaultAppearance.headingColor,
                               ],
                               [
                                 "orderNumberColor",
-                                "Sales order #",
+                                "te.color.orderNumber",
                                 settings.appearance.orderNumberColor,
                                 defaultAppearance.orderNumberColor,
                               ],
@@ -3253,12 +3343,18 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "organization",
-                            title: "Organization",
+                            titleKey: "te.appearance.cat.organization",
                             sizes: [
-                              ["organizationFontSize", "Org", 8, 24, 12],
+                              [
+                                "organizationFontSize",
+                                "te.sizeLabel.org",
+                                8,
+                                24,
+                                12,
+                              ],
                               [
                                 "organizationDetailsFontSize",
-                                "Address",
+                                "te.sizeLabel.address",
                                 7,
                                 18,
                                 12,
@@ -3267,7 +3363,7 @@ export default function TemplateEditorPage() {
                             colors: [
                               [
                                 "organizationColor",
-                                "Organization",
+                                "te.color.organization",
                                 settings.appearance.organizationColor,
                                 defaultAppearance.organizationColor,
                               ],
@@ -3275,14 +3371,32 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "addresses",
-                            title: "Addresses",
+                            titleKey: "te.appearance.cat.addresses",
                             sizes: [
-                              ["addressLabelFontSize", "Label", 7, 18, 12],
-                              ["companyFontSize", "Company", 8, 24, 12],
-                              ["customerNameFontSize", "Name", 8, 24, 12],
+                              [
+                                "addressLabelFontSize",
+                                "te.sizeLabel.label",
+                                7,
+                                18,
+                                12,
+                              ],
+                              [
+                                "companyFontSize",
+                                "te.sizeLabel.company",
+                                8,
+                                24,
+                                12,
+                              ],
+                              [
+                                "customerNameFontSize",
+                                "te.sizeLabel.name",
+                                8,
+                                24,
+                                12,
+                              ],
                               [
                                 "customerDetailsFontSize",
-                                "Details",
+                                "te.sizeLabel.details",
                                 7,
                                 18,
                                 12,
@@ -3291,19 +3405,19 @@ export default function TemplateEditorPage() {
                             colors: [
                               [
                                 "companyColor",
-                                "Company",
+                                "te.color.company",
                                 settings.appearance.companyColor,
                                 defaultAppearance.companyColor,
                               ],
                               [
                                 "customerNameColor",
-                                "Name",
+                                "te.color.name",
                                 settings.appearance.customerNameColor,
                                 defaultAppearance.customerNameColor,
                               ],
                               [
                                 "customerDetailsColor",
-                                "Details",
+                                "te.color.details",
                                 settings.appearance.customerDetailsColor,
                                 defaultAppearance.customerDetailsColor,
                               ],
@@ -3311,45 +3425,51 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "table",
-                            title: "Table",
+                            titleKey: "te.appearance.cat.table",
                             sizes: [
                               [
                                 "tableHeaderFontSize",
-                                "Table header",
+                                "te.sizeLabel.tableHeader",
                                 7,
                                 18,
                                 12,
                               ],
-                              ["tableBodyFontSize", "Table body", 7, 18, 12],
+                              [
+                                "tableBodyFontSize",
+                                "te.sizeLabel.tableBody",
+                                7,
+                                18,
+                                12,
+                              ],
                             ] as const,
                             colors: [
                               [
                                 "tableHeaderBackground",
-                                "Table header",
+                                "te.color.tableHeader",
                                 settings.appearance.tableHeaderBackground,
                                 defaultAppearance.tableHeaderBackground,
                               ],
                               [
                                 "tableHeaderText",
-                                "Table text",
+                                "te.color.tableText",
                                 settings.appearance.tableHeaderText,
                                 defaultAppearance.tableHeaderText,
                               ],
                               [
                                 "tableBorderColor",
-                                "Table border",
+                                "te.color.tableBorder",
                                 settings.appearance.tableBorderColor,
                                 defaultAppearance.tableBorderColor,
                               ],
                               [
                                 "unitPriceColor",
-                                "Unit price",
+                                "te.color.unitPrice",
                                 settings.appearance.unitPriceColor,
                                 defaultAppearance.unitPriceColor,
                               ],
                               [
                                 "comparePriceColor",
-                                "Compare price",
+                                "te.color.comparePrice",
                                 settings.appearance.comparePriceColor,
                                 defaultAppearance.comparePriceColor,
                               ],
@@ -3357,14 +3477,20 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "totals",
-                            title: "Totals",
+                            titleKey: "te.appearance.cat.totals",
                             sizes: [
-                              ["totalsFontSize", "Totals", 8, 20, 12],
+                              [
+                                "totalsFontSize",
+                                "te.sizeLabel.totals",
+                                8,
+                                20,
+                                12,
+                              ],
                             ] as const,
                             colors: [
                               [
                                 "totalHighlightBackground",
-                                "Total highlight",
+                                "te.color.totalHighlight",
                                 settings.appearance
                                   .totalHighlightBackground,
                                 defaultAppearance.totalHighlightBackground,
@@ -3373,18 +3499,18 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "payment-status",
-                            title: "Paid Amount / Balance Due",
+                            titleKey: "te.appearance.cat.paidBalance",
                             sizes: [
                               [
                                 "paymentStatusLabelFontSize",
-                                "Label",
+                                "te.sizeLabel.label",
                                 7,
                                 18,
                                 12,
                               ],
                               [
                                 "paymentStatusValueFontSize",
-                                "Value",
+                                "te.sizeLabel.value",
                                 7,
                                 18,
                                 12,
@@ -3393,19 +3519,19 @@ export default function TemplateEditorPage() {
                             colors: [
                               [
                                 "paymentStatusLabelColor",
-                                "Label",
+                                "te.color.label",
                                 settings.appearance.paymentStatusLabelColor,
                                 defaultAppearance.paymentStatusLabelColor,
                               ],
                               [
                                 "paymentStatusValueColor",
-                                "Value",
+                                "te.color.value",
                                 settings.appearance.paymentStatusValueColor,
                                 defaultAppearance.paymentStatusValueColor,
                               ],
                               [
                                 "paymentStatusBorderColor",
-                                "Border",
+                                "te.color.border",
                                 settings.appearance.paymentStatusBorderColor,
                                 defaultAppearance.paymentStatusBorderColor,
                               ],
@@ -3413,25 +3539,25 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "tax-summary",
-                            title: "Tax Summary",
+                            titleKey: "te.appearance.cat.taxSummary",
                             sizes: [
                               [
                                 "taxSummaryTitleFontSize",
-                                "Title",
+                                "te.sizeLabel.title",
                                 7,
                                 18,
                                 12,
                               ],
                               [
                                 "taxSummaryHeaderFontSize",
-                                "Header",
+                                "te.sizeLabel.header",
                                 7,
                                 18,
                                 12,
                               ],
                               [
                                 "taxSummaryBodyFontSize",
-                                "Body",
+                                "te.sizeLabel.body",
                                 7,
                                 18,
                                 12,
@@ -3440,31 +3566,31 @@ export default function TemplateEditorPage() {
                             colors: [
                               [
                                 "taxSummaryTitleColor",
-                                "Title",
+                                "te.color.title",
                                 settings.appearance.taxSummaryTitleColor,
                                 defaultAppearance.taxSummaryTitleColor,
                               ],
                               [
                                 "taxSummaryHeaderBackground",
-                                "Header background",
+                                "te.color.headerBg",
                                 settings.appearance.taxSummaryHeaderBackground,
                                 defaultAppearance.taxSummaryHeaderBackground,
                               ],
                               [
                                 "taxSummaryHeaderText",
-                                "Header text",
+                                "te.color.headerText",
                                 settings.appearance.taxSummaryHeaderText,
                                 defaultAppearance.taxSummaryHeaderText,
                               ],
                               [
                                 "taxSummaryTextColor",
-                                "Body text",
+                                "te.color.bodyText",
                                 settings.appearance.taxSummaryTextColor,
                                 defaultAppearance.taxSummaryTextColor,
                               ],
                               [
                                 "taxSummaryBorderColor",
-                                "Border",
+                                "te.color.border",
                                 settings.appearance.taxSummaryBorderColor,
                                 defaultAppearance.taxSummaryBorderColor,
                               ],
@@ -3472,35 +3598,59 @@ export default function TemplateEditorPage() {
                           },
                           {
                             id: "notes-terms",
-                            title: "Notes & Terms",
+                            titleKey: "te.appearance.cat.notesTerms",
                             sizes: [
-                              ["notesLabelFontSize", "Notes label", 7, 18, 12],
-                              ["notesBodyFontSize", "Notes text", 7, 18, 12],
-                              ["termsLabelFontSize", "Terms label", 7, 18, 12],
-                              ["termsBodyFontSize", "Terms text", 7, 18, 12],
+                              [
+                                "notesLabelFontSize",
+                                "te.sizeLabel.notesLabel",
+                                7,
+                                18,
+                                12,
+                              ],
+                              [
+                                "notesBodyFontSize",
+                                "te.sizeLabel.notesText",
+                                7,
+                                18,
+                                12,
+                              ],
+                              [
+                                "termsLabelFontSize",
+                                "te.sizeLabel.termsLabel",
+                                7,
+                                18,
+                                12,
+                              ],
+                              [
+                                "termsBodyFontSize",
+                                "te.sizeLabel.termsText",
+                                7,
+                                18,
+                                12,
+                              ],
                             ] as const,
                             colors: [
                               [
                                 "notesLabelColor",
-                                "Notes label",
+                                "te.color.notesLabel",
                                 settings.appearance.notesLabelColor,
                                 defaultAppearance.notesLabelColor,
                               ],
                               [
                                 "notesBodyColor",
-                                "Notes text",
+                                "te.color.notesText",
                                 settings.appearance.notesBodyColor,
                                 defaultAppearance.notesBodyColor,
                               ],
                               [
                                 "termsLabelColor",
-                                "Terms label",
+                                "te.color.termsLabel",
                                 settings.appearance.termsLabelColor,
                                 defaultAppearance.termsLabelColor,
                               ],
                               [
                                 "termsBodyColor",
-                                "Terms text",
+                                "te.color.termsText",
                                 settings.appearance.termsBodyColor,
                                 defaultAppearance.termsBodyColor,
                               ],
@@ -3512,15 +3662,15 @@ export default function TemplateEditorPage() {
                           {index > 0 ? <Divider /> : null}
                           <BlockStack gap="200">
                             <Text as="h3" variant="headingSm">
-                              {category.title}
+                              {teT(language, category.titleKey)}
                             </Text>
                             {category.sizes.length > 0 ? (
                               <InlineGrid columns={2} gap="200">
                                 {category.sizes.map(
-                                  ([key, label, min, max, fallback]) => (
+                                  ([key, labelKey, min, max, fallback]) => (
                                     <AppearanceSizeField
                                       key={key}
-                                      label={label}
+                                      label={teT(language, labelKey)}
                                       min={min}
                                       max={max}
                                       fallback={fallback}
@@ -3538,10 +3688,10 @@ export default function TemplateEditorPage() {
                             ) : null}
                             <InlineGrid columns={2} gap="200">
                               {category.colors.map(
-                                ([key, label, value, fallback]) => (
+                                ([key, labelKey, value, fallback]) => (
                                   <AppearanceColorField
                                     key={key}
-                                    label={label}
+                                    label={teT(language, labelKey)}
                                     value={value}
                                     fallback={fallback}
                                     onChange={(next) => {
@@ -3607,12 +3757,12 @@ export default function TemplateEditorPage() {
                 {activeSection === "transaction" ? (
                   <BlockStack gap="500">
                     <Text as="h2" variant="headingLg">
-                      Transaction Details
+                      {teT(language, "te.tx.title")}
                     </Text>
                     <Card padding="0">
                       {renderSectionHeader(
                         "organization",
-                        "Organization details",
+                        teT(language, "te.tx.orgDetails"),
                         "organization-details-panel",
                       )}
                       <Collapsible
@@ -3622,14 +3772,13 @@ export default function TemplateEditorPage() {
                         <div className="template-editor__accordion-body">
                           <BlockStack gap="300">
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Organization name and logo come from Settings →
-                              Store details and apply to every template. Only
-                              logo size is set here.
+                              {teT(language, "te.tx.orgHelp")}
                             </Text>
                             <Banner tone="info">
                               <BlockStack gap="200">
                                 <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                  {data.storeDetails.name || "Store name not set"}
+                                  {data.storeDetails.name ||
+                                    teT(language, "te.tx.storeNameUnset")}
                                 </Text>
                                 {formatStoreAddressLines(data.storeDetails).map(
                                   (line, index) => (
@@ -3648,7 +3797,7 @@ export default function TemplateEditorPage() {
                                   }
                                   size="slim"
                                 >
-                                  Edit store details
+                                  {teT(language, "te.tx.editStore")}
                                 </Button>
                               </BlockStack>
                             </Banner>
@@ -3662,17 +3811,17 @@ export default function TemplateEditorPage() {
                                   source={data.storeDetails.logoDataUrl}
                                   alt={
                                     data.storeDetails.logoFileName ||
-                                    "Organization logo"
+                                    teT(language, "te.tx.orgLogoAlt")
                                   }
                                   size="small"
                                 />
                                 <BlockStack gap="200">
                                   <Text as="p" variant="bodySm" tone="subdued">
-                                    Logo from Store details
+                                    {teT(language, "te.tx.logoFromStore")}
                                   </Text>
                                   <div className="template-editor__logo-size">
                                     <RangeSlider
-                                      label="Logo size"
+                                      label={teT(language, "te.tx.logoSize")}
                                       min={20}
                                       max={100}
                                       step={1}
@@ -3695,8 +3844,7 @@ export default function TemplateEditorPage() {
                               <Banner tone="warning">
                                 <BlockStack gap="200">
                                   <Text as="p" variant="bodySm">
-                                    No store logo yet. Upload one in Settings →
-                                    Store details to show it on all templates.
+                                    {teT(language, "te.tx.noLogo")}
                                   </Text>
                                   <Button
                                     onClick={() =>
@@ -3704,11 +3852,11 @@ export default function TemplateEditorPage() {
                                     }
                                     size="slim"
                                   >
-                                    Upload store logo
+                                    {teT(language, "te.tx.uploadLogo")}
                                   </Button>
                                   <div className="template-editor__logo-size">
                                     <RangeSlider
-                                      label="Logo size"
+                                      label={teT(language, "te.tx.logoSize")}
                                       min={20}
                                       max={100}
                                       step={1}
@@ -3731,7 +3879,7 @@ export default function TemplateEditorPage() {
                             {adminCaps.logoPosition ? (
                               <BlockStack gap="200">
                                 <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                  Logo position
+                                  {teT(language, "te.tx.logoPosition")}
                                 </Text>
                                 <InlineStack gap="300" wrap>
                                   {logoPositionOptions.map((option) => (
@@ -3756,12 +3904,12 @@ export default function TemplateEditorPage() {
                             {adminCaps.metaStyle ? (
                               <BlockStack gap="200">
                                 <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                  Details box style
+                                  {teT(language, "te.tx.metaStyle")}
                                 </Text>
                                 <Text as="p" variant="bodySm" tone="subdued">
                                   {isPackingSlipEditor
-                                    ? "Order Date and Ref# block."
-                                    : "Order Date, Ref#, and Payment Method block."}
+                                    ? teT(language, "te.tx.metaHelpPacking")
+                                    : teT(language, "te.tx.metaHelpDefault")}
                                 </Text>
                                 <BlockStack gap="100">
                                   {metaStyleOptions.map((option) => (
@@ -3789,8 +3937,7 @@ export default function TemplateEditorPage() {
                     </Card>
 
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Drag Billing, Shipping, or Customer details to change
-                      their left-to-right order on the document.
+                      {teT(language, "te.tx.dragBlocks")}
                     </Text>
                     {addressBlockOrder.map((section) => {
                       if (section === "billing" && !isPackingSlipEditor) {
@@ -3798,7 +3945,7 @@ export default function TemplateEditorPage() {
                           <div key={section}>
                             {renderAddressSectionPanel(
                               "billing",
-                              "Billing details",
+                              teT(language, ADDRESS_SECTION_TITLE_KEYS.billing),
                             )}
                           </div>
                         );
@@ -3808,7 +3955,7 @@ export default function TemplateEditorPage() {
                           <div key={section}>
                             {renderAddressSectionPanel(
                               "shipping",
-                              "Shipping details",
+                              teT(language, ADDRESS_SECTION_TITLE_KEYS.shipping),
                             )}
                           </div>
                         );
@@ -3818,7 +3965,7 @@ export default function TemplateEditorPage() {
                           <div key={section}>
                             {renderAddressSectionPanel(
                               "customer",
-                              "Customer details",
+                              teT(language, ADDRESS_SECTION_TITLE_KEYS.customer),
                             )}
                           </div>
                         );
@@ -3829,7 +3976,7 @@ export default function TemplateEditorPage() {
                     <Card padding="0">
                       {renderSectionHeader(
                         "document",
-                        "Document details",
+                        teT(language, "te.tx.document"),
                         "document-details-panel",
                       )}
                       <Collapsible
@@ -3839,21 +3986,20 @@ export default function TemplateEditorPage() {
                         <div className="template-editor__accordion-body">
                           <BlockStack gap="300">
                             <Text as="p" variant="bodySm" tone="subdued">
-                              Customize document labels. Values are filled from
-                              the Shopify order.
+                              {teT(language, "te.tx.docLabelsHelp")}
                             </Text>
                             <FormLayout>
                               {(
                                 [
-                                  ["documentTitle", "Document title"],
-                                  ["orderNumber", "Order number label"],
-                                  ["date", "Date label"],
-                                  ["reference", "Reference label"],
+                                  ["documentTitle", "te.tx.documentTitle"],
+                                  ["orderNumber", "te.tx.orderNumberLabel"],
+                                  ["date", "te.tx.dateLabel"],
+                                  ["reference", "te.tx.referenceLabel"],
                                   ...(!isCreditNoteEditor
                                     ? ([
                                         [
                                           "expectedShipmentDate",
-                                          "Expected shipment date label",
+                                          "te.tx.expectedShipLabel",
                                         ],
                                       ] as const)
                                     : []),
@@ -3861,15 +4007,15 @@ export default function TemplateEditorPage() {
                                     ? ([
                                         [
                                           "paymentMethod",
-                                          "Payment method label",
+                                          "te.tx.paymentMethodLabel",
                                         ],
                                       ] as const)
                                     : []),
                                 ] as const
-                              ).map(([key, label]) => (
+                              ).map(([key, labelKey]) => (
                                 <TextField
                                   key={key}
-                                  label={label}
+                                  label={teT(language, labelKey)}
                                   value={settings.transactionLabels[key]}
                                   onChange={(value) =>
                                     updateSettings({
@@ -3884,7 +4030,7 @@ export default function TemplateEditorPage() {
                               ))}
                               {!isCreditNoteEditor ? (
                                 <Checkbox
-                                  label="Show Expected Shipment Date"
+                                  label={teT(language, "te.tx.showExpectedShip")}
                                   checked={
                                     settings.header.showExpectedShipmentDate
                                   }
@@ -3900,7 +4046,7 @@ export default function TemplateEditorPage() {
                               ) : null}
                               {!isCreditNoteEditor && !isPackingSlipEditor ? (
                                 <Checkbox
-                                  label="Show Payment Method"
+                                  label={teT(language, "te.tx.showPaymentMethod")}
                                   checked={settings.header.showPaymentMethod}
                                   onChange={(showPaymentMethod) =>
                                     updateSettings({
@@ -3923,12 +4069,12 @@ export default function TemplateEditorPage() {
                 {activeSection === "table" ? (
                   <BlockStack gap="400">
                     <Text as="h2" variant="headingLg">
-                      Table Properties
+                      {teT(language, "te.table.title")}
                     </Text>
                     <div className="template-editor__table-heading">
-                      <span>Field</span>
-                      <span>Width (%)</span>
-                      <span>Label</span>
+                      <span>{teT(language, "te.table.field")}</span>
+                      <span>{teT(language, "te.table.widthPct")}</span>
+                      <span>{teT(language, "te.table.label")}</span>
                     </div>
                     {settings.columns.map((column, index) =>
                       isPackingSlipEditor &&
@@ -3936,12 +4082,16 @@ export default function TemplateEditorPage() {
                       <div key={column.key}>
                         <div className="template-editor__column-row">
                           <Checkbox
-                            label={
+                            label={teColumnFieldLabel(
+                              language,
+                              column.key,
                               columnFieldLabels[column.key] ??
-                              column.key
-                                .replace(/([A-Z])/g, " $1")
-                                .replace(/^./, (letter) => letter.toUpperCase())
-                            }
+                                column.key
+                                  .replace(/([A-Z])/g, " $1")
+                                  .replace(/^./, (letter) =>
+                                    letter.toUpperCase(),
+                                  ),
+                            )}
                             checked={column.enabled}
                             onChange={(enabled) =>
                               updateColumn(index, { enabled })
@@ -3955,7 +4105,7 @@ export default function TemplateEditorPage() {
                           ) : (
                             <>
                               <TextField
-                                label="Width"
+                                label={teT(language, "te.table.width")}
                                 labelHidden
                                 type="number"
                                 value={String(column.width)}
@@ -3967,7 +4117,7 @@ export default function TemplateEditorPage() {
                                 autoComplete="off"
                               />
                               <TextField
-                                label="Label"
+                                label={teT(language, "te.table.label")}
                                 labelHidden
                                 value={column.label}
                                 onChange={(label) =>
@@ -3980,7 +4130,7 @@ export default function TemplateEditorPage() {
                           {column.key === "rate" ? (
                             <div className="template-editor__column-option">
                               <Checkbox
-                                label="Show Compare Price"
+                                label={teT(language, "te.table.showCompare")}
                                 checked={Boolean(column.showComparePrice)}
                                 onChange={(showComparePrice) =>
                                   updateColumn(index, { showComparePrice })
@@ -3991,7 +4141,7 @@ export default function TemplateEditorPage() {
                           {column.key === "sku" || column.key === "barcode" ? (
                             <div className="template-editor__column-option">
                               <Checkbox
-                                label="Show below item title"
+                                label={teT(language, "te.table.showBelowTitle")}
                                 checked={Boolean(column.showBelowItem)}
                                 onChange={(showBelowItem) =>
                                   updateColumn(index, { showBelowItem })
@@ -4003,7 +4153,7 @@ export default function TemplateEditorPage() {
                             <div className="template-editor__column-option">
                               <BlockStack gap="200">
                                 <Checkbox
-                                  label="Show Image"
+                                  label={teT(language, "te.table.showImage")}
                                   checked={Boolean(column.showImage)}
                                   onChange={(showImage) =>
                                     updateColumn(index, {
@@ -4017,14 +4167,14 @@ export default function TemplateEditorPage() {
                                   <InlineStack gap="300" wrap={false}>
                                     {(
                                       [
-                                        ["small", "Small"],
-                                        ["medium", "Medium"],
-                                        ["large", "Large"],
+                                        ["small", "te.size.small"],
+                                        ["medium", "te.size.medium"],
+                                        ["large", "te.size.large"],
                                       ] as const
-                                    ).map(([value, label]) => (
+                                    ).map(([value, labelKey]) => (
                                       <RadioButton
                                         key={value}
-                                        label={label}
+                                        label={teT(language, labelKey)}
                                         checked={
                                           (column.imageSize ?? "medium") ===
                                           value
@@ -4049,8 +4199,7 @@ export default function TemplateEditorPage() {
                             {!customFieldsLoadRequested ? (
                               <BlockStack gap="300">
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  Click <strong>Refresh list</strong> to load
-                                  product metafields for this column.
+                                  {teT(language, "te.table.refreshHint")}
                                 </Text>
                                 <InlineStack gap="200" wrap>
                                   <Button
@@ -4058,45 +4207,44 @@ export default function TemplateEditorPage() {
                                     onClick={refreshCustomFieldSources}
                                     loading={customFieldsLoading}
                                   >
-                                    Refresh list
+                                    {teT(language, "te.table.refresh")}
                                   </Button>
                                   <Button
                                     url="shopify://admin/settings/custom_data/product/metafields"
                                     target="_top"
                                   >
-                                    Manage metafields
+                                    {teT(language, "te.table.manageMetafields")}
                                   </Button>
                                 </InlineStack>
                               </BlockStack>
                             ) : customFieldsLoading &&
                               customFieldSources.length === 0 ? (
                               <Text as="p" variant="bodySm" tone="subdued">
-                                Loading metafields…
+                                {teT(language, "te.table.loadingMetafields")}
                               </Text>
                             ) : customFieldSources.length === 0 ? (
                               <BlockStack gap="300">
                                 <Text as="h3" variant="headingSm">
-                                  Set up product metafields
+                                  {teT(language, "te.table.setupTitle")}
                                 </Text>
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  This column shows product metafields you
-                                  create in Shopify. None are set up yet —
-                                  follow these steps:
+                                  {teT(language, "te.table.setupBody")}
                                 </Text>
                                 <ol className="template-editor__setup-steps">
                                   <li>
-                                    Open{" "}
                                     <strong>
-                                      Settings → Custom data → Products
+                                      {teT(language, "te.table.setupStep1")}
                                     </strong>
                                   </li>
                                   <li>
-                                    Click <strong>Add definition</strong>, name
-                                    your field, choose a type, then save
+                                    <strong>
+                                      {teT(language, "te.table.setupStep2")}
+                                    </strong>
                                   </li>
                                   <li>
-                                    Come back here and click{" "}
-                                    <strong>Refresh list</strong> to select it
+                                    <strong>
+                                      {teT(language, "te.table.setupStep3")}
+                                    </strong>
                                   </li>
                                 </ol>
                                 <InlineStack gap="200" wrap>
@@ -4105,21 +4253,20 @@ export default function TemplateEditorPage() {
                                     url="shopify://admin/settings/custom_data/product/metafields"
                                     target="_top"
                                   >
-                                    Create product metafield
+                                    {teT(language, "te.table.createMetafield")}
                                   </Button>
                                   <Button
                                     onClick={refreshCustomFieldSources}
                                     loading={customFieldsLoading}
                                   >
-                                    Refresh list
+                                    {teT(language, "te.table.refresh")}
                                   </Button>
                                 </InlineStack>
                               </BlockStack>
                             ) : (
                               <BlockStack gap="200">
                                 <Text as="p" variant="bodySm" tone="subdued">
-                                  Select product metafields to show as separate
-                                  columns. Drag selected fields to change order.
+                                  {teT(language, "te.table.selectMetafields")}
                                 </Text>
                                 {settings.selectedCustomFields.length > 0 ? (
                                   <div className="template-editor__custom-field-list">
@@ -4132,7 +4279,7 @@ export default function TemplateEditorPage() {
                                         const label =
                                           source?.name?.trim() ||
                                           field.name.trim() ||
-                                          "Custom field";
+                                          teT(language, "te.table.customField");
                                         const isDragging =
                                           draggingCustomFieldIndex === index;
                                         const isDropTarget =
@@ -4183,7 +4330,11 @@ export default function TemplateEditorPage() {
                                               type="button"
                                               className="template-editor__drag-handle"
                                               draggable
-                                              aria-label={`Drag to reorder ${field.name}`}
+                                              aria-label={teTf(
+                                                language,
+                                                "te.dragReorder",
+                                                { name: field.name },
+                                              )}
                                               onDragStart={(event) => {
                                                 event.dataTransfer.effectAllowed =
                                                   "move";
@@ -4233,7 +4384,10 @@ export default function TemplateEditorPage() {
                                             />
                                             <div className="template-editor__custom-field-width">
                                               <TextField
-                                                label="Width"
+                                                label={teT(
+                                                  language,
+                                                  "te.table.width",
+                                                )}
                                                 labelHidden
                                                 type="number"
                                                 value={String(
@@ -4281,13 +4435,13 @@ export default function TemplateEditorPage() {
                                     url="shopify://admin/settings/custom_data/product/metafields"
                                     target="_top"
                                   >
-                                    Manage metafields
+                                    {teT(language, "te.table.manageMetafields")}
                                   </Button>
                                   <Button
                                     onClick={refreshCustomFieldSources}
                                     loading={customFieldsLoading}
                                   >
-                                    Refresh list
+                                    {teT(language, "te.table.refresh")}
                                   </Button>
                                 </InlineStack>
                               </BlockStack>
@@ -4302,17 +4456,22 @@ export default function TemplateEditorPage() {
                 {activeSection === "total" ? (
                   <BlockStack gap="400">
                     <Text as="h2" variant="headingLg">
-                      Total Properties
+                      {teT(language, "te.total.title")}
                     </Text>
                     {!isPackingSlipEditor
                       ? (
                           [
-                            ["showSubtotal", "subtotalLabel", "Sub Total"],
+                            [
+                              "showSubtotal",
+                              "subtotalLabel",
+                              "Sub Total",
+                              "te.total.subTotal",
+                            ],
                           ] as const
-                        ).map(([showKey, labelKey, fallback]) => (
+                        ).map(([showKey, labelKey, fallback, uiKey]) => (
                       <div className="template-editor__toggle-label" key={showKey}>
                         <Checkbox
-                          label={fallback}
+                          label={teT(language, uiKey)}
                           checked={Boolean(
                             settings.totals[
                               showKey as keyof typeof settings.totals
@@ -4353,8 +4512,8 @@ export default function TemplateEditorPage() {
                       <Checkbox
                         label={
                           isPackingSlipEditor
-                            ? "Show items packed"
-                            : "Show quantity"
+                            ? teT(language, "te.total.showItemsPacked")
+                            : teT(language, "te.total.showQuantity")
                         }
                         checked={Boolean(settings.totals.showQuantity)}
                         onChange={(showQuantity) =>
@@ -4366,8 +4525,8 @@ export default function TemplateEditorPage() {
                       <TextField
                         label={
                           isPackingSlipEditor
-                            ? "Items packed label"
-                            : "Items in Total label"
+                            ? teT(language, "te.total.itemsPackedLabel")
+                            : teT(language, "te.total.itemsInTotalLabel")
                         }
                         labelHidden
                         value={displayTotalLabel(
@@ -4389,7 +4548,7 @@ export default function TemplateEditorPage() {
                     </div>
                     {!isPackingSlipEditor ? (
                       <Checkbox
-                        label="Show tax details"
+                        label={teT(language, "te.total.showTaxDetails")}
                         checked={Boolean(settings.totals.showTaxLines)}
                         onChange={(showTaxLines) =>
                           updateSettings({
@@ -4405,6 +4564,7 @@ export default function TemplateEditorPage() {
                               "showDiscountAmount",
                               "discountAmountLabel",
                               "Discount",
+                              "te.total.discount",
                             ],
                             ...(!isCreditNoteEditor
                               ? ([
@@ -4412,15 +4572,21 @@ export default function TemplateEditorPage() {
                                     "showShippingPrice",
                                     "shippingPriceLabel",
                                     "Shipping",
+                                    "te.total.shipping",
                                   ],
                                 ] as const)
                               : []),
-                            ["showVatAmount", "vatAmountLabel", "Total Tax"],
+                            [
+                              "showVatAmount",
+                              "vatAmountLabel",
+                              "Total Tax",
+                              "te.total.totalTax",
+                            ],
                           ] as const
-                        ).map(([showKey, labelKey, fallback]) => (
+                        ).map(([showKey, labelKey, fallback, uiKey]) => (
                       <div className="template-editor__toggle-label" key={showKey}>
                         <Checkbox
-                          label={fallback}
+                          label={teT(language, uiKey)}
                           checked={Boolean(
                             settings.totals[
                               showKey as keyof typeof settings.totals
@@ -4459,7 +4625,7 @@ export default function TemplateEditorPage() {
                       : null}
                     {!isPackingSlipEditor ? (
                       <TextField
-                        label="Total label"
+                        label={teT(language, "te.total.totalLabel")}
                         value={settings.totals.totalLabel}
                         onChange={(totalLabel) =>
                           updateSettings({
@@ -4472,13 +4638,23 @@ export default function TemplateEditorPage() {
                     {adminCaps.paymentAmounts !== false
                       ? (
                           [
-                            ["showPaidAmount", "paidAmountLabel", "Paid Amount"],
-                            ["showBalanceDue", "balanceDueLabel", "Balance Due"],
+                            [
+                              "showPaidAmount",
+                              "paidAmountLabel",
+                              "Paid Amount",
+                              "te.total.paidAmount",
+                            ],
+                            [
+                              "showBalanceDue",
+                              "balanceDueLabel",
+                              "Balance Due",
+                              "te.total.balanceDue",
+                            ],
                           ] as const
-                        ).map(([showKey, labelKey, fallback]) => (
+                        ).map(([showKey, labelKey, fallback, uiKey]) => (
                       <div className="template-editor__toggle-label" key={showKey}>
                         <Checkbox
-                          label={fallback}
+                          label={teT(language, uiKey)}
                           checked={Boolean(
                             settings.totals[
                               showKey as keyof typeof settings.totals
@@ -4520,7 +4696,7 @@ export default function TemplateEditorPage() {
                       settings.totals.showBalanceDue) ? (
                       <BlockStack gap="200">
                         <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          Payment status style
+                          {teT(language, "te.total.paymentStatusStyle")}
                         </Text>
                         {paymentStyleOptions.map((style) => (
                           <RadioButton
@@ -4550,7 +4726,7 @@ export default function TemplateEditorPage() {
                     {adminCaps.taxSummary !== false ? (
                       <>
                     <Checkbox
-                      label="Show Tax Summary table"
+                      label={teT(language, "te.total.showTaxSummary")}
                       checked={settings.taxSummary.enabled === true}
                       onChange={(enabled) =>
                         updateSettings({
@@ -4562,15 +4738,17 @@ export default function TemplateEditorPage() {
                     {settings.taxSummary.enabled === true ? (
                       <>
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Use {"{currency}"} in labels to insert €, $, etc.
+                          {teTf(language, "te.total.currencyHint", {
+                            currency: "{currency}",
+                          })}
                         </Text>
                         <div className="template-editor__tax-summary-row">
                           <Text as="span" variant="bodyMd">
-                            Tax Summary Title
+                            {teT(language, "te.total.taxSummaryTitle")}
                           </Text>
                           <span className="template-editor__tax-summary-spacer" />
                           <TextField
-                            label="Tax Summary Title"
+                            label={teT(language, "te.total.taxSummaryTitle")}
                             labelHidden
                             value={settings.taxSummary.title}
                             onChange={(title) =>
@@ -4583,11 +4761,11 @@ export default function TemplateEditorPage() {
                         </div>
                         <div className="template-editor__tax-summary-row">
                           <Text as="span" variant="bodyMd">
-                            Tax Details
+                            {teT(language, "te.total.taxDetails")}
                           </Text>
                           <span className="template-editor__tax-summary-spacer" />
                           <TextField
-                            label="Tax Details"
+                            label={teT(language, "te.total.taxDetails")}
                             labelHidden
                             value={settings.taxSummary.detailsLabel}
                             onChange={(detailsLabel) =>
@@ -4607,24 +4785,41 @@ export default function TemplateEditorPage() {
                               "showTaxableAmount",
                               "taxableAmountLabel",
                               "Taxable Amount",
+                              "te.total.taxableAmount",
+                              "te.total.showTaxableAmount",
                             ],
-                            ["showTaxAmount", "taxAmountLabel", "Tax Amount"],
+                            [
+                              "showTaxAmount",
+                              "taxAmountLabel",
+                              "Tax Amount",
+                              "te.total.taxAmount",
+                              "te.total.showTaxAmount",
+                            ],
                             [
                               "showTotalAmount",
                               "totalAmountLabel",
                               "Total Amount",
+                              "te.total.totalAmount",
+                              "te.total.showTotalAmount",
                             ],
                           ] as const
-                        ).map(([showKey, labelKey, fallback]) => (
+                        ).map(
+                          ([
+                            showKey,
+                            labelKey,
+                            fallback,
+                            displayKey,
+                            showLabelKey,
+                          ]) => (
                           <div
                             className="template-editor__tax-summary-row"
                             key={showKey}
                           >
                             <Text as="span" variant="bodyMd">
-                              {fallback}
+                              {teT(language, displayKey)}
                             </Text>
                             <Checkbox
-                              label={`Show ${fallback}`}
+                              label={teT(language, showLabelKey)}
                               labelHidden
                               checked={Boolean(settings.taxSummary[showKey])}
                               onChange={(checked) =>
@@ -4655,11 +4850,11 @@ export default function TemplateEditorPage() {
                         ))}
                         <div className="template-editor__tax-summary-row">
                           <Text as="span" variant="bodyMd">
-                            Total
+                            {teT(language, "te.total.rowTotal")}
                           </Text>
                           <span className="template-editor__tax-summary-spacer" />
                           <TextField
-                            label="Total"
+                            label={teT(language, "te.total.rowTotal")}
                             labelHidden
                             value={settings.taxSummary.totalLabel}
                             onChange={(totalLabel) =>
@@ -4683,52 +4878,52 @@ export default function TemplateEditorPage() {
                 {activeSection === "other" ? (
                   <BlockStack gap="400">
                     <Text as="h2" variant="headingLg">
-                      Other Details
+                      {teT(language, "te.other.title")}
                     </Text>
                     <TextField
-                      label="Notes label"
+                      label={teT(language, "te.other.notesLabel")}
                       value={settings.notesLabel}
                       onChange={(notesLabel) => updateSettings({ notesLabel })}
                       autoComplete="off"
                     />
                     <Checkbox
-                      label="Prefer Shopify order note"
-                      helpText="When enabled, the note from the Shopify order is shown in Notes. Default notes are used only when the order has no note."
+                      label={teT(language, "te.other.preferOrderNote")}
+                      helpText={teT(language, "te.other.preferOrderNoteHelp")}
                       checked={settings.preferShopifyOrderNote === true}
                       onChange={(preferShopifyOrderNote) =>
                         updateSettings({ preferShopifyOrderNote })
                       }
                     />
                     <TextField
-                      label="Default notes"
-                      helpText="Fallback text when Prefer Shopify order note is off, or the order has no note."
+                      label={teT(language, "te.other.defaultNotes")}
+                      helpText={teT(language, "te.other.defaultNotesHelp")}
                       value={settings.notes}
                       onChange={(notes) => updateSettings({ notes })}
                       multiline={4}
                       autoComplete="off"
                     />
                     <TextField
-                      label="Terms & Conditions label"
+                      label={teT(language, "te.other.termsLabel")}
                       value={settings.termsLabel}
                       onChange={(termsLabel) => updateSettings({ termsLabel })}
                       autoComplete="off"
                     />
                     <TextField
-                      label="Default terms"
+                      label={teT(language, "te.other.defaultTerms")}
                       value={settings.terms}
                       onChange={(terms) => updateSettings({ terms })}
                       multiline={5}
                       autoComplete="off"
                     />
                     <Checkbox
-                      label="Show signature area"
+                      label={teT(language, "te.other.showSignature")}
                       checked={settings.showSignature}
                       onChange={(showSignature) =>
                         updateSettings({ showSignature })
                       }
                     />
                     <Checkbox
-                      label="Show stamp"
+                      label={teT(language, "te.other.showStamp")}
                       checked={settings.showStamp}
                       onChange={(showStamp) => updateSettings({ showStamp })}
                     />
@@ -4740,10 +4935,16 @@ export default function TemplateEditorPage() {
               <aside className="template-editor__preview">
               <div className="template-editor__preview-header">
                 <Text as="h2" variant="headingMd">
-                  Preview
+                  {teT(language, "te.preview")}
                 </Text>
                 <Text as="span" tone="subdued">
-                  {settings.paperSize} · {settings.orientation}
+                  {settings.paperSize} ·{" "}
+                  {teT(
+                    language,
+                    settings.orientation === "landscape"
+                      ? "te.general.landscape"
+                      : "te.general.portrait",
+                  )}
                 </Text>
               </div>
               <div
@@ -4775,7 +4976,7 @@ export default function TemplateEditorPage() {
                         borderRadius: 8,
                       }}
                     >
-                      <PageLoader label="Loading preview" />
+                      <PageLoader label={teT(language, "te.loadingPreview")} />
                     </div>
                   }
                 >

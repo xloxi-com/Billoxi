@@ -32,6 +32,7 @@ import {
   RadioButton,
   Tabs,
   Thumbnail,
+  Select,
 } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import {
@@ -42,6 +43,7 @@ import {
   DragHandleIcon,
   EditIcon,
   EmailIcon,
+  LanguageIcon,
   NoteIcon,
   OrderIcon,
   ReceiptIcon,
@@ -130,7 +132,15 @@ import {
   saveSmtpSettingsForShop,
   saveStoreDetailsForShop,
 } from "../shop-settings.server";
-import { markSetupGuideStep } from "../setup-guide.server";
+import { markSetupGuideStep, loadAdminLanguage, saveAdminLanguage } from "../setup-guide.server";
+import {
+  ADMIN_UI_LANGUAGES,
+  DEFAULT_ADMIN_UI_LANGUAGE,
+  adminT,
+  normalizeAdminUiLanguage,
+  type AdminUiLanguage,
+} from "../admin-i18n";
+import { useAdminI18n } from "../admin-i18n-context";
 import {
   normalizeCreditNoteSettings,
   type CreditNoteSettings,
@@ -156,7 +166,12 @@ import {
 } from "../customer-download-links";
 import { customerDownloadSnippetsForShop } from "../customer-download-links.server";
 import "../settings.css";
-import { RecommendedAppsSidebar } from "../components/recommended-apps";  
+import { RecommendedAppsSidebar } from "../components/recommended-apps";
+import {
+  settingsT,
+  settingsModuleLabel,
+  settingsDocLabel,
+} from "../admin-settings-i18n";
 
 function getNumberSeriesAlreadyUsedError(
   current: NumberSeriesMap,
@@ -207,6 +222,7 @@ function getNumberSeriesAlreadyUsedError(
 }
 
 type SettingsSection =
+  | "admin-language"
   | "store-details"
   | "number-series"
   | "credit-notes"
@@ -222,19 +238,27 @@ type SettingsSection =
 
 type SettingsMenuItem = {
   id: SettingsSection;
-  label: string;
-  description: string;
-  icon: "store" | "order" | "email" | "note" | "receipt" | "currency" | "clipboard";
+  labelKey: import("../admin-i18n").AdminMessageKey;
+  descriptionKey: import("../admin-i18n").AdminMessageKey;
+  icon:
+    | "language"
+    | "store"
+    | "order"
+    | "email"
+    | "note"
+    | "receipt"
+    | "currency"
+    | "clipboard";
 };
 
 type SettingsMenuGroup = {
   id: "email-templates";
-  label: string;
+  labelKey: import("../admin-i18n").AdminMessageKey;
   icon: "note";
   children: Array<{
     id: SettingsSection;
-    label: string;
-    description: string;
+    labelKey: import("../admin-i18n").AdminMessageKey;
+    descriptionKey: import("../admin-settings-i18n").SettingsMessageKey;
     kind: EmailDocumentKind;
   }>;
 };
@@ -242,89 +266,95 @@ type SettingsMenuGroup = {
 const EMAIL_TEMPLATE_SECTIONS: SettingsMenuGroup["children"] = [
   {
     id: "email-sales-order",
-    label: "Sales Orders",
+    labelKey: "settings.emailSalesOrders",
     kind: "sales-order",
-    description: "Subject, body, and PDF for Sales order emails.",
+    descriptionKey: "set.emailDescSales",
   },
   {
     id: "email-invoice",
-    label: "Invoice",
+    labelKey: "settings.emailInvoice",
     kind: "invoice",
-    description: "Subject, body, and PDF for Invoice emails.",
+    descriptionKey: "set.emailDescInvoice",
   },
   {
     id: "email-draft",
-    label: "Draft",
+    labelKey: "settings.emailDraft",
     kind: "draft",
-    description: "Subject, body, and PDF for Draft emails.",
+    descriptionKey: "set.emailDescDraft",
   },
   {
     id: "email-credit-note",
-    label: "Credit Note",
+    labelKey: "settings.emailCreditNote",
     kind: "credit-note",
-    description: "Subject, body, and PDF for Credit note emails.",
+    descriptionKey: "set.emailDescCredit",
   },
   {
     id: "email-packing-slip",
-    label: "Packing Slip",
+    labelKey: "settings.emailPackingSlip",
     kind: "packing-slip",
-    description: "Subject, body, and PDF for Packing slip emails.",
+    descriptionKey: "set.emailDescPacking",
   },
   {
     id: "email-return",
-    label: "Return",
+    labelKey: "settings.emailReturn",
     kind: "return",
-    description: "Subject, body, and PDF for Return emails.",
+    descriptionKey: "set.emailDescReturn",
   },
 ];
 
 const settingsMenu: Array<SettingsMenuItem | SettingsMenuGroup> = [
   {
+    id: "admin-language",
+    labelKey: "settings.language",
+    descriptionKey: "settings.languageDesc",
+    icon: "language",
+  },
+  {
     id: "store-details",
-    label: "Store details",
-    description: "Info shown on document headers.",
+    labelKey: "settings.storeDetails",
+    descriptionKey: "settings.storeDetailsDesc",
     icon: "store",
   },
   {
     id: "number-series",
-    label: "Transaction numbers",
-    description: "Prefix and starting numbers per module.",
+    labelKey: "settings.transactionNumbers",
+    descriptionKey: "settings.transactionNumbersDesc",
     icon: "order",
   },
   {
     id: "credit-notes",
-    label: "Advanced",
-    description: "Auto-create on cancel and refund.",
+    labelKey: "settings.advanced",
+    descriptionKey: "settings.advancedDesc",
     icon: "receipt",
   },
   {
     id: "multi-currency",
-    label: "Multi Currency",
-    description:
-      "Show documents in the customer checkout currency or shop currency.",
+    labelKey: "settings.multiCurrency",
+    descriptionKey: "settings.multiCurrencyDesc",
     icon: "currency",
   },
   {
     id: "download-links",
-    label: "Download links",
-    description: "PDF links for Shopify notification emails.",
+    labelKey: "settings.downloadLinks",
+    descriptionKey: "settings.downloadLinksDesc",
     icon: "clipboard",
   },
   {
     id: "smtp",
-    label: "SMTP",
-    description: "Email server for sending documents.",
+    labelKey: "settings.smtp",
+    descriptionKey: "settings.smtpDesc",
     icon: "email",
   },
   {
     id: "email-templates",
-    label: "Email templates",
+    labelKey: "settings.emailTemplates",
     icon: "note",
     children: EMAIL_TEMPLATE_SECTIONS,
   },
 ];
 
 const SETTINGS_MENU_ICONS: Record<SettingsMenuItem["icon"], typeof StoreIcon> = {
+  language: LanguageIcon,
   store: StoreIcon,
   order: OrderIcon,
   email: EmailIcon,
@@ -378,6 +408,8 @@ function isEmailTemplatesSection(section: SettingsSection): boolean {
 
 function parseSettingsSection(value: string | null): SettingsSection {
   if (
+    value === "admin-language" ||
+    value === "language" ||
     value === "number-series" ||
     value === "transaction-numbers" ||
     value === "credit-notes" ||
@@ -392,7 +424,9 @@ function parseSettingsSection(value: string | null): SettingsSection {
     value === "email-packing-slip" ||
     value === "email-return"
   ) {
-    return value === "transaction-numbers" ? "number-series" : value;
+    if (value === "transaction-numbers") return "number-series";
+    if (value === "language") return "admin-language";
+    return value;
   }
   // Legacy ?section=email-templates
   if (value === "email-templates") return "email-invoice";
@@ -441,6 +475,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     lastDraftSequence,
     lastReturnSequence,
     invoiceDigitWidth,
+    savedAdminLanguage,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
@@ -455,6 +490,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     getLastDraftAllocatedSequence(session.shop),
     getLastReturnAllocatedSequence(session.shop),
     getInvoiceNumberDigitWidth(session.shop),
+    loadAdminLanguage(session.shop),
   ]);
   const selectedSalesOrderTemplateId = resolveSalesOrderTemplateId(
     selectedSalesOrderTemplateIdRaw,
@@ -481,6 +517,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     multiCurrencySettings,
     shopDomain: session.shop,
     downloadLinkSnippets: customerDownloadSnippetsForShop(session.shop, request),
+    adminLanguage: normalizeAdminUiLanguage(
+      savedAdminLanguage,
+      DEFAULT_ADMIN_UI_LANGUAGE,
+    ),
   };
 }
 
@@ -531,6 +571,19 @@ export async function action({ request }: ActionFunctionArgs) {
     );
     await markSetupGuideStep(session.shop, "store-details");
     return { saved: true, section: "store-details" as const, storeDetails };
+  }
+
+  if (intent === "save-admin-language") {
+    const language = normalizeAdminUiLanguage(
+      formData.get("language"),
+      DEFAULT_ADMIN_UI_LANGUAGE,
+    );
+    const progress = await saveAdminLanguage(session.shop, language);
+    return {
+      saved: true,
+      section: "admin-language" as const,
+      adminLanguage: progress.adminLanguage ?? language,
+    };
   }
 
   if (intent === "save-credit-notes") {
@@ -874,6 +927,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function SettingsPage() {
   const data = useLoaderData<typeof loader>();
+  const { t, language } = useAdminI18n();
   const fetcher = useFetcher<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSection = searchParams.get("section");
@@ -882,6 +936,12 @@ export default function SettingsPage() {
     useState<SettingsSection>(initialSection);
   const [emailTemplatesNavOpen, setEmailTemplatesNavOpen] = useState(
     isEmailTemplatesSection(initialSection),
+  );
+  const [adminLanguage, setAdminLanguage] = useState<AdminUiLanguage>(
+    data.adminLanguage,
+  );
+  const [savedAdminLanguage, setSavedAdminLanguage] = useState<AdminUiLanguage>(
+    data.adminLanguage,
   );
   const [storeDetails, setStoreDetails] = useState<StoreDetails>(
     data.storeDetails,
@@ -964,7 +1024,9 @@ export default function SettingsPage() {
     usePlanUpgradeModal(currentPlanId);
   const isSaving = fetcher.state !== "idle";
   const isDirty =
-    activeSection === "store-details"
+    activeSection === "admin-language"
+      ? false
+      : activeSection === "store-details"
       ? isStoreDirty
       : activeSection === "smtp"
         ? isSmtpDirty
@@ -981,16 +1043,30 @@ export default function SettingsPage() {
     if (activeEmailChild) {
       return {
         id: activeEmailChild.id,
-        label: `Email · ${activeEmailChild.label}`,
-        description: activeEmailChild.description,
+        label: `${t("settings.emailTemplates")} · ${t(activeEmailChild.labelKey)}`,
+        description: settingsT(language, activeEmailChild.descriptionKey),
         icon: "note" as const,
       };
     }
     const top = settingsMenu.find(
       (item): item is SettingsMenuItem =>
-        "description" in item && item.id === activeSection,
+        "descriptionKey" in item && item.id === activeSection,
     );
-    return top ?? (settingsMenu[0] as SettingsMenuItem);
+    if (!top) {
+      const first = settingsMenu[0] as SettingsMenuItem;
+      return {
+        id: first.id,
+        label: t(first.labelKey),
+        description: t(first.descriptionKey),
+        icon: first.icon,
+      };
+    }
+    return {
+      id: top.id,
+      label: t(top.labelKey),
+      description: t(top.descriptionKey),
+      icon: top.icon,
+    };
   })();
 
   const emailPreview = useMemo(() => {
@@ -1036,6 +1112,11 @@ export default function SettingsPage() {
       setIsEditingSeries(false);
     }
   }, [requestedSection]);
+
+  useEffect(() => {
+    setAdminLanguage(data.adminLanguage);
+    setSavedAdminLanguage(data.adminLanguage);
+  }, [data.adminLanguage]);
 
   useEffect(() => {
     setStoreDetails(data.storeDetails);
@@ -1178,9 +1259,20 @@ export default function SettingsPage() {
       }
     }
 
+    if ("adminLanguage" in fetcher.data && fetcher.data.adminLanguage) {
+      setAdminLanguage(fetcher.data.adminLanguage);
+      setSavedAdminLanguage(fetcher.data.adminLanguage);
+    }
+
     if (typeof shopify !== "undefined" && shopify.toast) {
       shopify.toast.show(
-        fetcher.data.section === "smtp"
+        fetcher.data.section === "admin-language"
+          ? adminT(
+              ("adminLanguage" in fetcher.data && fetcher.data.adminLanguage) ||
+                adminLanguage,
+              "settings.languageSaved",
+            )
+          : fetcher.data.section === "smtp"
           ? "SMTP settings saved"
           : fetcher.data.section === "credit-notes"
             ? (() => {
@@ -1206,7 +1298,7 @@ export default function SettingsPage() {
                     : "Settings saved",
       );
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [fetcher.state, fetcher.data, adminLanguage]);
 
   const updateField = (
     key: Exclude<keyof StoreDetails, "customFields">,
@@ -1220,12 +1312,12 @@ export default function SettingsPage() {
     const file = files[0];
     if (!file) return;
     if (file.size > 1024 * 1024) {
-      setLogoError("Logo must be smaller than 1 MB.");
+      setLogoError(t("settings.storeLogoTooBig"));
       return;
     }
     const allowed = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
     if (file.type && !allowed.has(file.type.toLowerCase())) {
-      setLogoError("Logo must be PNG, JPG, or WebP.");
+      setLogoError(t("settings.storeLogoBadType"));
       return;
     }
     setLogoError("");
@@ -1234,9 +1326,7 @@ export default function SettingsPage() {
       if (typeof reader.result !== "string") return;
       const logoDataUrl = normalizeStoreLogoDataUrl(reader.result);
       if (!logoDataUrl) {
-        setLogoError(
-          "Could not read this logo. Use PNG, JPG, or WebP under 1 MB.",
-        );
+        setLogoError(t("settings.storeLogoReadFail"));
         return;
       }
       setStoreDetails((current) => ({
@@ -1621,19 +1711,21 @@ export default function SettingsPage() {
   };
 
   const mainCardHeading =
-    activeSection === "store-details"
-      ? "Store details"
+    activeSection === "admin-language"
+      ? t("settings.language")
+      : activeSection === "store-details"
+      ? t("settings.storeDetails")
       : activeSection === "number-series"
-        ? "Transaction numbers"
+        ? t("settings.transactionNumbers")
         : activeSection === "credit-notes"
-          ? "Advanced"
+          ? t("settings.advanced")
           : activeSection === "multi-currency"
-            ? "Multi Currency"
+            ? t("settings.multiCurrency")
             : activeSection === "download-links"
-              ? "Download links"
+              ? t("settings.downloadLinks")
           : activeSection === "smtp"
-            ? "SMTP"
-            : `Email · ${activeEmailChild?.label ?? "Template"}`;
+            ? t("settings.smtp")
+            : `${t("settings.emailTemplates")} · ${activeEmailChild ? t(activeEmailChild.labelKey) : "Template"}`;
 
   return (
     <>
@@ -1644,22 +1736,22 @@ export default function SettingsPage() {
           disabled={!isDirty || isSaving || undefined}
           loading={isSaving || undefined}
         >
-          {isSaving ? "Saving…" : "Save"}
+          {isSaving ? t("settings.saving") : t("common.save")}
         </button>
         <button onClick={discard} disabled={isSaving || undefined}>
-          Discard
+          {t("settings.discard")}
         </button>
       </SaveBar>
 
       <AppProvider i18n={enTranslations}>
         <Page
-          title="Settings"
+          title={t("pages.settings")}
           fullWidth
           secondaryActions={
             activeSection === "store-details"
               ? [
                   {
-                    content: "Load from Shopify store",
+                    content: t("settings.storeLoadFromShopify"),
                     onAction: resetFromShopify,
                     disabled: isSaving,
                   },
@@ -1713,7 +1805,7 @@ export default function SettingsPage() {
                                   tone={groupActive ? "base" : "subdued"}
                                 />
                                 <Text as="span" fontWeight="semibold">
-                                  {item.label}
+                                  {t(item.labelKey)}
                                 </Text>
                                 <span className="settings-nav-item__plan-badge">
                                   <PlanFeatureBadge
@@ -1762,7 +1854,7 @@ export default function SettingsPage() {
                                           isActive ? "semibold" : "regular"
                                         }
                                       >
-                                        {child.label}
+                                        {t(child.labelKey)}
                                       </Text>
                                     </button>
                                   );
@@ -1791,7 +1883,7 @@ export default function SettingsPage() {
                               as="span"
                               fontWeight={isActive ? "semibold" : "regular"}
                             >
-                              {item.label}
+                              {t(item.labelKey)}
                             </Text>
                             {menuCap ? (
                               <span className="settings-nav-item__plan-badge">
@@ -1823,7 +1915,7 @@ export default function SettingsPage() {
                           <BlockStack gap="100">
                             <InlineStack gap="200" blockAlign="center">
                               <Text as="h2" variant="headingMd">
-                                Credit Note
+                                {settingsT(language, "set.creditNoteTitle")}
                               </Text>
                               <PlanFeatureBadge
                                 capability="autoCreditNote"
@@ -1831,18 +1923,17 @@ export default function SettingsPage() {
                               />
                             </InlineStack>
                             <Text as="p" tone="subdued">
-                              Auto-create when an order is cancelled or
-                              refunded. Needs an invoice first.
+                              {settingsT(language, "set.creditNoteDesc")}
                             </Text>
                           </BlockStack>
 
                           <BlockStack gap="300">
                             <Text as="h3" variant="headingSm">
-                              Automation
+                              {settingsT(language, "set.automation")}
                             </Text>
                             <Checkbox
-                              label="On cancel"
-                              helpText="When the order is cancelled."
+                              label={settingsT(language, "set.onCancel")}
+                              helpText={settingsT(language, "set.onCancelHelp")}
                               checked={creditNoteSettings.autoOnCancel}
                               onChange={(checked) => {
                                 setCreditNoteSettings((current) => ({
@@ -1853,8 +1944,11 @@ export default function SettingsPage() {
                               }}
                             />
                             <Checkbox
-                              label="On full refund"
-                              helpText="When fully refunded."
+                              label={settingsT(language, "set.onFullRefund")}
+                              helpText={settingsT(
+                                language,
+                                "set.onFullRefundHelp",
+                              )}
                               checked={creditNoteSettings.autoOnRefund}
                               onChange={(checked) => {
                                 setCreditNoteSettings((current) => ({
@@ -1865,8 +1959,11 @@ export default function SettingsPage() {
                               }}
                             />
                             <Checkbox
-                              label="On partial refund"
-                              helpText="When partially refunded."
+                              label={settingsT(language, "set.onPartialRefund")}
+                              helpText={settingsT(
+                                language,
+                                "set.onPartialRefundHelp",
+                              )}
                               checked={creditNoteSettings.autoOnPartialRefund}
                               onChange={(checked) => {
                                 setCreditNoteSettings((current) => ({
@@ -1884,20 +1981,20 @@ export default function SettingsPage() {
                         <BlockStack gap="400">
                           <BlockStack gap="100">
                             <Text as="h2" variant="headingMd">
-                              Invoice
+                              {settingsT(language, "set.invoiceTitle")}
                             </Text>
                             <Text as="p" tone="subdued">
-                              Auto-create when an order is paid in Shopify.
+                              {settingsT(language, "set.invoiceDesc")}
                             </Text>
                           </BlockStack>
 
                           <BlockStack gap="300">
                             <Text as="h3" variant="headingSm">
-                              Automation
+                              {settingsT(language, "set.automation")}
                             </Text>
                             <Checkbox
-                              label="On paid"
-                              helpText="Convert to invoice when the order is paid."
+                              label={settingsT(language, "set.onPaid")}
+                              helpText={settingsT(language, "set.onPaidHelp")}
                               checked={invoiceSettings.autoOnPaid}
                               onChange={(checked) => {
                                 setInvoiceSettings({ autoOnPaid: checked });
@@ -1910,7 +2007,7 @@ export default function SettingsPage() {
 
                       {isCreditNoteDirty ? (
                         <Text as="p" tone="subdued">
-                          Unsaved changes
+                          {settingsT(language, "set.unsaved")}
                         </Text>
                       ) : null}
                     </BlockStack>
@@ -1925,7 +2022,7 @@ export default function SettingsPage() {
                       <BlockStack gap="200">
                         <InlineStack gap="200" blockAlign="center">
                           <Text as="h2" variant="headingMd">
-                            Multi Currency
+                            {settingsT(language, "set.multiCurrencyTitle")}
                           </Text>
                           <PlanFeatureBadge
                             capability="multiCurrency"
@@ -1933,16 +2030,15 @@ export default function SettingsPage() {
                           />
                         </InlineStack>
                         <Text as="p" tone="subdued">
-                          Choose which currency appears on your invoices and
-                          other documents.
+                          {settingsT(language, "set.multiCurrencyBody")}
                         </Text>
                       </BlockStack>
 
                       <Card>
                         <BlockStack gap="500">
                           <RadioButton
-                            label="Off"
-                            helpText="Always use your store’s main currency."
+                            label={settingsT(language, "set.mcOff")}
+                            helpText={settingsT(language, "set.mcOffHelp")}
                             checked={multiCurrencySettings.mode === "off"}
                             id="multi-currency-off"
                             name="multiCurrency"
@@ -1954,8 +2050,8 @@ export default function SettingsPage() {
                           />
 
                           <RadioButton
-                            label="Shopify Multi Currency"
-                            helpText="Show the currency the customer paid in at checkout (Shopify Payments)."
+                            label={settingsT(language, "set.mcShopify")}
+                            helpText={settingsT(language, "set.mcShopifyHelp")}
                             checked={multiCurrencySettings.mode === "shopify"}
                             id="multi-currency-shopify"
                             name="multiCurrency"
@@ -1970,7 +2066,7 @@ export default function SettingsPage() {
 
                       {isMultiCurrencyDirty ? (
                         <Text as="p" tone="subdued">
-                          Unsaved changes
+                          {settingsT(language, "set.unsaved")}
                         </Text>
                       ) : null}
                     </BlockStack>
@@ -1985,7 +2081,7 @@ export default function SettingsPage() {
                       <BlockStack gap="200">
                         <InlineStack gap="200" blockAlign="center">
                           <Text as="h2" variant="headingMd">
-                            Automated PDF download links
+                            {settingsT(language, "set.downloadTitle")}
                           </Text>
                           <PlanFeatureBadge
                             capability="customerDownloadLinks"
@@ -1993,30 +2089,32 @@ export default function SettingsPage() {
                           />
                         </InlineStack>
                         <Text as="p" tone="subdued">
-                          Paste a link into Shopify order notification emails so
-                          customers can download the PDF directly.
+                          {settingsT(language, "set.downloadDesc")}
                         </Text>
                       </BlockStack>
 
-                      <Banner tone="info" title="When can customers download?">
-                        <p>
-                          Invoice link works only after the order is converted to
-                          an invoice in Billoxi (paid orders). COD and custom
-                          payment orders should use the Sales Order link until
-                          then. If a document is not converted yet, the customer
-                          sees a notice instead of a PDF.
-                        </p>
+                      <Banner
+                        tone="info"
+                        title={settingsT(language, "set.downloadWhenTitle")}
+                      >
+                        <p>{settingsT(language, "set.downloadWhenBody")}</p>
                       </Banner>
 
                       <Card>
                         <BlockStack gap="400">
                           <Tabs
                             tabs={[
-                              { id: "smart", content: "Recommended" },
+                              {
+                                id: "smart",
+                                content: settingsT(
+                                  language,
+                                  "set.downloadRecommended",
+                                ),
+                              },
                               ...CUSTOMER_DOWNLOAD_DOCUMENT_TYPES.map(
                                 (item) => ({
                                   id: item.id,
-                                  content: item.label,
+                                  content: settingsDocLabel(language, item.id),
                                 }),
                               ),
                             ]}
@@ -2044,18 +2142,27 @@ export default function SettingsPage() {
 
                           <Text as="p" tone="subdued">
                             {downloadLinkTab === "smart"
-                              ? "Paid → invoice link. COD / custom / unpaid → sales order link."
+                              ? settingsT(language, "set.downloadHelpSmart")
                               : downloadLinkTab === "invoice"
-                                ? "Shows only when the order is paid. Download works after invoice convert in Billoxi."
+                                ? settingsT(
+                                    language,
+                                    "set.downloadHelpInvoice",
+                                  )
                                 : downloadLinkTab === "sales-order"
-                                  ? "Shows for unpaid orders (COD / custom). Use until invoice convert."
-                                  : "Copy and paste into your Shopify notification email."}{" "}
+                                  ? settingsT(
+                                      language,
+                                      "set.downloadHelpSalesOrder",
+                                    )
+                                  : settingsT(
+                                      language,
+                                      "set.downloadHelpOther",
+                                    )}{" "}
                             <Link
                               url="shopify://admin/settings/notifications"
                               target="_top"
                               removeUnderline
                             >
-                              Open notification emails
+                              {settingsT(language, "set.openNotifications")}
                             </Link>
                           </Text>
 
@@ -2092,21 +2199,25 @@ export default function SettingsPage() {
                                     typeof shopify !== "undefined" &&
                                     shopify.toast
                                   ) {
-                                    shopify.toast.show("Copied to clipboard");
+                                    shopify.toast.show(
+                                      settingsT(language, "set.copied"),
+                                    );
                                   }
                                 } catch {
                                   if (
                                     typeof shopify !== "undefined" &&
                                     shopify.toast
                                   ) {
-                                    shopify.toast.show("Couldn’t copy", {
+                                    shopify.toast.show(
+                                      settingsT(language, "set.copyFail"),
+                                      {
                                       isError: true,
                                     });
                                   }
                                 }
                               }}
                             >
-                              Copy code
+                              {settingsT(language, "set.copyCode")}
                             </Button>
                           </InlineStack>
                         </BlockStack>
@@ -2128,7 +2239,46 @@ export default function SettingsPage() {
                         ) : null}
                       </InlineStack>
 
-                      {activeSection === "store-details" ? (
+                      {activeSection === "admin-language" ? (
+                        <BlockStack gap="400">
+                          <Text as="p" tone="subdued">
+                            {t("settings.languageDesc")}
+                          </Text>
+                          <Banner tone="info" title={t("settings.language")}>
+                            <p>{t("settings.languageHelp")}</p>
+                          </Banner>
+                          <Select
+                            label={t("settings.language")}
+                            options={ADMIN_UI_LANGUAGES.map((entry) => ({
+                              value: entry.value,
+                              label: entry.label,
+                            }))}
+                            value={adminLanguage}
+                            onChange={(value) =>
+                              setAdminLanguage(normalizeAdminUiLanguage(value))
+                            }
+                            disabled={isSaving}
+                          />
+                          <InlineStack gap="200">
+                            <Button
+                              variant="primary"
+                              loading={isSaving}
+                              disabled={
+                                isSaving ||
+                                adminLanguage === savedAdminLanguage
+                              }
+                              onClick={() => {
+                                const formData = new FormData();
+                                formData.set("intent", "save-admin-language");
+                                formData.set("language", adminLanguage);
+                                fetcher.submit(formData, { method: "post" });
+                              }}
+                            >
+                              {t("common.save")}
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
+                      ) : activeSection === "store-details" ? (
                         <BlockStack gap="400">
                           <Text as="p" tone="subdued">
                             {activeItem.description}
@@ -2136,13 +2286,10 @@ export default function SettingsPage() {
 
                           <BlockStack gap="300">
                             <Text as="h3" variant="headingSm">
-                              Store logo
+                              {t("settings.storeLogo")}
                             </Text>
                             <Text as="p" tone="subdued">
-                              Used on every sales order, invoice, credit note,
-                              and packing slip template. Upload a logo, then
-                              click Save. Set size per template in Templates →
-                              Edit → Transaction details.
+                              {t("settings.storeLogoHelp")}
                             </Text>
                             {logoError ? (
                               <Banner tone="critical" onDismiss={() => setLogoError("")}>
@@ -2153,7 +2300,10 @@ export default function SettingsPage() {
                               <InlineStack gap="300" blockAlign="center" wrap={false}>
                                 <Thumbnail
                                   source={storeDetails.logoDataUrl}
-                                  alt={storeDetails.logoFileName || "Store logo"}
+                                  alt={
+                                    storeDetails.logoFileName ||
+                                    t("settings.storeLogo")
+                                  }
                                   size="medium"
                                 />
                                 <BlockStack gap="200">
@@ -2161,7 +2311,7 @@ export default function SettingsPage() {
                                     <Button
                                       onClick={() => logoInputRef.current?.click()}
                                     >
-                                      Change logo
+                                      {t("settings.storeChangeLogo")}
                                     </Button>
                                     <Button
                                       tone="critical"
@@ -2177,11 +2327,12 @@ export default function SettingsPage() {
                                         setLogoError("");
                                       }}
                                     >
-                                      Remove
+                                      {t("settings.storeRemoveLogo")}
                                     </Button>
                                   </InlineStack>
                                   <Text as="p" tone="subdued" variant="bodySm">
-                                    {storeDetails.logoFileName || "PNG, JPG, or WebP"}
+                                    {storeDetails.logoFileName ||
+                                      t("settings.storeLogoFormats")}
                                   </Text>
                                 </BlockStack>
                               </InlineStack>
@@ -2192,14 +2343,12 @@ export default function SettingsPage() {
                                 type="image"
                                 onDropAccepted={uploadStoreLogo}
                                 onDropRejected={() =>
-                                  setLogoError(
-                                    "Upload a PNG, JPG, or WebP image smaller than 1 MB.",
-                                  )
+                                  setLogoError(t("settings.storeLogoReject"))
                                 }
                               >
                                 <DropZone.FileUpload
-                                  actionTitle="Upload logo"
-                                  actionHint="PNG, JPG, or WebP · Maximum 1 MB"
+                                  actionTitle={t("settings.storeUploadLogo")}
+                                  actionHint={t("settings.storeLogoHint")}
                                 />
                               </DropZone>
                             )}
@@ -2222,25 +2371,25 @@ export default function SettingsPage() {
                           <Divider />
 
                           <TextField
-                            label="Store / organization name"
+                            label={t("settings.storeName")}
                             value={storeDetails.name}
                             onChange={(value) => updateField("name", value)}
                             autoComplete="organization"
                           />
 
                           <TextField
-                            label="Address"
+                            label={t("settings.storeAddress")}
                             value={storeDetails.address}
                             multiline={4}
                             onChange={(value) => updateField("address", value)}
                             autoComplete="street-address"
-                            helpText="Type the full address. Use a new line for each address line."
+                            helpText={t("settings.storeAddressHelp")}
                           />
 
                           <InlineStack gap="300" wrap={false}>
                             <div className="settings-flex-field">
                               <TextField
-                                label="Phone"
+                                label={t("settings.storePhone")}
                                 value={storeDetails.phone}
                                 onChange={(value) => updateField("phone", value)}
                                 autoComplete="off"
@@ -2248,7 +2397,7 @@ export default function SettingsPage() {
                             </div>
                             <div className="settings-flex-field">
                               <TextField
-                                label="Email"
+                                label={t("settings.storeEmail")}
                                 type="email"
                                 value={storeDetails.email}
                                 onChange={(value) => updateField("email", value)}
@@ -2258,30 +2407,32 @@ export default function SettingsPage() {
                           </InlineStack>
 
                           <TextField
-                            label="Website"
+                            label={t("settings.storeWebsite")}
                             value={storeDetails.website}
                             onChange={(value) => updateField("website", value)}
                             autoComplete="off"
-                            helpText="Shown on document headers as Website: www.your-site.com"
+                            helpText={t("settings.storeWebsiteHelp")}
                           />
 
                           <Divider />
 
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="h3" variant="headingSm">
-                              Custom fields
+                              {t("settings.storeCustomFields")}
                             </Text>
-                            <Button onClick={addCustomField}>Add field</Button>
+                            <Button onClick={addCustomField}>
+                              {t("settings.storeAddField")}
+                            </Button>
                           </InlineStack>
 
                           {storeDetails.customFields.length === 0 ? (
                             <Text as="p" tone="subdued">
-                              No custom fields yet.
+                              {t("settings.storeNoCustomFields")}
                             </Text>
                           ) : (
                             <BlockStack gap="200">
                               <Text as="p" tone="subdued">
-                                Drag to reorder fields.
+                                {t("settings.storeDragReorder")}
                               </Text>
                               <div className="settings-custom-fields">
                                 {storeDetails.customFields.map((field, index) => {
@@ -2332,7 +2483,7 @@ export default function SettingsPage() {
                                           draggable
                                           role="button"
                                           tabIndex={0}
-                                          aria-label={`Drag to reorder ${field.label || "custom field"}`}
+                                          aria-label={t("settings.storeDragReorder")}
                                           onDragStart={(event) => {
                                             event.dataTransfer.effectAllowed =
                                               "move";
@@ -2354,10 +2505,12 @@ export default function SettingsPage() {
                                         </div>
                                         <div className="settings-custom-field__input">
                                           <TextField
-                                            label="Label"
+                                            label={t("settings.storeFieldLabel")}
                                             labelHidden
                                             value={field.label}
-                                            placeholder="Label"
+                                            placeholder={t(
+                                              "settings.storeFieldLabel",
+                                            )}
                                             onChange={(value) =>
                                               updateCustomField(field.id, {
                                                 label: value,
@@ -2368,10 +2521,12 @@ export default function SettingsPage() {
                                         </div>
                                         <div className="settings-custom-field__input">
                                           <TextField
-                                            label="Text"
+                                            label={t("settings.storeFieldText")}
                                             labelHidden
                                             value={field.value}
-                                            placeholder="Text"
+                                            placeholder={t(
+                                              "settings.storeFieldText",
+                                            )}
                                             onChange={(value) =>
                                               updateCustomField(field.id, { value })
                                             }
@@ -2383,7 +2538,7 @@ export default function SettingsPage() {
                                           tone="critical"
                                           onClick={() => removeCustomField(field.id)}
                                         >
-                                          Remove
+                                          {t("settings.storeRemoveField")}
                                         </Button>
                                       </InlineStack>
                                     </div>
@@ -2395,7 +2550,7 @@ export default function SettingsPage() {
 
                           {isStoreDirty ? (
                             <Text as="p" tone="subdued">
-                              Unsaved changes
+                              {t("settings.storeUnsaved")}
                             </Text>
                           ) : null}
                         </BlockStack>
@@ -2416,28 +2571,33 @@ export default function SettingsPage() {
                                 }}
                                 disabled={isSaving}
                               >
-                                Cancel
+                                {settingsT(language, "set.cancel")}
                               </Button>
                             ) : (
                               <Button icon={EditIcon} onClick={beginEditingSeries}>
-                                Edit
+                                {settingsT(language, "set.edit")}
                               </Button>
                             )}
                           </InlineStack>
 
                           <DataTable
                             columnContentTypes={["text", "text", "text", "text"]}
-                            headings={["Module", "Prefix", "Starting number", "Preview"]}
+                            headings={[
+                              settingsT(language, "set.colModule"),
+                              settingsT(language, "set.colPrefix"),
+                              settingsT(language, "set.colStarting"),
+                              settingsT(language, "set.colPreview"),
+                            ]}
                             rows={NUMBER_SERIES_MODULES.map((module) => {
                               const entry = numberSeries[module.id];
                               return [
                                 <Text as="span" fontWeight="semibold" key={`label-${module.id}`}>
-                                  {module.label}
+                                  {settingsModuleLabel(language, module.id)}
                                 </Text>,
                                 isEditingSeries ? (
                                   <TextField
                                     key={`prefix-${module.id}`}
-                                    label="Prefix"
+                                    label={settingsT(language, "set.colPrefix")}
                                     labelHidden
                                     value={entry.prefix}
                                     onChange={(value) =>
@@ -2451,7 +2611,7 @@ export default function SettingsPage() {
                                 isEditingSeries ? (
                                   <TextField
                                     key={`start-${module.id}`}
-                                    label="Starting number"
+                                    label={settingsT(language, "set.colStarting")}
                                     labelHidden
                                     value={entry.startingNumber}
                                     onChange={(value) =>
@@ -2467,7 +2627,7 @@ export default function SettingsPage() {
                                 isEditingSeries ? (
                                   <TextField
                                     key={`preview-${module.id}`}
-                                    label="Preview / next number"
+                                    label={settingsT(language, "set.previewNext")}
                                     labelHidden
                                     value={
                                       previewDrafts[module.id] ??
@@ -2494,19 +2654,14 @@ export default function SettingsPage() {
 
                           {isNumberSeriesDirty ? (
                             <Text as="p" tone="subdued">
-                              Unsaved changes
+                              {settingsT(language, "set.unsaved")}
                             </Text>
                           ) : null}
 
                           <Divider />
 
                           <Banner tone="info">
-                            <p>
-                              Numbers for existing Shopify orders, invoices,
-                              drafts, and returns are assigned automatically
-                              when the app is installed. Save Prefix and
-                              Starting number above for new documents.
-                            </p>
+                            <p>{settingsT(language, "set.numbersInfo")}</p>
                           </Banner>
                         </BlockStack>
                       ) : activeSection === "smtp" ? (
@@ -2542,7 +2697,7 @@ export default function SettingsPage() {
                               }}
                             >
                               <Text as="span" fontWeight="semibold">
-                                How to set up SMTP
+                                {settingsT(language, "set.smtpHowTo")}
                               </Text>
                               <span className="settings-smtp-help__toggle-icon">
                                 <Icon
@@ -2568,58 +2723,41 @@ export default function SettingsPage() {
                                       pressed={smtpHelpProvider === "webmail"}
                                       onClick={() => setSmtpHelpProvider("webmail")}
                                     >
-                                      Webmail / custom domain
+                                      {settingsT(language, "set.webmailCustom")}
                                     </Button>
                                   </InlineStack>
 
                                   {smtpHelpProvider === "gmail" ? (
                                     <ol className="settings-help-list">
                                       <li>
-                                        Click <strong>Use Gmail</strong> below — host,
-                                        port 587, and TLS fill automatically.
+                                        {settingsT(language, "set.smtpGmailStep1")}
                                       </li>
                                       <li>
-                                        Enter your full Gmail in{" "}
-                                        <strong>From email</strong> and{" "}
-                                        <strong>Username</strong> (e.g. you@gmail.com).
+                                        {settingsT(language, "set.smtpGmailStep2")}
                                       </li>
                                       <li>
-                                        Turn on 2-Step Verification in your Google
-                                        Account, then create an{" "}
-                                        <strong>App Password</strong>. Use that
-                                        password here — not your normal Gmail password.
+                                        {settingsT(language, "set.smtpGmailStep3")}
                                       </li>
                                       <li>
-                                        Paste the App Password in the{" "}
-                                        <strong>Password</strong> field.
+                                        {settingsT(language, "set.smtpGmailStep4")}
                                       </li>
                                       <li>
-                                        Click <strong>Save</strong> at the top of this
-                                        page.
+                                        {settingsT(language, "set.smtpGmailStep5")}
                                       </li>
                                     </ol>
                                   ) : (
                                     <ol className="settings-help-list">
                                       <li>
-                                        Click <strong>Use Webmail</strong> below —
-                                        Hostinger defaults fill automatically
-                                        (smtp.hostinger.com, port 465, SSL). Change the
-                                        host if you use another provider (e.g.
-                                        mail.yourdomain.com or smtp.office365.com).
+                                        {settingsT(language, "set.smtpWebStep1")}
                                       </li>
                                       <li>
-                                        Hostinger: keep port <strong>465</strong> with
-                                        TLS off (SSL). For other providers, port{" "}
-                                        <strong>587</strong> + Use TLS is common.
+                                        {settingsT(language, "set.smtpWebStep2")}
                                       </li>
                                       <li>
-                                        Fill <strong>From email</strong>,{" "}
-                                        <strong>From name</strong>, username (full
-                                        email), and mailbox password.
+                                        {settingsT(language, "set.smtpWebStep3")}
                                       </li>
                                       <li>
-                                        Click <strong>Save</strong> at the top of this
-                                        page, then send a test document email.
+                                        {settingsT(language, "set.smtpWebStep4")}
                                       </li>
                                     </ol>
                                   )}
@@ -2634,24 +2772,24 @@ export default function SettingsPage() {
                               pressed={smtpHelpProvider === "gmail"}
                               onClick={applyGmailSmtpPreset}
                             >
-                              Use Gmail
+                              {settingsT(language, "set.smtpUseGmail")}
                             </Button>
                             <Button
                               size="slim"
                               pressed={smtpHelpProvider === "webmail"}
                               onClick={applyWebmailSmtpPreset}
                             >
-                              Use Webmail
+                              {settingsT(language, "set.smtpUseWebmail")}
                             </Button>
                             <Text as="span" tone="subdued">
                               {smtpHelpProvider === "gmail"
-                                ? "Gmail needs an App Password, not your regular password."
-                                : "Hostinger example: smtp.hostinger.com · port 465 · SSL"}
+                                ? settingsT(language, "set.smtpGmailHint")
+                                : settingsT(language, "set.smtpWebmailHint")}
                             </Text>
                           </InlineStack>
 
                           <TextField
-                            label="SMTP host"
+                            label={settingsT(language, "set.smtpHost")}
                             value={smtpSettings.host}
                             placeholder={
                               smtpHelpProvider === "gmail"
@@ -2665,7 +2803,7 @@ export default function SettingsPage() {
                           <InlineStack gap="400" blockAlign="end" wrap={false}>
                             <div className="settings-port-field">
                               <TextField
-                                label="Port"
+                                label={settingsT(language, "set.smtpPort")}
                                 value={smtpSettings.port}
                                 placeholder="587"
                                 onChange={(value) => updateSmtpField("port", value)}
@@ -2673,7 +2811,7 @@ export default function SettingsPage() {
                               />
                             </div>
                             <Checkbox
-                              label="Use TLS"
+                              label={settingsT(language, "set.smtpTls")}
                               checked={smtpSettings.encryption === "tls"}
                               onChange={(checked) => {
                                 if (checked) {
@@ -2691,7 +2829,7 @@ export default function SettingsPage() {
                           <InlineStack gap="300" wrap={false}>
                             <div className="settings-flex-field">
                               <TextField
-                                label="From email"
+                                label={settingsT(language, "set.smtpFromEmail")}
                                 type="email"
                                 value={smtpSettings.fromEmail}
                                 placeholder="you@gmail.com"
@@ -2703,7 +2841,7 @@ export default function SettingsPage() {
                             </div>
                             <div className="settings-flex-field">
                               <TextField
-                                label="From name"
+                                label={settingsT(language, "set.smtpFromName")}
                                 value={smtpSettings.fromName}
                                 placeholder="Your Store"
                                 onChange={(value) =>
@@ -2717,7 +2855,7 @@ export default function SettingsPage() {
                           <InlineStack gap="300" wrap={false}>
                             <div className="settings-flex-field">
                               <TextField
-                                label="Username"
+                                label={settingsT(language, "set.smtpUsername")}
                                 value={smtpSettings.username}
                                 placeholder="Same as from email"
                                 onChange={(value) =>
@@ -2728,13 +2866,13 @@ export default function SettingsPage() {
                             </div>
                             <div className="settings-flex-field">
                               <TextField
-                                label="Password"
+                                label={settingsT(language, "set.smtpPassword")}
                                 type="password"
                                 value={smtpSettings.password}
                                 placeholder={
                                   hasSmtpPassword
-                                    ? "Leave blank to keep existing"
-                                    : "App password"
+                                    ? settingsT(language, "set.smtpPasswordKeep")
+                                    : settingsT(language, "set.smtpPasswordApp")
                                 }
                                 onChange={(value) =>
                                   updateSmtpField("password", value)
@@ -2745,25 +2883,24 @@ export default function SettingsPage() {
                           </InlineStack>
 
                           {smtpSettings.host ? (
-                            <Banner tone="info" title="SMTP ready">
-                              <p>
-                                Document emails will send through this server when
-                                you use Send Email. Turn PDF attach on in Email
-                                templates.
-                              </p>
+                            <Banner
+                              tone="info"
+                              title={settingsT(language, "set.smtpReadyTitle")}
+                            >
+                              <p>{settingsT(language, "set.smtpReadyBody")}</p>
                             </Banner>
                           ) : (
-                            <Banner tone="warning" title="SMTP not configured">
-                              <p>
-                                Set up SMTP here before using Send Email. Without
-                                SMTP, document emails cannot be sent from the app.
-                              </p>
+                            <Banner
+                              tone="warning"
+                              title={settingsT(language, "set.smtpMissingTitle")}
+                            >
+                              <p>{settingsT(language, "set.smtpMissingBody")}</p>
                             </Banner>
                           )}
 
                           {isSmtpDirty ? (
                             <Text as="p" tone="subdued">
-                              Unsaved changes
+                              {settingsT(language, "set.unsaved")}
                             </Text>
                           ) : null}
                         </BlockStack>
@@ -2790,20 +2927,20 @@ export default function SettingsPage() {
                               variant="tertiary"
                               onClick={resetEmailTemplateToDefault}
                             >
-                              Reset this
+                              {settingsT(language, "set.emailReset")}
                             </Button>
                             <Button
                               variant="tertiary"
                               onClick={loadAllReadyEmailTemplates}
                             >
-                              Load all ready
+                              {settingsT(language, "set.emailLoadAll")}
                             </Button>
                           </InlineStack>
 
                           <InlineStack gap="300" blockAlign="end" wrap={false}>
                             <div className="settings-flex-field">
                               <TextField
-                                label="Subject"
+                                label={settingsT(language, "set.emailSubject")}
                                 value={
                                   emailTemplates.templates[emailTemplateKind].subject
                                 }
@@ -2814,7 +2951,7 @@ export default function SettingsPage() {
                               />
                             </div>
                             <Checkbox
-                              label="Attach PDF"
+                              label={settingsT(language, "set.emailAttachPdf")}
                               checked={
                                 emailTemplates.templates[emailTemplateKind]
                                   .attachPdf
@@ -2828,14 +2965,14 @@ export default function SettingsPage() {
                           <Suspense
                             fallback={
                               <Text as="p" tone="subdued">
-                                Loading editor…
+                                {settingsT(language, "set.emailLoadingEditor")}
                               </Text>
                             }
                           >
                             <EmailBodyEditor
                               key={emailTemplateKind}
                               ref={emailBodyEditorRef}
-                              label="Body"
+                              label={settingsT(language, "set.emailBody")}
                               value={emailTemplates.templates[emailTemplateKind].body}
                               onChange={(html) =>
                                 updateEmailTemplateField("body", html)

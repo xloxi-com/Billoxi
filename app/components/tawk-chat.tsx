@@ -28,7 +28,18 @@ export function TawkChat() {
     script.setAttribute("crossorigin", "*");
 
     const first = document.getElementsByTagName("script")[0];
-    first?.parentNode?.insertBefore(script, first);
+    const load = () => {
+      if (document.getElementById("tawk-to-script")) return;
+      first?.parentNode?.insertBefore(script, first);
+    };
+
+    // Don't compete with first paint / route loaders.
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(load, { timeout: 4000 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timer = window.setTimeout(load, 2500);
+    return () => window.clearTimeout(timer);
   }, []);
 
   return null;

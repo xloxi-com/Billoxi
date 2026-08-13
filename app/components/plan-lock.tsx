@@ -11,12 +11,17 @@ import {
   Tooltip,
 } from "@shopify/polaris";
 
+import { useAdminI18n } from "../admin-i18n-context";
+import {
+  settingsT,
+  settingsTf,
+  settingsUpgradeMessage,
+} from "../admin-settings-i18n";
 import {
   getCurrentPlanId,
   planBadgeLabel,
   planHasCapability,
   requiredPlanFor,
-  upgradeMessage,
   type PlanCapability,
 } from "../plan-access";
 import { getPlanById, type PlanId } from "../plan-features";
@@ -42,13 +47,15 @@ export function CrownIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 /** Standalone crown for FREE / non-capability locks. */
-export function PlanCrownBadge({ label = "Paid plan" }: { label?: string }) {
+export function PlanCrownBadge({ label }: { label?: string }) {
+  const { language } = useAdminI18n();
+  const resolved = label ?? settingsT(language, "set.planPaid");
   return (
-    <Tooltip content={label}>
+    <Tooltip content={resolved}>
       <span
         className="plan-feature-crown"
-        title={label}
-        aria-label={label}
+        title={resolved}
+        aria-label={resolved}
       >
         <Icon source={CrownIcon} />
         <style>{`
@@ -84,14 +91,16 @@ export function PlanFeatureBadge({
   capability: PlanCapability;
   currentPlanId?: PlanId;
 }) {
+  const { language } = useAdminI18n();
   if (planHasCapability(currentPlanId, capability)) return null;
   const required = planBadgeLabel(requiredPlanFor(capability));
+  const tip = settingsTf(language, "set.planFeatureTitle", { plan: required });
   return (
-    <Tooltip content={`${required} plan`}>
+    <Tooltip content={tip}>
       <span
         className="plan-feature-crown"
-        title={`${required} plan`}
-        aria-label={`${required} plan feature`}
+        title={tip}
+        aria-label={tip}
       >
         <Icon source={CrownIcon} />
         <style>{`
@@ -130,23 +139,28 @@ export function PlanLockBanner({
   onUpgrade?: () => void;
 }) {
   const navigate = useNavigate();
+  const { language } = useAdminI18n();
   if (planHasCapability(currentPlanId, capability)) return null;
 
   const required = getPlanById(requiredPlanFor(capability));
 
   return (
     <Banner
-      title={`${required.name} feature`}
+      title={settingsTf(language, "set.planFeatureTitle", {
+        plan: required.name,
+      })}
       tone="warning"
       action={{
-        content: `Upgrade to ${required.name}`,
+        content: settingsTf(language, "set.planUpgradeTo", {
+          plan: required.name,
+        }),
         onAction: () => {
           if (onUpgrade) onUpgrade();
           else navigate("/app/pricing");
         },
       }}
     >
-      <p>{upgradeMessage(capability, currentPlanId)}</p>
+      <p>{settingsUpgradeMessage(language, capability, currentPlanId)}</p>
     </Banner>
   );
 }
@@ -226,6 +240,7 @@ export function usePlanUpgradeModal(
   currentPlanId: PlanId = getCurrentPlanId(),
 ) {
   const navigate = useNavigate();
+  const { language } = useAdminI18n();
   const [open, setOpen] = useState(false);
   const [capability, setCapability] = useState<PlanCapability | null>(null);
 
@@ -256,9 +271,11 @@ export function usePlanUpgradeModal(
       <Modal
         open={open}
         onClose={closeUpgrade}
-        title="Upgrade your plan"
+        title={settingsT(language, "set.planUpgradeModalTitle")}
         primaryAction={{
-          content: `View ${planBadgeLabel(requiredPlanFor(capability))} plan`,
+          content: settingsTf(language, "set.planViewPlan", {
+            plan: planBadgeLabel(requiredPlanFor(capability)),
+          }),
           onAction: () => {
             closeUpgrade();
             navigate("/app/pricing");
@@ -266,7 +283,7 @@ export function usePlanUpgradeModal(
         }}
         secondaryActions={[
           {
-            content: "Not now",
+            content: settingsT(language, "set.planNotNow"),
             onAction: closeUpgrade,
           },
         ]}
@@ -278,10 +295,12 @@ export function usePlanUpgradeModal(
                 <Icon source={CrownIcon} />
               </span>
               <Text as="p" fontWeight="semibold">
-                Locked on your current plan
+                {settingsT(language, "set.planLockedOn")}
               </Text>
             </InlineStack>
-            <Text as="p">{upgradeMessage(capability, currentPlanId)}</Text>
+            <Text as="p">
+              {settingsUpgradeMessage(language, capability, currentPlanId)}
+            </Text>
             <Box
               background="bg-surface-secondary"
               borderRadius="200"

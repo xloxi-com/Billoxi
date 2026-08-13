@@ -47,6 +47,11 @@ export default defineConfig({
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
       allow: ["app", "node_modules"],
     },
+    watch: {
+      // Locale JSON is loaded on demand; watching 137 files restarts the
+      // Cloudflare tunnel and breaks the Shopify admin iframe.
+      ignored: ["**/app/admin-locales/**"],
+    },
   },
   plugins: [
     reactRouter(),

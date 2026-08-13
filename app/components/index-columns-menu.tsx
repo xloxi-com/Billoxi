@@ -15,6 +15,7 @@ import {
   LayoutColumns3Icon,
   ViewIcon,
 } from "@shopify/polaris-icons";
+import { useAdminI18n } from "../admin-i18n-context";
 
 export type IndexColumnDef = {
   id: string;
@@ -200,6 +201,7 @@ export function useIndexColumns(
   visibleColumns: IndexColumnDef[];
   menu: ReactNode;
 } {
+  const { t } = useAdminI18n();
   const [state, setState] = useState<IndexColumnsState>(() =>
     readStored(storageKey, columns),
   );
@@ -264,14 +266,14 @@ export function useIndexColumns(
       onClose={() => setOpen(false)}
       activator={
         <Tooltip
-          content="Edit columns"
+          content={t("col.editColumns")}
           preferredPosition="above"
           hoverDelay={400}
         >
           <Button
             size="slim"
             icon={LayoutColumns3Icon}
-            accessibilityLabel="Edit columns"
+            accessibilityLabel={t("col.editColumns")}
             pressed={open}
             onClick={() => setOpen((v) => !v)}
           />
@@ -281,7 +283,7 @@ export function useIndexColumns(
       <Box minWidth="240px" paddingBlockStart="200">
         <Box paddingInline="300" paddingBlockEnd="150">
           <Text as="h3" variant="headingSm">
-            Columns
+            {t("col.columns")}
           </Text>
         </Box>
         <div className="sales-orders-columns-list" role="list">

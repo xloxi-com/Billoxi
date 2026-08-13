@@ -1,6 +1,6 @@
 import type { StoreDetails } from "./store-details";
 import { formatStoreAddressLines } from "./store-details";
-import { normalizeTemplateLanguage } from "./template-labels";
+import { normalizeTemplateLanguage } from "./template-languages";
 
 export type PaymentStatusStyle =
   | "boxed"

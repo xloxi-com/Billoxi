@@ -13,23 +13,25 @@ import { ExternalSmallIcon } from "@shopify/polaris-icons";
 
 import offrefyLogo from "../assets/recommended/offrefy.png";
 import approvefyLogo from "../assets/recommended/approvefy.png";
+import { useAdminI18n } from "../admin-i18n-context";
+import { settingsT } from "../admin-settings-i18n";
 import "./recommended-apps.css";
 
 export const RECOMMENDED_APPS = [
   {
     id: "approvefy",
     name: "Approvefy",
-    tagline: "B2B registration & approval",
+    taglineKey: "set.rec.approvefyTag" as const,
+    badgeKey: "set.rec.approvefyBadge" as const,
     href: "https://apps.shopify.com/approvefy",
-    badge: "From $4.99/mo",
     logo: approvefyLogo,
   },
   {
     id: "offrefy",
     name: "Offrefy",
-    tagline: "Quantity breaks at checkout",
+    taglineKey: "set.rec.offrefyTag" as const,
+    badgeKey: "set.rec.offrefyBadge" as const,
     href: "https://apps.shopify.com/offrefy",
-    badge: "Free plan",
     logo: offrefyLogo,
   },
 ] as const;
@@ -45,19 +47,23 @@ type RecommendedAppsListProps = {
 
 function RecommendedAppsList({
   className,
-  title = "More from us",
-  subtitle = "Apps that work well alongside Billoxi.",
+  title,
+  subtitle,
   inCard = true,
 }: RecommendedAppsListProps) {
+  const { t, language } = useAdminI18n();
+  const resolvedTitle = title ?? t("home.moreFromUs");
+  const resolvedSubtitle =
+    subtitle === undefined ? t("home.moreFromUsSubtitle") : subtitle;
   const body = (
     <BlockStack gap="400">
       <BlockStack gap="100">
         <Text as="h2" variant={inCard ? "headingMd" : "headingSm"}>
-          {title}
+          {resolvedTitle}
         </Text>
-        {subtitle ? (
+        {resolvedSubtitle ? (
           <Text as="p" tone="subdued" variant="bodySm">
-            {subtitle}
+            {resolvedSubtitle}
           </Text>
         ) : null}
       </BlockStack>
@@ -87,11 +93,11 @@ function RecommendedAppsList({
                     {app.name}
                   </Text>
                   <Badge size="small" tone="info">
-                    {app.badge}
+                    {settingsT(language, app.badgeKey)}
                   </Badge>
                 </InlineStack>
                 <Text as="p" tone="subdued" variant="bodySm">
-                  {app.tagline}
+                  {settingsT(language, app.taglineKey)}
                 </Text>
               </div>
               <span className="recommended-app-row__action" aria-hidden>
@@ -120,11 +126,12 @@ export function RecommendedAppsCard() {
 }
 
 export function RecommendedAppsSidebar() {
+  const { language } = useAdminI18n();
   return (
     <RecommendedAppsList
       className="settings-recommend-column"
-      title="More from XLOXI"
-      subtitle="Apps that pair well with Billoxi."
+      title={settingsT(language, "set.rec.title")}
+      subtitle={settingsT(language, "set.rec.subtitle")}
       inCard={false}
     />
   );

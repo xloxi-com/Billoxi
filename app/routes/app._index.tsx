@@ -1,10 +1,12 @@
 import type {
+  ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  useFetcher,
   useLoaderData,
   useNavigate,
   useRevalidator,
@@ -30,6 +32,7 @@ import {
   Link,
   Page,
   ProgressBar,
+  Select,
   Text,
 } from "@shopify/polaris";
 import {
@@ -50,7 +53,6 @@ import {
   loadRecentDocumentEvents,
 } from "../document-event-log.server";
 import {
-  documentKindLabel,
   formatEventLogTime,
   formatOrderIdLabel,
   orderIdHref,
@@ -60,7 +62,18 @@ import {
   loadSmtpSettingsForShop,
 } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
-import { loadSetupGuideProgress } from "../setup-guide.server";
+import { loadSetupGuideProgress, saveAdminLanguage } from "../setup-guide.server";
+import {
+  ADMIN_UI_LANGUAGES,
+  DEFAULT_ADMIN_UI_LANGUAGE,
+  adminEventActionLabel,
+  adminEventKindLabel,
+  adminT,
+  adminTf,
+  normalizeAdminUiLanguage,
+  type AdminUiLanguage,
+} from "../admin-i18n";
+import { useAdminI18n } from "../admin-i18n-context";
 import prisma from "../db.server";
 import { RecommendedAppsCard } from "../components/recommended-apps";
 import { HomeAnalyticsSection } from "../components/home-analytics";
@@ -76,6 +89,7 @@ import {
 } from "../components/plan-lock";
 
 type SetupStepId =
+  | "admin-language"
   | "store-details"
   | "templates"
   | "transaction-numbers"
@@ -83,40 +97,52 @@ type SetupStepId =
 
 const FULL_SETUP_STEPS: Array<{
   id: SetupStepId;
-  label: string;
-  detail: string;
-  cta: string;
+  labelKey: import("../admin-i18n").AdminMessageKey;
+  detailKey: import("../admin-i18n").AdminMessageKey;
+  ctaKey: import("../admin-i18n").AdminMessageKey;
   href: string;
 }> = [
   {
+    id: "admin-language",
+    labelKey: "setup.adminLanguage",
+    detailKey: "setup.adminLanguageDetail",
+    ctaKey: "setup.saveLanguage",
+    href: "/app/settings?section=admin-language",
+  },
+  {
     id: "store-details",
-    label: "Store details",
-    detail: "Add your business name, address, and logo for documents.",
-    cta: "Open store details",
+    labelKey: "setup.storeDetails",
+    detailKey: "setup.storeDetailsDetail",
+    ctaKey: "setup.openStoreDetails",
     href: "/app/settings?section=store-details",
   },
   {
     id: "templates",
-    label: "Document templates",
-    detail: "Pick active templates for sales orders and invoices.",
-    cta: "Open templates",
+    labelKey: "setup.templates",
+    detailKey: "setup.templatesDetail",
+    ctaKey: "setup.openTemplates",
     href: "/app/templates",
   },
   {
     id: "transaction-numbers",
-    label: "Transaction numbers",
-    detail: "Set prefixes and starting numbers for SO, INV, DFT, and RET.",
-    cta: "Open Transaction numbers",
+    labelKey: "setup.transactionNumbers",
+    detailKey: "setup.transactionNumbersDetail",
+    ctaKey: "setup.openTransactionNumbers",
     href: "/app/settings?section=number-series",
   },
   {
     id: "smtp",
-    label: "Email (SMTP)",
-    detail: "Connect SMTP so you can send documents by email.",
-    cta: "Open SMTP settings",
+    labelKey: "setup.smtp",
+    detailKey: "setup.smtpDetail",
+    ctaKey: "setup.openSmtp",
     href: "/app/settings?section=smtp",
   },
 ];
+
+const LANGUAGE_OPTIONS = ADMIN_UI_LANGUAGES.map((entry) => ({
+  value: entry.value,
+  label: entry.label,
+}));
 
 /** Fallback copy when no subscription is active yet. */
 const NO_PLAN_SUMMARY = {
@@ -224,8 +250,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Merchant must finish each step after install — do not treat Shopify
   // auto-filled store details / default templates as Done.
+  const adminLanguage = normalizeAdminUiLanguage(
+    setupProgress.adminLanguage,
+    DEFAULT_ADMIN_UI_LANGUAGE,
+  );
+  // New installs must choose language first. Shops that already finished later
+  // steps before this feature existed stay complete (default English).
+  const adminLanguageDone = Boolean(
+    setupProgress["admin-language"] ||
+      setupProgress.adminLanguage ||
+      setupProgress["store-details"] ||
+      setupProgress.templates ||
+      setupProgress.smtp,
+  );
   const setupGuide = {
+    adminLanguage,
     steps: {
+      "admin-language": adminLanguageDone,
       "store-details": Boolean(setupProgress["store-details"]),
       templates: Boolean(setupProgress.templates),
       "transaction-numbers": transactionNumbersReady,
@@ -254,22 +295,75 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await requireAdminAuth(request);
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") || "");
+
+  if (intent === "save-admin-language") {
+    const language = normalizeAdminUiLanguage(
+      formData.get("language"),
+      DEFAULT_ADMIN_UI_LANGUAGE,
+    );
+    const progress = await saveAdminLanguage(session.shop, language);
+    return {
+      ok: true as const,
+      intent: "save-admin-language" as const,
+      adminLanguage: progress.adminLanguage ?? language,
+    };
+  }
+
+  return { ok: false as const, error: "Unknown action." };
+};
+
 export default function AppHomePage() {
   const { analytics, plan, eventLogs, setupGuide, hasActivePlan, currentPlanId } =
     useLoaderData<typeof loader>();
+  const { t, language } = useAdminI18n();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+  const languageFetcher = useFetcher<typeof action>();
   const planIdForLocks = currentPlanId ?? "starter";
   const { guard: planGuard, modal: planUpgradeModal } =
     usePlanUpgradeModal(planIdForLocks);
   const chartUnlocked =
     Boolean(currentPlanId) &&
-    planHasCapability(currentPlanId, "dashboardChart");
+    planHasCapability(currentPlanId!, "dashboardChart");
   const [stepSynced, setStepSynced] = useState(setupGuide.steps);
+  const [adminLanguage, setAdminLanguage] = useState<AdminUiLanguage>(
+    setupGuide.adminLanguage,
+  );
+  const handledLanguageFetcherRef = useRef<unknown>(null);
 
   useEffect(() => {
     setStepSynced(setupGuide.steps);
-  }, [setupGuide.steps]);
+    setAdminLanguage(setupGuide.adminLanguage);
+  }, [setupGuide.steps, setupGuide.adminLanguage]);
+
+  useEffect(() => {
+    if (languageFetcher.state !== "idle" || !languageFetcher.data) return;
+    if (handledLanguageFetcherRef.current === languageFetcher.data) return;
+    handledLanguageFetcherRef.current = languageFetcher.data;
+
+    if (
+      languageFetcher.data.ok &&
+      languageFetcher.data.intent === "save-admin-language"
+    ) {
+      const nextLanguage = languageFetcher.data.adminLanguage;
+      setAdminLanguage(nextLanguage);
+      setStepSynced((prev) => ({ ...prev, "admin-language": true }));
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(adminT(nextLanguage, "settings.languageSaved"));
+      }
+      if (revalidator.state === "idle") revalidator.revalidate();
+    } else if (!languageFetcher.data.ok && "error" in languageFetcher.data) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(languageFetcher.data.error || "Could not save", {
+          isError: true,
+        });
+      }
+    }
+  }, [languageFetcher.state, languageFetcher.data, revalidator]);
 
   useEffect(() => {
     const refresh = () => {
@@ -281,17 +375,20 @@ export default function AppHomePage() {
   }, [revalidator]);
 
   const planItems = [
-    { label: "Your Current Plan", value: plan.name },
-    { label: "Date of Your Installation", value: plan.installedAtLabel },
-    { label: "Monthly Fee of Your Plan", value: plan.monthlyFee },
+    { label: t("home.planCurrent"), value: plan.name },
+    { label: t("home.planInstalled"), value: plan.installedAtLabel },
+    { label: t("home.planFee"), value: plan.monthlyFee },
     {
-      label: "Trial Period Expiration Date",
+      label: t("home.planTrialEnds"),
       value: hasActivePlan ? plan.trialEndsAtLabel : "—",
     },
   ] as const;
 
   const setupSteps = FULL_SETUP_STEPS.map((step) => ({
     ...step,
+    label: t(step.labelKey),
+    detail: t(step.detailKey),
+    cta: t(step.ctaKey),
     synced: Boolean(stepSynced[step.id]),
   }));
   const setupDoneCount = setupSteps.filter((step) => step.synced).length;
@@ -300,6 +397,15 @@ export default function AppHomePage() {
   const setupProgress = Math.round(
     (setupDoneCount / setupSteps.length) * 100,
   );
+  const languageSaving = languageFetcher.state !== "idle";
+  const languageDirty = adminLanguage !== setupGuide.adminLanguage;
+
+  const saveAdminLanguageChoice = () => {
+    const formData = new FormData();
+    formData.set("intent", "save-admin-language");
+    formData.set("language", adminLanguage);
+    languageFetcher.submit(formData, { method: "post" });
+  };
 
   // Incomplete → open; fully done → stay collapsed (auto-close).
   const [setupOpen, setSetupOpen] = useState(!setupComplete);
@@ -314,11 +420,11 @@ export default function AppHomePage() {
         primaryAction={
           hasActivePlan
             ? {
-                content: "Sales orders",
+                content: t("common.salesOrders"),
                 onAction: () => navigate("/app/sales-order"),
               }
             : {
-                content: "View pricing",
+                content: t("common.viewPricing"),
                 onAction: () => navigate("/app/pricing"),
               }
         }
@@ -326,12 +432,16 @@ export default function AppHomePage() {
           hasActivePlan
             ? [
                 {
-                  content: "Templates",
+                  content: t("common.templates"),
                   onAction: () => navigate("/app/templates"),
                 },
                 {
-                  content: "Settings",
+                  content: t("common.settings"),
                   onAction: () => navigate("/app/settings"),
+                },
+                {
+                  content: t("common.viewPricing"),
+                  onAction: () => navigate("/app/pricing"),
                 },
               ]
             : undefined
@@ -341,17 +451,14 @@ export default function AppHomePage() {
           {!hasActivePlan ? (
             <Layout.Section>
               <Banner
-                title="You’re on FREE"
+                title={t("home.freeBannerTitle")}
                 tone="info"
                 action={{
-                  content: "View pricing",
+                  content: t("common.viewPricing"),
                   onAction: () => navigate("/app/pricing"),
                 }}
               >
-                <p>
-                  Document modules are hidden until you choose STARTER,
-                  PREMIUM, or ULTIMATE.
-                </p>
+                <p>{t("home.freeBannerBody")}</p>
               </Banner>
             </Layout.Section>
           ) : null}
@@ -362,13 +469,12 @@ export default function AppHomePage() {
                   <BlockStack gap="300">
                     <InlineStack gap="200" blockAlign="center">
                       <Text as="h2" variant="headingMd">
-                        Setup guide
+                        {t("setup.guideTitle")}
                       </Text>
-                      <PlanCrownBadge label="Paid plan" />
+                      <PlanCrownBadge label={t("setup.paidPlan")} />
                     </InlineStack>
                     <Text as="p" tone="subdued" variant="bodySm">
-                      Setup is locked on FREE. Choose a paid plan to finish
-                      store details, templates, numbers, and SMTP.
+                      {t("setup.lockedBody")}
                     </Text>
                     <Box
                       background="bg-surface-secondary"
@@ -377,13 +483,13 @@ export default function AppHomePage() {
                     >
                       <BlockStack gap="300" inlineAlign="center">
                         <Text as="p" tone="subdued" alignment="center">
-                          Unlock Setup guide with STARTER or higher.
+                          {t("setup.unlockBody")}
                         </Text>
                         <Button
                           variant="primary"
                           onClick={() => navigate("/app/pricing")}
                         >
-                          View pricing
+                          {t("common.viewPricing")}
                         </Button>
                       </BlockStack>
                     </Box>
@@ -396,18 +502,18 @@ export default function AppHomePage() {
                       <BlockStack gap="100">
                         <InlineStack gap="200" blockAlign="center">
                           <Text as="h2" variant="headingMd">
-                            Setup guide
+                            {t("setup.guideTitle")}
                           </Text>
                           <Badge tone={setupComplete ? "success" : "attention"}>
                             {setupComplete
-                              ? "Complete"
+                              ? t("setup.complete")
                               : `${setupDoneCount}/${setupSteps.length}`}
                           </Badge>
                         </InlineStack>
                         <Text as="p" tone="subdued" variant="bodySm">
                           {setupComplete
-                            ? "All setup steps are done."
-                            : "Finish these steps to get Billoxi ready."}
+                            ? t("setup.allDone")
+                            : t("setup.finishSteps")}
                         </Text>
                       </BlockStack>
                       <Button
@@ -415,8 +521,8 @@ export default function AppHomePage() {
                         icon={setupOpen ? ChevronUpIcon : ChevronDownIcon}
                         accessibilityLabel={
                           setupOpen
-                            ? "Collapse setup guide"
-                            : "Expand setup guide"
+                            ? t("setup.collapse")
+                            : t("setup.expand")
                         }
                         onClick={() => setSetupOpen((open) => !open)}
                       />
@@ -439,6 +545,9 @@ export default function AppHomePage() {
                       <BlockStack gap="0">
                         {setupSteps.map((step, index) => {
                           const isNext = nextStep?.id === step.id;
+                          const isLanguageStep = step.id === "admin-language";
+                          // Always show picker so merchants can change language again.
+                          const showLanguagePicker = isLanguageStep;
 
                           return (
                             <Box key={step.id}>
@@ -452,13 +561,21 @@ export default function AppHomePage() {
                               >
                                 <InlineStack
                                   align="space-between"
-                                  blockAlign={isNext ? "start" : "center"}
+                                  blockAlign={
+                                    isNext || showLanguagePicker
+                                      ? "start"
+                                      : "center"
+                                  }
                                   gap="300"
                                   wrap
                                 >
                                   <InlineStack
                                     gap="200"
-                                    blockAlign={isNext ? "start" : "center"}
+                                    blockAlign={
+                                      isNext || showLanguagePicker
+                                        ? "start"
+                                        : "center"
+                                    }
                                     wrap={false}
                                   >
                                     <Box>
@@ -482,17 +599,21 @@ export default function AppHomePage() {
                                         as="h3"
                                         variant="bodyMd"
                                         fontWeight={
-                                          isNext ? "semibold" : undefined
+                                          isNext || isLanguageStep
+                                            ? "semibold"
+                                            : undefined
                                         }
                                         tone={
-                                          step.synced || isNext
+                                          step.synced ||
+                                          isNext ||
+                                          isLanguageStep
                                             ? undefined
                                             : "subdued"
                                         }
                                       >
                                         {step.label}
                                       </Text>
-                                      {isNext ? (
+                                      {isNext || showLanguagePicker ? (
                                         <Text
                                           as="p"
                                           tone="subdued"
@@ -501,10 +622,55 @@ export default function AppHomePage() {
                                           {step.detail}
                                         </Text>
                                       ) : null}
+                                      {showLanguagePicker ? (
+                                        <Box width="100%">
+                                          <div style={{ maxWidth: 320 }}>
+                                            <Select
+                                              label="Language"
+                                              labelHidden
+                                              options={LANGUAGE_OPTIONS}
+                                              value={adminLanguage}
+                                              onChange={(value) =>
+                                                setAdminLanguage(
+                                                  normalizeAdminUiLanguage(
+                                                    value,
+                                                  ),
+                                                )
+                                              }
+                                              disabled={languageSaving}
+                                            />
+                                          </div>
+                                        </Box>
+                                      ) : null}
                                     </BlockStack>
                                   </InlineStack>
-                                  {step.synced ? (
-                                    <Badge tone="success">Done</Badge>
+                                  {isLanguageStep ? (
+                                    <InlineStack gap="200" blockAlign="center">
+                                      {step.synced && !languageDirty ? (
+                                        <Badge tone="success">
+                                          {t("setup.done")}
+                                        </Badge>
+                                      ) : null}
+                                      <Button
+                                        variant={
+                                          !step.synced || languageDirty
+                                            ? "primary"
+                                            : "secondary"
+                                        }
+                                        onClick={saveAdminLanguageChoice}
+                                        loading={languageSaving}
+                                        disabled={
+                                          languageSaving ||
+                                          (step.synced && !languageDirty)
+                                        }
+                                      >
+                                        {step.synced
+                                          ? t("setup.updateLanguage")
+                                          : step.cta}
+                                      </Button>
+                                    </InlineStack>
+                                  ) : step.synced ? (
+                                    <Badge tone="success">{t("setup.done")}</Badge>
                                   ) : (
                                     <Button
                                       variant={isNext ? "primary" : "secondary"}
@@ -528,13 +694,13 @@ export default function AppHomePage() {
                 <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Plan
+                      {t("home.plan")}
                     </Text>
                     <Button
                       variant="plain"
                       onClick={() => navigate("/app/pricing")}
                     >
-                      View pricing
+                      {t("common.viewPricing")}
                     </Button>
                   </InlineStack>
                   <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="300">
@@ -583,7 +749,7 @@ export default function AppHomePage() {
                     <BlockStack gap="100">
                       <InlineStack gap="200" blockAlign="center">
                         <Text as="h2" variant="headingMd">
-                          Event Logs
+                          {t("home.eventLogs")}
                         </Text>
                         <PlanFeatureBadge
                           capability="eventLog"
@@ -591,8 +757,7 @@ export default function AppHomePage() {
                         />
                       </InlineStack>
                       <Text as="p" tone="subdued" variant="bodySm">
-                        Recent print, download, and email activity for sales
-                        orders, invoices, credit notes, and packing slips.
+                        {t("home.eventLogsSubtitle")}
                       </Text>
                     </BlockStack>
                   </Box>
@@ -603,9 +768,7 @@ export default function AppHomePage() {
                       padding="400"
                     >
                       <Text as="p" tone="subdued" alignment="center">
-                        Event log is locked on your plan. Upgrade to ULTIMATE to
-                        view activity. New events are not recorded until you
-                        upgrade.
+                        {t("home.eventLogsLocked")}
                       </Text>
                     </Box>
                   </Box>
@@ -617,7 +780,7 @@ export default function AppHomePage() {
                 <BlockStack gap="100">
                   <InlineStack gap="200" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Event Logs
+                      {t("home.eventLogs")}
                     </Text>
                     <PlanFeatureBadge
                       capability="eventLog"
@@ -625,8 +788,7 @@ export default function AppHomePage() {
                     />
                   </InlineStack>
                   <Text as="p" tone="subdued" variant="bodySm">
-                    Recent print, download, and email activity for sales
-                    orders, invoices, credit notes, and packing slips.
+                    {t("home.eventLogsSubtitle")}
                   </Text>
                 </BlockStack>
               </Box>
@@ -639,19 +801,21 @@ export default function AppHomePage() {
                     padding="400"
                   >
                     <Text as="p" tone="subdued">
-                      No events yet. Print, download, or send a document to see
-                      activity here.
+                      {t("home.eventLogsEmpty")}
                     </Text>
                   </Box>
                 </Box>
               ) : (
                 <IndexTable
-                  resourceName={{ singular: "event", plural: "events" }}
+                  resourceName={{
+                    singular: t("home.eventSingular"),
+                    plural: t("home.eventPlural"),
+                  }}
                   itemCount={eventLogs.length}
                   headings={[
-                    { title: "Order ID" },
-                    { title: "Description" },
-                    { title: "Log Date" },
+                    { title: t("home.eventOrderId") },
+                    { title: t("home.eventDescription") },
+                    { title: t("home.eventLogDate") },
                   ]}
                   selectable={false}
                 >
@@ -664,7 +828,14 @@ export default function AppHomePage() {
                       event.orderGid,
                       event.documentKind,
                     );
-                    const kindLabel = documentKindLabel(event.documentKind);
+                    const actionLabel = adminEventActionLabel(
+                      language,
+                      event.action,
+                    );
+                    const kindPhrase = adminEventKindLabel(
+                      language,
+                      event.documentKind,
+                    );
 
                     return (
                       <IndexTable.Row
@@ -691,14 +862,11 @@ export default function AppHomePage() {
                         <IndexTable.Cell>
                           {orderLabel !== "—" ? (
                             <Text as="span" variant="bodyMd">
-                              You have {event.action}{" "}
-                              <strong>{orderLabel}</strong> as{" "}
-                              <strong>
-                                {kindLabel === "document"
-                                  ? "a document"
-                                  : `a ${kindLabel}`}
-                              </strong>
-                              .
+                              {adminTf(language, "home.eventMessage", {
+                                action: actionLabel,
+                                order: orderLabel,
+                                kind: kindPhrase,
+                              })}
                             </Text>
                           ) : (
                             <Text as="span" variant="bodyMd">
