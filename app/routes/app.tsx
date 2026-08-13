@@ -57,10 +57,9 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
     savedAdminLanguage,
     DEFAULT_ADMIN_UI_LANGUAGE,
   );
-  const adminMessages =
-    adminLanguage === DEFAULT_ADMIN_UI_LANGUAGE
-      ? null
-      : loadAdminLocalePack(adminLanguage);
+  // Always ship the active pack (incl. English) so newly added keys resolve
+  // instead of showing raw ids after locale edits / HMR.
+  const adminMessages = loadAdminLocalePack(adminLanguage);
 
   // eslint-disable-next-line no-undef
   return {

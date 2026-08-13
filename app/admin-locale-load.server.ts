@@ -9,24 +9,34 @@ import { hydrateAdminLocale } from "./admin-locale-store";
 import en from "./admin-locales/en.json";
 
 const enPack = en as AdminLocalePack;
-const fileCache = new Map<string, AdminLocalePack>([["en", enPack]]);
+const fileCache = new Map<string, AdminLocalePack>();
+
+function readLocaleFile(code: string): AdminLocalePack | null {
+  try {
+    const file = join(process.cwd(), "app", "admin-locales", `${code}.json`);
+    return JSON.parse(readFileSync(file, "utf8")) as AdminLocalePack;
+  } catch {
+    return null;
+  }
+}
+
+function mergeWithEnglish(pack: AdminLocalePack): AdminLocalePack {
+  // English fills gaps so newly added keys never render as raw ids.
+  return { ...enPack, ...pack };
+}
 
 export function loadAdminLocalePack(lang: string): AdminLocalePack {
   const code = (lang && String(lang).trim()) || "en";
-  const cached = fileCache.get(code);
-  if (cached) {
-    hydrateAdminLocale(code, cached);
-    return cached;
+  const isDev = process.env.NODE_ENV !== "production";
+
+  let pack = !isDev ? fileCache.get(code) : undefined;
+  if (!pack) {
+    // Dev: re-read so new keys appear without restart. Prod: cache once.
+    pack = readLocaleFile(code) ?? (code === "en" ? enPack : null) ?? enPack;
+    fileCache.set(code, pack);
   }
 
-  try {
-    const file = join(process.cwd(), "app", "admin-locales", `${code}.json`);
-    const pack = JSON.parse(readFileSync(file, "utf8")) as AdminLocalePack;
-    fileCache.set(code, pack);
-    hydrateAdminLocale(code, pack);
-    return pack;
-  } catch {
-    hydrateAdminLocale(code, enPack);
-    return enPack;
-  }
+  const merged = mergeWithEnglish(pack);
+  hydrateAdminLocale(code, merged);
+  return merged;
 }

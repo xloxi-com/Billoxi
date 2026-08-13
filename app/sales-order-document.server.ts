@@ -103,6 +103,19 @@ export function invalidateDocumentTemplateSettingsCache(shop?: string) {
 export type { SalesOrderDocumentData, TemplateEditorSettings };
 
 const columnsReupdateDoneShops = new Set<string>();
+const columnsReupdateFailedUntil = new Map<string, number>();
+const columnsReupdateInFlight = new Map<
+  string,
+  Promise<{ updated: number; seeded: number; skipped: boolean }>
+>();
+
+function templateSettingsUnchanged(a: unknown, b: unknown) {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Re-merge every saved template customization with current code defaults
@@ -132,12 +145,22 @@ export async function reupdateAllShopTemplates(shop: string) {
   });
 
   let updated = 0;
+  const dirty: Array<{ id: string; settings: Prisma.InputJsonValue }> = [];
   for (const row of rows) {
     const name = salesOrderTemplateName(row.templateId);
     const merged = mergeTemplateSettings(row.settings, name, row.templateId);
+    if (templateSettingsUnchanged(row.settings, merged)) continue;
+    dirty.push({
+      id: row.id,
+      settings: merged as unknown as Prisma.InputJsonValue,
+    });
+  }
+
+  // Sequential updates on one connection — avoids pool stampede (limit often 1).
+  for (const row of dirty) {
     await prisma.templateCustomization.update({
       where: { id: row.id },
-      data: { settings: merged as unknown as Prisma.InputJsonValue },
+      data: { settings: row.settings },
     });
     updated += 1;
   }
@@ -200,9 +223,30 @@ export async function reupdateAllShopTemplatesIfNeeded(shop: string) {
   if (columnsReupdateDoneShops.has(shop)) {
     return { updated: 0, seeded: 0, skipped: true as const };
   }
-  const result = await reupdateAllShopTemplates(shop);
-  columnsReupdateDoneShops.add(shop);
-  return { ...result, skipped: false as const };
+  const failedUntil = columnsReupdateFailedUntil.get(shop) ?? 0;
+  if (Date.now() < failedUntil) {
+    return { updated: 0, seeded: 0, skipped: true as const };
+  }
+  const inFlight = columnsReupdateInFlight.get(shop);
+  if (inFlight) return inFlight;
+
+  const promise = reupdateAllShopTemplates(shop)
+    .then((result) => {
+      columnsReupdateDoneShops.add(shop);
+      columnsReupdateFailedUntil.delete(shop);
+      return { ...result, skipped: false as const };
+    })
+    .catch((error) => {
+      // Avoid retry storms when the pool is saturated (dev connection_limit=1).
+      columnsReupdateFailedUntil.set(shop, Date.now() + 60_000);
+      throw error;
+    })
+    .finally(() => {
+      columnsReupdateInFlight.delete(shop);
+    });
+
+  columnsReupdateInFlight.set(shop, promise);
+  return promise;
 }
 
 /**

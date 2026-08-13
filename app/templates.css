@@ -132,14 +132,28 @@
 
 .template-card__actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto 1fr 1fr;
   gap: var(--p-space-200, 8px);
   margin-top: auto;
   padding-top: var(--p-space-200, 8px);
+  align-items: stretch;
 }
 
-.template-card__actions .Polaris-Button {
+.template-card__actions > :not(:first-child) .Polaris-Button,
+.template-card__actions > .Polaris-Button:not(:first-child) {
   width: 100%;
+}
+
+.template-card__actions-download {
+  display: flex;
+  align-items: stretch;
+}
+
+.template-preview-modal__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--p-space-200, 8px);
+  flex-shrink: 0;
 }
 
 .template-card-thumb {

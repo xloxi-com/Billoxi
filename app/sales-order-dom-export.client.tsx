@@ -506,6 +506,27 @@ export async function downloadSalesOrderDomPdfFromPayload(
   triggerBlobDownload(blob, fileName);
 }
 
+/** Gallery / template-card preview PDF (sample order, no activity log). */
+export async function downloadTemplatePreviewPdf(args: {
+  templateId: string;
+  settings: TemplateEditorSettings;
+  storeDetails: StoreDetails;
+  order: SalesOrderDocumentData;
+  documentKind?: DocumentKind;
+}) {
+  const documentKind = args.documentKind ?? "sales-order";
+  await downloadSalesOrderDomPdfFromPayload(
+    {
+      ok: true,
+      order: args.order,
+      templateId: args.templateId,
+      settings: args.settings,
+      storeDetails: args.storeDetails,
+    },
+    documentKind,
+  );
+}
+
 export async function buildSalesOrderDomPdfBlobFromList(args: {
   orderId: string;
   templateId: string;

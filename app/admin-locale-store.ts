@@ -19,7 +19,8 @@ export function hydrateAdminLocale(
 ) {
   const code = (lang && String(lang).trim()) || "en";
   if (pack && typeof pack === "object") {
-    packCache.set(code, pack);
+    // Static English fills gaps (covers stale server packs / new keys).
+    packCache.set(code, { ...enPack, ...pack });
   }
 }
 

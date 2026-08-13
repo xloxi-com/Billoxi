@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   ClientLoaderFunctionArgs,
@@ -25,7 +25,9 @@ import {
   BlockStack,
   InlineStack,
   Box,
+  Tooltip,
 } from "@shopify/polaris";
+import { ImportIcon } from "@shopify/polaris-icons";
 import enTranslations from "@shopify/polaris/locales/en.json";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
 import { useAdminI18n } from "../admin-i18n-context";
@@ -258,8 +260,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await requireAdminAuth(request);
 
   try {
-    const reupdatePromise = reupdateAllShopTemplatesIfNeeded(session.shop);
-
+    // Gallery paint must not wait on schema reupdate (N row updates + pool=1
+    // timeouts). Migrate in the background after the read path finishes.
     const [selectedTemplates, storeDetails, numberSeries, customizations, shopCurrencyCode] =
       await Promise.all([
         loadSelectedTemplatesForShop(session.shop),
@@ -294,13 +296,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
           }
         })(),
         fetchShopCurrencyCode(admin, session.shop),
-        reupdatePromise,
       ]);
 
     const customizationByKey: Record<string, unknown> = {};
     for (const row of customizations) {
       customizationByKey[`${row.documentType}:${row.templateId}`] = row.settings;
     }
+
+    void reupdateAllShopTemplatesIfNeeded(session.shop).catch((error) => {
+      console.error("Background template reupdate failed:", error);
+    });
 
     return {
       shopCurrencyCode,
@@ -710,6 +715,9 @@ export default function TemplatesPage() {
   >({});
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [confirmTemplate, setConfirmTemplate] = useState<Template | null>(null);
+  const [downloadingTemplateId, setDownloadingTemplateId] = useState<
+    string | null
+  >(null);
 
   // Live card thumbs for the visible document type only (~15, not all 60).
   // Cards mount via IntersectionObserver so first paint stays light.
@@ -821,6 +829,67 @@ export default function TemplatesPage() {
     setConfirmTemplate(null);
   };
 
+  const downloadTemplatePreview = useCallback(
+    async (template: Template) => {
+      if (downloadingTemplateId) return;
+      const preview = salesOrderPreviews[template.id];
+      if (!preview) {
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(templatesT(language, "tpl.pdfFailed"), {
+            isError: true,
+          });
+        }
+        return;
+      }
+
+      setDownloadingTemplateId(template.id);
+      try {
+        const previewSettings = buildPreviewSettings(
+          preview.settings,
+          template.id,
+          preview.storeDetails.logoDataUrl,
+        );
+        const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
+        const previewOrder = {
+          ...(template.id.startsWith("credit-")
+            ? sampleCreditNoteForShop(shopCurrencyCode)
+            : sampleSalesOrderForShop(shopCurrencyCode)),
+          name: "#1008",
+          documentNumber,
+        };
+        const { downloadTemplatePreviewPdf } = await import(
+          "../sales-order-dom-export.client"
+        );
+        await downloadTemplatePreviewPdf({
+          templateId: template.id,
+          settings: previewSettings,
+          storeDetails: preview.storeDetails,
+          order: previewOrder,
+          documentKind: activeType,
+        });
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(templatesT(language, "tpl.pdfDownloaded"));
+        }
+      } catch (error) {
+        console.error("Template preview PDF download failed:", error);
+        if (typeof shopify !== "undefined" && shopify.toast) {
+          shopify.toast.show(templatesT(language, "tpl.pdfFailed"), {
+            isError: true,
+          });
+        }
+      } finally {
+        setDownloadingTemplateId(null);
+      }
+    },
+    [
+      activeType,
+      downloadingTemplateId,
+      language,
+      salesOrderPreviews,
+      shopCurrencyCode,
+    ],
+  );
+
   if (isEditRoute) {
     return <Outlet />;
   }
@@ -915,27 +984,49 @@ export default function TemplatesPage() {
                                   </span>
                                 </Text>
                                 <div className="template-card__actions">
+                                  <div className="template-card__actions-download">
+                                    <Tooltip
+                                      content={templatesT(
+                                        language,
+                                        "tpl.downloadPdf",
+                                      )}
+                                    >
+                                      <Button
+                                        icon={ImportIcon}
+                                        variant="secondary"
+                                        accessibilityLabel={templatesT(
+                                          language,
+                                          "tpl.downloadPdf",
+                                        )}
+                                        loading={
+                                          downloadingTemplateId === template.id
+                                        }
+                                        disabled={
+                                          downloadingTemplateId !== null &&
+                                          downloadingTemplateId !== template.id
+                                        }
+                                        onClick={() => {
+                                          void downloadTemplatePreview(template);
+                                        }}
+                                      />
+                                    </Tooltip>
+                                  </div>
                                   <Button
                                     onClick={() => setPreviewTemplate(template)}
                                   >
                                     {templatesT(language, "tpl.preview")}
                                   </Button>
                                   {isSelected ? (
-                                    <>
-                                      <PrefetchPageLinks
-                                        page={`/app/templates/edit/${activeType}/${template.id}`}
-                                      />
-                                      <Button
-                                        variant="secondary"
-                                        onClick={() =>
-                                          navigate(
-                                            `/app/templates/edit/${activeType}/${template.id}`,
-                                          )
-                                        }
-                                      >
-                                        {templatesT(language, "tpl.edit")}
-                                      </Button>
-                                    </>
+                                    <Button
+                                      variant="secondary"
+                                      onClick={() =>
+                                        navigate(
+                                          `/app/templates/edit/${activeType}/${template.id}`,
+                                        )
+                                      }
+                                    >
+                                      {templatesT(language, "tpl.edit")}
+                                    </Button>
                                   ) : (
                                     <Button
                                       variant="primary"
@@ -945,6 +1036,11 @@ export default function TemplatesPage() {
                                     </Button>
                                   )}
                                 </div>
+                                {isSelected ? (
+                                  <PrefetchPageLinks
+                                    page={`/app/templates/edit/${activeType}/${template.id}`}
+                                  />
+                                ) : null}
                               </BlockStack>
                             </Box>
                           </div>
@@ -1011,14 +1107,36 @@ export default function TemplatesPage() {
                   })}
                 </s-paragraph>
               </div>
-              <button
-                aria-label={templatesT(language, "tpl.close")}
-                className="template-preview-modal__close"
-                onClick={() => setPreviewTemplate(null)}
-                type="button"
-              >
-                ×
-              </button>
+              <div className="template-preview-modal__header-actions">
+                <Tooltip
+                  content={templatesT(language, "tpl.downloadPdf")}
+                >
+                  <Button
+                    icon={ImportIcon}
+                    variant="secondary"
+                    accessibilityLabel={templatesT(
+                      language,
+                      "tpl.downloadPdf",
+                    )}
+                    loading={downloadingTemplateId === previewTemplate.id}
+                    disabled={
+                      downloadingTemplateId !== null &&
+                      downloadingTemplateId !== previewTemplate.id
+                    }
+                    onClick={() => {
+                      void downloadTemplatePreview(previewTemplate);
+                    }}
+                  />
+                </Tooltip>
+                <button
+                  aria-label={templatesT(language, "tpl.close")}
+                  className="template-preview-modal__close"
+                  onClick={() => setPreviewTemplate(null)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             <div className="template-preview-modal__preview">
               {salesOrderPreview ? (
