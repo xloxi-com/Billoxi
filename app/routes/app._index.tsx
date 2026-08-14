@@ -48,6 +48,7 @@ import {
   loadDailyUsageSeries,
   loadShopMonthlyUsage,
 } from "../shop-monthly-usage.server";
+import { loadOrderQuotaStatus } from "../order-quota.server";
 import {
   enrichDocumentEventsWithOrderNames,
   loadRecentDocumentEvents,
@@ -78,7 +79,7 @@ import prisma from "../db.server";
 import { RecommendedAppsCard } from "../components/recommended-apps";
 import { HomeAnalyticsSection } from "../components/home-analytics";
 import { DOCUMENT_ACTIVITY_RECORDED_EVENT } from "../record-document-activity.client";
-import { getPlanById, planMonthlyPriceLabel } from "../plan-features";
+import { getPlanById, planMonthlyPriceLabel, PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
 import { planHasCapability } from "../plan-access";
 import { loadShopBillingState } from "../billing-plans";
 import {
@@ -220,6 +221,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncFlags,
     smtpSettings,
     setupProgress,
+    orderQuota,
   ] = await Promise.all([
     loadShopMonthlyUsage(shop),
     canDashboardChart
@@ -232,6 +234,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     loadNumberSyncFlagsForShop(shop),
     loadSmtpSettingsForShop(shop),
     loadSetupGuideProgress(shop),
+    loadOrderQuotaStatus(shop, planId ?? PLACEHOLDER_CURRENT_PLAN_ID),
   ]);
   const salesOrderSynced = syncFlags.salesOrder;
   const invoiceSynced = syncFlags.invoice;
@@ -283,6 +286,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       downloaded: monthlyUsage.downloaded,
       sent: monthlyUsage.sent,
       series: usageSeries,
+      orderQuota,
     },
     plan: {
       name: planSummary.planName,
@@ -733,6 +737,8 @@ export default function AppHomePage() {
                   series={chartUnlocked ? analytics.series : []}
                   chartLocked={!chartUnlocked}
                   onUnlockChart={() => planGuard("dashboardChart")}
+                  orderQuota={analytics.orderQuota}
+                  onUpgradePlan={() => navigate("/app/pricing")}
                 />
               </Card>
             </BlockStack>

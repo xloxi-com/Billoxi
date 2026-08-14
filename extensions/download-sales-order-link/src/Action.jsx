@@ -24,7 +24,7 @@ function Extension() {
   const orderGid = data?.selected?.[0]?.id;
   const orderId = orderGid ? String(orderGid).split("/").pop() : "";
 
-  // print-action does not support should_render — gate FREE inside the modal.
+  // print-action does not support should_render — gate FREE / quota inside the modal.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -47,10 +47,18 @@ function Extension() {
         });
         const payload = res.ok ? await res.json() : null;
         if (!cancelled) {
-          setHasActivePlan(Boolean(payload?.ok && payload?.adminExtensions));
+          const allowed = Boolean(payload?.ok && payload?.adminExtensions);
+          setHasActivePlan(allowed);
           setPlanReady(true);
-          if (!(payload?.ok && payload?.adminExtensions)) {
+          if (!allowed) {
             setPreparing(false);
+          } else if (payload?.orderQuota?.exhausted) {
+            // Soft notice — already-processed orders this month can still print.
+            setError(
+              payload.orderQuota.limit != null
+                ? `Monthly limit ${payload.orderQuota.used}/${payload.orderQuota.limit} reached for new orders. Already processed orders can still print. Upgrade or wait until next month for more.`
+                : "Monthly order limit reached for new orders. Upgrade or wait until next month.",
+            );
           }
         }
       } catch {
@@ -290,7 +298,7 @@ function Extension() {
           <s-text>Checking plan…</s-text>
         ) : !hasActivePlan ? (
           <s-banner heading="Paid plan required" tone="warning">
-            Print from Shopify orders is locked on FREE. Choose a Billoxi plan
+            Print from Shopify orders needs an active Billoxi plan. Choose a plan
             to unlock this action.
           </s-banner>
         ) : (

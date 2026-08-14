@@ -10,6 +10,12 @@ import {
   type DocumentEventProcessType,
 } from "../document-event-log";
 import { normalizeOrderIdentity } from "../document-event-log.server";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+  orderQuotaExceededResponse,
+} from "../order-quota.server";
+import { getShopPlanIdForGating } from "../plan-access";
 import { requireAdminAuth } from "../shopify-context.server";
 
 const METRICS = new Set<ShopMonthlyUsageMetric>([
@@ -34,7 +40,7 @@ function parseProcessType(
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await requireAdminAuth(request);
+  const { session, billing } = await requireAdminAuth(request);
   const formData = await request.formData();
   const metric = parseMetric(formData.get("metric"));
   if (!metric) {
@@ -50,6 +56,22 @@ export async function action({ request }: ActionFunctionArgs) {
       null,
     orderName: String(formData.get("orderName") || "").trim() || null,
   });
+
+  if (metric === "printed" || metric === "downloaded" || metric === "sent") {
+    try {
+      const planId = await getShopPlanIdForGating(billing);
+      const orderSlots =
+        identity.orderGid != null
+          ? [identity.orderGid]
+          : Array.from({ length: count }, () => null);
+      await assertOrderQuotaAllows(session.shop, planId, orderSlots);
+    } catch (error) {
+      if (error instanceof OrderQuotaExceededError) {
+        return orderQuotaExceededResponse(error);
+      }
+      throw error;
+    }
+  }
 
   await incrementShopMonthlyUsage(session.shop, metric, count, {
     documentKind: String(formData.get("documentKind") || "").trim() || null,

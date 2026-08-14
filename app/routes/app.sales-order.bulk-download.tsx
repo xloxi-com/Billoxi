@@ -9,6 +9,11 @@ import { requireAdminAuth } from "../shopify-context.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import { getShopPlanIdForGating, planHasCapability } from "../plan-access";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+  orderQuotaExceededResponse,
+} from "../order-quota.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { admin, session, billing } = await requireAdminAuth(request);
@@ -17,14 +22,22 @@ export async function action({ request }: ActionFunctionArgs) {
     .getAll("orderIds")
     .map((value) => String(value).trim())
     .filter(Boolean);
+  const planId = await getShopPlanIdForGating(billing);
   if (orderIds.length > 1) {
-    const planId = await getShopPlanIdForGating(billing);
     if (!planHasCapability(planId, "bulkActions")) {
       return Response.json(
         { ok: false, error: "Bulk download needs the PREMIUM plan." },
         { status: 403 },
       );
     }
+  }
+  try {
+    await assertOrderQuotaAllows(session.shop, planId, orderIds);
+  } catch (error) {
+    if (error instanceof OrderQuotaExceededError) {
+      return orderQuotaExceededResponse(error);
+    }
+    throw error;
   }
   const documentKind = String(formData.get("document") || "sales-order");
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(
@@ -87,15 +100,18 @@ export async function action({ request }: ActionFunctionArgs) {
       documentKind,
     });
 
-    void incrementShopMonthlyUsage(
-      session.shop,
-      intent === "print" ? "printed" : "downloaded",
-      orderIds.length,
-      {
-        documentKind,
-        processType: "bulk",
-      },
-    );
+    for (const orderId of orderIds) {
+      void incrementShopMonthlyUsage(
+        session.shop,
+        intent === "print" ? "printed" : "downloaded",
+        1,
+        {
+          documentKind,
+          orderGid: orderId,
+          processType: "bulk",
+        },
+      );
+    }
 
     return new Response(Buffer.from(zip), {
       status: 200,

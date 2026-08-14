@@ -50,7 +50,7 @@ async function countAssignedReturnNumbers(shop: string): Promise<number> {
 export async function hasReturnOrderNumbersSynced(
   shop: string,
 ): Promise<boolean> {
-  if (syncedShops.has(shop)) return true;
+  // Always read DB — process memo alone is wrong after `prisma migrate reset`.
   try {
     const synced = (await loadNumberSyncFlagsForShop(shop)).return;
     if (synced) syncedShops.add(shop);
@@ -372,9 +372,14 @@ export async function syncReturnOrderNumbersForShop(
     }
 
     if (await hasReturnOrderNumbersSynced(shop)) {
-      throw new Error(
-        "Return sync already completed. Reset sync first to sync again.",
-      );
+      const assigned = await countAssignedReturnNumbers(shop);
+      if (assigned === 0) {
+        await clearReturnOrderNumbersSynced(shop);
+      } else {
+        throw new Error(
+          "Return sync already completed. Reset sync first to sync again.",
+        );
+      }
     }
 
     await clearAllReturnDocumentNumbers(shop);

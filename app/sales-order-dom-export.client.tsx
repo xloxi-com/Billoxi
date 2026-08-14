@@ -2,7 +2,10 @@ import { createRoot, type Root } from "react-dom/client";
 import * as JSZipNS from "jszip";
 
 import { SalesOrderLiveDocument } from "./components/sales-order-live-document";
-import { recordDocumentActivity } from "./record-document-activity.client";
+import {
+  ensureOrderQuotaAllows,
+  recordDocumentActivity,
+} from "./record-document-activity.client";
 import {
   paperPaddingCss,
   type SalesOrderDocumentData,
@@ -429,6 +432,11 @@ export async function downloadSalesOrdersDomPdfZipFromList(args: {
     throw new Error("No orders selected");
   }
 
+  const quota = await ensureOrderQuotaAllows(orderIds);
+  if (!quota.ok) {
+    throw new Error(quota.error);
+  }
+
   const total = orderIds.length;
   args.onProgress?.(0, total);
 
@@ -575,6 +583,8 @@ export async function downloadSalesOrderDomPdfFromList(args: {
   documentKind?: DocumentKind;
 }) {
   const documentKind = args.documentKind ?? "sales-order";
+  const quota = await ensureOrderQuotaAllows(args.orderId);
+  if (!quota.ok) throw new Error(quota.error);
   await withOffscreenPaper(
     args.orderId,
     args.templateId,
@@ -597,6 +607,8 @@ export async function printSalesOrderDomPdfFromList(args: {
   documentKind?: DocumentKind;
 }) {
   const documentKind = args.documentKind ?? "sales-order";
+  const quota = await ensureOrderQuotaAllows(args.orderId);
+  if (!quota.ok) throw new Error(quota.error);
   await withOffscreenPaper(
     args.orderId,
     args.templateId,

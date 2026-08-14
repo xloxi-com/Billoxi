@@ -7,6 +7,13 @@ import {
 import { authenticate } from "../shopify.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import { loader as exportLoader } from "./app.sales-order.export.$orderId";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+} from "../order-quota.server";
+import { getShopPlanIdForGating } from "../plan-access";
+import { getShopPlanIdForShop } from "../plan-access.server";
+import { PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
 
 /**
  * Ultra-light PDF bridge — same DOM template as in-app Download.
@@ -105,8 +112,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (!payload) {
     const authedRequest = withBearerFromQuery(request);
-    const { session } = await authenticate.admin(authedRequest);
+    const { session, billing } = await authenticate.admin(authedRequest);
     shop = session.shop;
+
+    try {
+      const planId =
+        (await getShopPlanIdForGating(billing)) || PLACEHOLDER_CURRENT_PLAN_ID;
+      await assertOrderQuotaAllows(session.shop, planId, [
+        documentKind === "draft"
+          ? `gid://shopify/DraftOrder/${orderId}`
+          : `gid://shopify/Order/${orderId}`,
+      ]);
+    } catch (error) {
+      if (error instanceof OrderQuotaExceededError) {
+        throw new Response(error.message, { status: 403 });
+      }
+      throw error;
+    }
 
     const exportUrl = new URL(
       `/app/sales-order/export/${encodeURIComponent(orderId)}`,
@@ -135,6 +157,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
     payload = body;
     kind = documentKind;
+  } else if (shop) {
+    try {
+      const planId = await getShopPlanIdForShop(shop);
+      await assertOrderQuotaAllows(
+        shop,
+        planId ?? PLACEHOLDER_CURRENT_PLAN_ID,
+        [
+          kind === "draft"
+            ? `gid://shopify/DraftOrder/${orderId}`
+            : `gid://shopify/Order/${orderId}`,
+        ],
+      );
+    } catch (error) {
+      if (error instanceof OrderQuotaExceededError) {
+        throw new Response(error.message, { status: 403 });
+      }
+      throw error;
+    }
   }
 
   const payloadJson = escapeJsonForScript({

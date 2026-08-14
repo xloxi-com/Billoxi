@@ -99,6 +99,24 @@ export async function hasCompletedSalesOrderNumberSync(
   try {
     const flags = await loadNumberSyncFlagsForShop(shop);
     if (flags.salesOrder) {
+      // Flag alone is not enough after a partial DB wipe of number rows.
+      const any = await prisma.salesOrderDocumentNumber.findFirst({
+        where: { shop },
+        select: { id: true },
+      });
+      if (!any) {
+        completedSalesOrderSyncShops.delete(shop);
+        void prisma
+          .$executeRaw`
+            UPDATE "ShopSettings"
+            SET "salesOrderNumbersSyncedAt" = NULL,
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE shop = ${shop}
+              AND "salesOrderNumbersSyncedAt" IS NOT NULL
+          `
+          .catch(() => undefined);
+        return false;
+      }
       completedSalesOrderSyncShops.add(shop);
       return true;
     }

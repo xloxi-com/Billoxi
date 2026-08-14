@@ -1261,34 +1261,33 @@ export async function loadSalesOrdersPage(
     });
   }
 
-  // After DB reset / install: backfill numbers in the background (idempotent).
-  // Never block the list spinner on a full-shop GraphQL sync.
-  void (async () => {
+  // After DB reset / install: backfill numbers (idempotent). Await when unsynced
+  // so the first list paint after a wipe gets SO numbers instead of "—".
+  const needsSalesOrderSync =
+    !isInvoicedView &&
+    !isCreditNoteView &&
+    !isPackingSlipView &&
+    !isReturnView &&
+    !isDraftView &&
+    !(await hasCompletedSalesOrderNumberSync(shop));
+  const needsInvoiceSync =
+    isInvoicedView && !(await hasInvoiceOrderNumbersSynced(shop));
+  const needsReturnSync =
+    isReturnView && !(await hasReturnOrderNumbersSynced(shop));
+
+  if (needsSalesOrderSync || needsInvoiceSync || needsReturnSync) {
     try {
-      if (
-        !isInvoicedView &&
-        !isCreditNoteView &&
-        !isPackingSlipView &&
-        !isReturnView &&
-        !isDraftView &&
-        !(await hasCompletedSalesOrderNumberSync(shop))
-      ) {
+      if (needsSalesOrderSync) {
         await syncSalesOrderNumbersForShop(shop, admin);
-      } else if (
-        isInvoicedView &&
-        !(await hasInvoiceOrderNumbersSynced(shop))
-      ) {
+      } else if (needsInvoiceSync) {
         await syncInvoiceOrderNumbersForShop(shop, admin);
-      } else if (
-        isReturnView &&
-        !(await hasReturnOrderNumbersSynced(shop))
-      ) {
+      } else if (needsReturnSync) {
         await syncReturnOrderNumbersForShop(shop, admin);
       }
     } catch (error) {
       console.warn("[sales-orders] auto number sync failed:", shop, error);
     }
-  })();
+  }
 
   const buildPage = async (
     nodes: RawSalesOrder[],

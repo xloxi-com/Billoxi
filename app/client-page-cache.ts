@@ -45,9 +45,12 @@ export function createAppPageClientCache(options?: {
 export async function cachedClientLoader(
   cache: ReturnType<typeof createAppPageClientCache>,
   { request, serverLoader }: ClientLoaderFunctionArgs,
+  options?: { bypassCache?: boolean },
 ) {
-  const hit = cache.get(request);
-  if (hit) return hit;
+  if (!options?.bypassCache) {
+    const hit = cache.get(request);
+    if (hit) return hit;
+  }
   const data = await serverLoader();
   cache.set(request, data);
   return data;

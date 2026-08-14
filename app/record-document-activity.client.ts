@@ -22,6 +22,7 @@ function toOrderGid(value?: string | null): string | null {
   const raw = value?.trim();
   if (!raw) return null;
   if (raw.startsWith("gid://shopify/Order/")) return raw;
+  if (raw.startsWith("gid://shopify/DraftOrder/")) return raw;
   if (/^\d+$/.test(raw)) return `gid://shopify/Order/${raw}`;
   if (raw.includes("/")) {
     const last = raw.split("/").pop();
@@ -55,6 +56,55 @@ async function activityHeaders(): Promise<HeadersInit> {
     // Cookie session still works for same-origin posts.
   }
   return headers;
+}
+
+function showQuotaToast(message: string) {
+  try {
+    const shopify = (window as Window & {
+      shopify?: { toast?: { show: (msg: string, opts?: { isError?: boolean }) => void } };
+    }).shopify;
+    shopify?.toast?.show(message, { isError: true });
+  } catch {
+    // ignore
+  }
+}
+
+/** Preflight before print / download / email. Already-used orders this month pass. */
+export async function ensureOrderQuotaAllows(
+  orderGid?: string | null | Array<string | null | undefined>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof window === "undefined") return { ok: true };
+  try {
+    const params = new URLSearchParams();
+    const rawList = Array.isArray(orderGid) ? orderGid : [orderGid];
+    for (const raw of rawList) {
+      const gid = toOrderGid(raw);
+      if (gid) params.append("orderGid", gid);
+    }
+    const response = await fetch(`/app/order-quota?${params}`, {
+      method: "GET",
+      headers: await activityHeaders(),
+      credentials: "same-origin",
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      allowed?: boolean;
+      error?: string | null;
+      quota?: { used?: number; limit?: number | null };
+    } | null;
+    if (!response.ok || payload?.allowed === false) {
+      const error =
+        payload?.error ||
+        (payload?.quota?.limit != null
+          ? `Monthly order limit reached (${payload.quota.used}/${payload.quota.limit}). Upgrade or wait until next month.`
+          : "Monthly order limit reached. Upgrade or wait until next month.");
+      showQuotaToast(error);
+      return { ok: false, error };
+    }
+    return { ok: true };
+  } catch {
+    // Fail open on network blips — server still enforces on activity / email.
+    return { ok: true };
+  }
 }
 
 /** Fire-and-forget home Analytics + Event Logs after client print/download. */
@@ -99,6 +149,13 @@ export function recordDocumentActivity(
         window.dispatchEvent(
           new CustomEvent(DOCUMENT_ACTIVITY_RECORDED_EVENT),
         );
+        return;
+      }
+      if (response.status === 403) {
+        const payload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        if (payload?.error) showQuotaToast(payload.error);
       }
     } catch {
       // Ignore analytics failures — never block print/download UX.

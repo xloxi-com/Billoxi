@@ -50,8 +50,7 @@ async function countAssignedInvoiceNumbers(shop: string): Promise<number> {
 export async function hasInvoiceOrderNumbersSynced(
   shop: string,
 ): Promise<boolean> {
-  if (syncedShops.has(shop)) return true;
-  // Always read DB until confirmed — then trust process set (reset clears it).
+  // Always read DB — process memo alone is wrong after `prisma migrate reset`.
   try {
     const synced = (await loadNumberSyncFlagsForShop(shop)).invoice;
     if (synced) syncedShops.add(shop);
@@ -412,9 +411,14 @@ export async function syncInvoiceOrderNumbersForShop(
     }
 
     if (await hasInvoiceOrderNumbersSynced(shop)) {
-      throw new Error(
-        "Invoice sync already completed. Reset sync first to sync again.",
-      );
+      const assigned = await countAssignedInvoiceNumbers(shop);
+      if (assigned === 0) {
+        await clearInvoiceOrderNumbersSynced(shop);
+      } else {
+        throw new Error(
+          "Invoice sync already completed. Reset sync first to sync again.",
+        );
+      }
     }
 
     await clearAllInvoiceDocumentNumbers(shop);

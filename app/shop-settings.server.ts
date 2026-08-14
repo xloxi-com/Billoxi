@@ -30,6 +30,7 @@ import {
 import {
   emptyStoreDetails,
   normalizeStoreDetails,
+  normalizeStoreLogoDataUrl,
   type StoreDetails,
 } from "./store-details";
 import { fetchShopStoreDefaults } from "./store-details.server";
@@ -746,6 +747,11 @@ export async function saveStoreDetailsForShop(
 export async function resetStoreDetailsFromShopify(
   shop: string,
   admin: { graphql: (query: string) => Promise<Response> },
+  options?: {
+    /** Prefer unsaved client upload over DB when loading Shopify fields. */
+    logoDataUrl?: string | null;
+    logoFileName?: string | null;
+  },
 ): Promise<StoreDetails> {
   const [shopDefaults, rows] = await Promise.all([
     fetchShopStoreDefaults(admin, shop),
@@ -756,14 +762,22 @@ export async function resetStoreDetailsFromShopify(
       LIMIT 1
     `,
   ]);
-  const current = normalizeStoreDetails(parseStoreDetailsJson(rows[0]?.storeDetails));
+  const current = normalizeStoreDetails(
+    parseStoreDetailsJson(rows[0]?.storeDetails),
+  );
+  const keepLogo =
+    normalizeStoreLogoDataUrl(options?.logoDataUrl) || current.logoDataUrl;
+  const keepFileName =
+    (typeof options?.logoFileName === "string" && options.logoFileName.trim()
+      ? options.logoFileName.trim()
+      : undefined) || current.logoFileName;
   const next: StoreDetails = {
     ...shopDefaults,
     customFields: current.customFields,
-    ...(current.logoDataUrl
+    ...(keepLogo
       ? {
-          logoDataUrl: current.logoDataUrl,
-          ...(current.logoFileName ? { logoFileName: current.logoFileName } : {}),
+          logoDataUrl: keepLogo,
+          ...(keepFileName ? { logoFileName: keepFileName } : {}),
         }
       : {}),
   };

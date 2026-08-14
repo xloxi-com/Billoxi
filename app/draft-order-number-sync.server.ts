@@ -47,7 +47,7 @@ async function countAssignedDraftNumbers(shop: string): Promise<number> {
 export async function hasDraftOrderNumbersSynced(
   shop: string,
 ): Promise<boolean> {
-  if (syncedShops.has(shop)) return true;
+  // Always read DB — process memo alone is wrong after `prisma migrate reset`.
   try {
     const synced = (await loadNumberSyncFlagsForShop(shop)).draft;
     if (synced) syncedShops.add(shop);
@@ -348,9 +348,14 @@ export async function syncDraftOrderNumbersForShop(
     }
 
     if (await hasDraftOrderNumbersSynced(shop)) {
-      throw new Error(
-        "Draft sync already completed. Reset sync first to sync again.",
-      );
+      const assigned = await countAssignedDraftNumbers(shop);
+      if (assigned === 0) {
+        await clearDraftOrderNumbersSynced(shop);
+      } else {
+        throw new Error(
+          "Draft sync already completed. Reset sync first to sync again.",
+        );
+      }
     }
 
     // Replace any partial / out-of-order numbers so sync always starts from series.

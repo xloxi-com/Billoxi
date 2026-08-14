@@ -3,11 +3,13 @@ import type { LoaderFunctionArgs } from "react-router";
 import { loadShopBillingState } from "../billing-plans";
 import { planHasCapability } from "../plan-access";
 import { PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
+import { loadOrderQuotaStatus } from "../order-quota.server";
 import { authenticate } from "../shopify.server";
 
 /**
  * Admin UI extension should-render probe.
  * FREE (no paid subscription) → hide order Print/Apps Billoxi actions.
+ * Extensions are available on all paid plans; monthly order quota still applies.
  */
 function extensionCorsHeaders(request: Request): HeadersInit {
   const origin =
@@ -41,14 +43,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   try {
-    const { billing } = await authenticate.admin(request);
+    const { billing, session } = await authenticate.admin(request);
     const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
     const planId = currentPlanId ?? PLACEHOLDER_CURRENT_PLAN_ID;
+    const quota = hasActivePlan
+      ? await loadOrderQuotaStatus(session.shop, planId)
+      : null;
     return corsJson(request, {
       ok: true,
       hasActivePlan,
       currentPlanId,
-      adminExtensions: planHasCapability(planId, "adminExtensions"),
+      adminExtensions:
+        hasActivePlan && planHasCapability(planId, "adminExtensions"),
+      orderQuota: quota,
     });
   } catch (error) {
     if (error instanceof Response) {

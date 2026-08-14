@@ -24,19 +24,18 @@ type AdminGraphql = {
 
 /** In-flight install syncs — allow retry if backfill did not finish. */
 const inFlightByShop = new Map<string, Promise<void>>();
-const completedShops = new Set<string>();
 
 /**
- * After install / first open: backfill SO / INV / DFT / RET numbers once
+ * After install / first open / DB reset: backfill SO / INV / DFT / RET numbers
  * (oldest → newest). Fire-and-forget; helpers are idempotent when synced.
- * Retries on the next app open if any series is still unsynced.
+ * Always re-checks DB flags so a process-local memo cannot skip after reset.
  */
 export function scheduleInstallNumberSync(
   shop: string,
   admin: AdminGraphql,
 ): void {
   const key = shop.trim().toLowerCase();
-  if (!key || completedShops.has(key) || inFlightByShop.has(key)) return;
+  if (!key || inFlightByShop.has(key)) return;
 
   const run = (async () => {
     try {
@@ -48,7 +47,6 @@ export function scheduleInstallNumberSync(
       ]);
 
       if (so && invoice && draft && ret) {
-        completedShops.add(key);
         return;
       }
 
@@ -80,16 +78,6 @@ export function scheduleInstallNumberSync(
         } catch (error) {
           console.warn("[install-number-sync] return failed", shop, error);
         }
-      }
-
-      const [soDone, invDone, draftDone, retDone] = await Promise.all([
-        hasSalesOrderNumbersSynced(shop),
-        hasInvoiceOrderNumbersSynced(shop),
-        hasDraftOrderNumbersSynced(shop),
-        hasReturnOrderNumbersSynced(shop),
-      ]);
-      if (soDone && invDone && draftDone && retDone) {
-        completedShops.add(key);
       }
     } catch (error) {
       console.error("[install-number-sync] failed", shop, error);

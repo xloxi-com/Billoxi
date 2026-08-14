@@ -89,16 +89,23 @@ export function shouldRevalidate({
   formMethod,
   currentUrl,
   nextUrl,
+  defaultShouldRevalidate,
 }: {
   formMethod?: string | null;
   currentUrl: URL;
   nextUrl: URL;
+  defaultShouldRevalidate: boolean;
 }) {
   if (formMethod && formMethod.toUpperCase() !== "GET") {
     packingSlipListCache.bust();
     return true;
   }
-  return currentUrl.search !== nextUrl.search;
+  if (currentUrl.search !== nextUrl.search) {
+    packingSlipListCache.bust();
+    return true;
+  }
+  if (defaultShouldRevalidate) packingSlipListCache.bust();
+  return defaultShouldRevalidate;
 }
 
 export default SalesOrdersListPage;

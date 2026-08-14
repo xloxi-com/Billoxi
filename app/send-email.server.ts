@@ -24,7 +24,15 @@ import {
 } from "./shop-settings.server";
 import { incrementShopMonthlyUsage } from "./shop-monthly-usage.server";
 import { recordDocumentEvent } from "./document-event-log.server";
-import { shopHasCapability } from "./plan-access.server";
+import {
+  getShopPlanIdForShop,
+  shopHasCapability,
+} from "./plan-access.server";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+} from "./order-quota.server";
+import { PLACEHOLDER_CURRENT_PLAN_ID } from "./plan-features";
 
 export type SendDocumentEmailResult =
   | {
@@ -118,6 +126,20 @@ export async function sendDocumentEmail(args: {
       ok: false,
       error: "SMTP email needs the PREMIUM plan.",
     };
+  }
+
+  const orderGidForQuota = args.orderId.includes("gid://")
+    ? args.orderId
+    : `gid://shopify/Order/${args.orderId}`;
+  try {
+    const planId =
+      (await getShopPlanIdForShop(args.shop)) ?? PLACEHOLDER_CURRENT_PLAN_ID;
+    await assertOrderQuotaAllows(args.shop, planId, [orderGidForQuota]);
+  } catch (error) {
+    if (error instanceof OrderQuotaExceededError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
   }
 
   const [smtp, emailTemplates, storeDetails] = await Promise.all([

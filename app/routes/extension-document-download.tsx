@@ -4,6 +4,12 @@ import { buildSalesOrderPdfFile } from "../sales-order-bulk-pdf.server";
 import { authenticate } from "../shopify.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+} from "../order-quota.server";
+import { getShopPlanIdForGating } from "../plan-access";
+import { PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
 
 /**
  * Save PDF from Admin UI extensions.
@@ -70,7 +76,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const wantRaw = url.searchParams.get("raw") === "1";
   const authedRequest = withBearerFromQuery(request);
-  const { admin, session } = await authenticate.admin(authedRequest);
+  const { admin, session, billing } = await authenticate.admin(authedRequest);
 
   const orderId = String(url.searchParams.get("orderId") || "")
     .replace(/^gid:\/\/shopify\/Order\//i, "")
@@ -81,6 +87,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (!orderId || !/^\d+$/.test(orderId)) {
     return new Response("Order not found", { status: 404 });
+  }
+
+  try {
+    const planId =
+      (await getShopPlanIdForGating(billing)) || PLACEHOLDER_CURRENT_PLAN_ID;
+    await assertOrderQuotaAllows(session.shop, planId, [
+      `gid://shopify/Order/${orderId}`,
+    ]);
+  } catch (error) {
+    if (error instanceof OrderQuotaExceededError) {
+      return new Response(error.message, { status: 403 });
+    }
+    throw error;
   }
 
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(

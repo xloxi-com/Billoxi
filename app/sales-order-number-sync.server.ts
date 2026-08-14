@@ -22,7 +22,7 @@ import {
 } from "./sales-order-number.server";
 import { invalidateSalesOrdersCache } from "./sales-orders.server";
 
-/** Process-local cache — skip DB check after first confirmed sync. */
+/** Tracks shops that completed a sync this process — cleared when DB says unsynced. */
 const syncedShops = new Set<string>();
 
 /** Every order that currently has a Sales Order document number. */
@@ -41,7 +41,7 @@ async function listAssignedSalesOrderGids(shop: string): Promise<{
 }
 
 export async function hasSalesOrderNumbersSynced(shop: string): Promise<boolean> {
-  if (syncedShops.has(shop)) return true;
+  // Always read DB — process memo alone is wrong after `prisma migrate reset`.
   try {
     const synced = (await loadNumberSyncFlagsForShop(shop)).salesOrder;
     if (synced) syncedShops.add(shop);
@@ -227,7 +227,10 @@ export async function syncSalesOrderNumbersForShop(
     }
 
     const alreadySynced = await getSalesOrderNumbersSyncStatus(shop);
-    if (alreadySynced.synced || alreadySynced.assignedCount > 0) {
+    // Stale syncedAt after a DB wipe (numbers gone, flag/memo still set): re-sync.
+    if (alreadySynced.assignedCount === 0 && alreadySynced.synced) {
+      await clearSalesOrderNumbersSynced(shop);
+    } else if (alreadySynced.synced || alreadySynced.assignedCount > 0) {
       throw new Error(
         "Sales Order sync already completed. Reset sync first to sync again.",
       );

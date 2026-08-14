@@ -473,8 +473,14 @@ export function shouldRevalidate({
     salesOrderListCache.bust();
     return true;
   }
-  if (currentUrl.search !== nextUrl.search) return true;
-  // Allow useRevalidator() / background poll to refresh the list.
+  if (currentUrl.search !== nextUrl.search) {
+    salesOrderListCache.bust();
+    return true;
+  }
+  // useRevalidator / poll must not reuse a stale client cache (e.g. "—" after DB reset sync).
+  if (defaultShouldRevalidate) {
+    salesOrderListCache.bust();
+  }
   return defaultShouldRevalidate;
 }
 

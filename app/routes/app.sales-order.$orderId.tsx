@@ -122,7 +122,10 @@ import {
 } from "../order-credit-note-status.server";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
-import { recordDocumentActivity } from "../record-document-activity.client";
+import {
+  ensureOrderQuotaAllows,
+  recordDocumentActivity,
+} from "../record-document-activity.client";
 import {
   adminPageHeading,
   adminPaymentStatusLabel,
@@ -1698,6 +1701,9 @@ export default function SalesOrderDocumentPage() {
     const paper = paperRef.current;
     if (!paper) return;
 
+    const quota = await ensureOrderQuotaAllows(data.order.id);
+    if (!quota.ok) return;
+
     setIsPrinting(true);
     try {
       const { printSalesOrderDomVectorPdf } = await import(
@@ -1755,6 +1761,9 @@ export default function SalesOrderDocumentPage() {
     if (isDownloading || isPrinting) return;
     const paper = paperRef.current;
     if (!paper) return;
+
+    const quota = await ensureOrderQuotaAllows(data.order.id);
+    if (!quota.ok) return;
 
     setIsDownloading(true);
     try {

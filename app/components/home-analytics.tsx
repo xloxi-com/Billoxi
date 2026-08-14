@@ -261,6 +261,14 @@ export type HomeAnalyticsProps = {
   series: DailyUsagePoint[];
   chartLocked?: boolean;
   onUnlockChart?: () => void;
+  orderQuota?: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    exhausted: boolean;
+    yearMonth: string;
+  } | null;
+  onUpgradePlan?: () => void;
 };
 
 export function HomeAnalyticsSection({
@@ -270,6 +278,8 @@ export function HomeAnalyticsSection({
   series,
   chartLocked = false,
   onUnlockChart,
+  orderQuota = null,
+  onUpgradePlan,
 }: HomeAnalyticsProps) {
   const { t } = useAdminI18n();
   const metrics: AnalyticsMetric[] = [
@@ -281,6 +291,10 @@ export function HomeAnalyticsSection({
     },
     { key: "sent", label: t("home.monthlySent"), value: sent },
   ];
+  const quotaProgress =
+    orderQuota?.limit != null && orderQuota.limit > 0
+      ? Math.min(100, Math.round((orderQuota.used / orderQuota.limit) * 100))
+      : null;
 
   return (
     <div className="billoxi-analytics">
@@ -293,6 +307,72 @@ export function HomeAnalyticsSection({
             {t("home.analyticsSubtitle")}
           </Text>
         </BlockStack>
+
+        {orderQuota && orderQuota.limit != null ? (
+          <Box
+            background="bg-surface-secondary"
+            borderRadius="300"
+            padding="400"
+          >
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center" wrap>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  {t("home.orderQuotaTitle")}
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {orderQuota.used} / {orderQuota.limit} {t("home.orderQuotaUnit")}
+                </Text>
+              </InlineStack>
+              {quotaProgress != null ? (
+                <div
+                  style={{
+                    height: 8,
+                    borderRadius: 999,
+                    background: "var(--p-color-bg-fill-secondary, #e3e3e3)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${quotaProgress}%`,
+                      height: "100%",
+                      background: orderQuota.exhausted
+                        ? "var(--p-color-bg-fill-critical, #ce0e2d)"
+                        : "var(--p-color-bg-fill-brand, #303030)",
+                    }}
+                  />
+                </div>
+              ) : null}
+              <Text as="p" tone="subdued" variant="bodySm">
+                {orderQuota.exhausted
+                  ? t("home.orderQuotaExhausted")
+                  : t("home.orderQuotaHint")}
+              </Text>
+              {orderQuota.exhausted && onUpgradePlan ? (
+                <button
+                  type="button"
+                  onClick={onUpgradePlan}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--p-color-text-link, #005bd3)",
+                    cursor: "pointer",
+                    font: "inherit",
+                    fontWeight: 600,
+                    padding: 0,
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  {t("home.upgradePlan")}
+                </button>
+              ) : null}
+            </BlockStack>
+          </Box>
+        ) : orderQuota?.limit == null ? (
+          <Text as="p" tone="subdued" variant="bodySm">
+            {t("home.orderQuotaUnlimited")}
+          </Text>
+        ) : null}
 
         <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
           {metrics.map((metric) => (

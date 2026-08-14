@@ -17,6 +17,12 @@ import type {
 } from "../sales-order-document";
 import type { StoreDetails } from "../store-details";
 import { authenticate } from "../shopify.server";
+import {
+  assertOrderQuotaAllows,
+  OrderQuotaExceededError,
+} from "../order-quota.server";
+import { getShopPlanIdForGating } from "../plan-access";
+import { PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
 
 /**
  * Admin print-action document:
@@ -153,9 +159,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const isPrep = url.searchParams.get("prep") === "1";
 
   let session: Awaited<ReturnType<typeof authenticate.admin>>["session"];
+  let billing: Awaited<ReturnType<typeof authenticate.admin>>["billing"];
 
   try {
-    ({ session } = await authenticate.admin(request));
+    ({ session, billing } = await authenticate.admin(request));
   } catch (error) {
     if (error instanceof Response) {
       const status =
@@ -191,6 +198,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return corsJson(request, { ok: false, error: "Order not found" }, 404);
     }
     throwHtml(request, errorHtml("Order not found."), 404);
+  }
+
+  const orderGidForQuota =
+    documentKinds[0] === "draft"
+      ? `gid://shopify/DraftOrder/${orderId}`
+      : `gid://shopify/Order/${orderId}`;
+  try {
+    const planId =
+      (await getShopPlanIdForGating(billing)) || PLACEHOLDER_CURRENT_PLAN_ID;
+    await assertOrderQuotaAllows(session.shop, planId, [orderGidForQuota]);
+  } catch (error) {
+    if (error instanceof OrderQuotaExceededError) {
+      if (isPrep) {
+        return corsJson(request, { ok: false, error: error.message }, 403);
+      }
+      throwHtml(request, errorHtml(error.message), 403);
+    }
+    throw error;
   }
 
   try {

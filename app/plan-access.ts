@@ -34,7 +34,6 @@ export const PREMIUM_CAPABILITIES: readonly PlanCapability[] = [
 /** ULTIMATE-only features (locked on PREMIUM and STARTER). */
 export const ULTIMATE_ONLY_CAPABILITIES: readonly PlanCapability[] = [
   "customerDownloadLinks",
-  "adminExtensions",
   "eventLog",
 ] as const;
 
@@ -48,7 +47,8 @@ export const PLAN_CAPABILITY_MIN: Record<PlanCapability, PlanId> = {
   autoCreditNote: "premium",
   multiCurrency: "premium",
   customerDownloadLinks: "ultimate",
-  adminExtensions: "ultimate",
+  /** All paid plans — gated by monthly order quota, not plan tier. */
+  adminExtensions: "starter",
   dashboardChart: "premium",
   eventLog: "ultimate",
 };

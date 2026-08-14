@@ -571,9 +571,21 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = formData.get("intent");
 
   if (intent === "reset") {
+    const logoField = formData.get("logoDataUrl");
+    const logoFileNameField = formData.get("logoFileName");
     const storeDetails = await resetStoreDetailsFromShopify(
       session.shop,
       admin,
+      {
+        logoDataUrl:
+          typeof logoField === "string" && logoField.trim()
+            ? logoField.trim()
+            : null,
+        logoFileName:
+          typeof logoFileNameField === "string" && logoFileNameField.trim()
+            ? logoFileNameField.trim()
+            : null,
+      },
     );
     await markSetupGuideStep(session.shop, "store-details");
     return { saved: true, section: "store-details" as const, storeDetails };
@@ -919,6 +931,24 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
+  // Logo may arrive as its own multipart field (avoids urlencoded truncation).
+  const logoField = formData.get("logoDataUrl");
+  const logoFileNameField = formData.get("logoFileName");
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    typeof logoField === "string" &&
+    logoField.trim()
+  ) {
+    (parsed as { logoDataUrl?: string; logoFileName?: string }).logoDataUrl =
+      logoField.trim();
+    if (typeof logoFileNameField === "string" && logoFileNameField.trim()) {
+      (parsed as { logoFileName?: string }).logoFileName =
+        logoFileNameField.trim();
+    }
+  }
+
   const rawLogo =
     parsed &&
     typeof parsed === "object" &&
@@ -1148,10 +1178,14 @@ export default function SettingsPage() {
     setSavedAdminLanguage(data.adminLanguage);
   }, [data.adminLanguage]);
 
+  const isStoreDirtyRef = useRef(false);
+  isStoreDirtyRef.current = isStoreDirty;
+
   useEffect(() => {
-    setStoreDetails(data.storeDetails);
     setSavedStoreDetails(data.storeDetails);
-    setIsStoreDirty(false);
+    // Keep in-progress edits (uploaded logo, typed name) across failed-save revalidates.
+    if (isStoreDirtyRef.current) return;
+    setStoreDetails(data.storeDetails);
   }, [data.storeDetails]);
 
   useEffect(() => {
@@ -1635,13 +1669,23 @@ export default function SettingsPage() {
       return;
     }
 
-    fetcher.submit(
-      {
-        intent: "save-store-details",
-        storeDetails: JSON.stringify(storeDetails),
-      },
-      { method: "post" },
-    );
+    if (!storeDetails.name.trim()) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(t("settings.storeNameRequired"), { isError: true });
+      }
+      return;
+    }
+
+    // Multipart FormData — large logo base64 is truncated under urlencoded submits.
+    const formData = new FormData();
+    formData.set("intent", "save-store-details");
+    const { logoDataUrl, logoFileName, ...detailsWithoutLogo } = storeDetails;
+    formData.set("storeDetails", JSON.stringify(detailsWithoutLogo));
+    if (logoDataUrl) {
+      formData.set("logoDataUrl", logoDataUrl);
+      if (logoFileName) formData.set("logoFileName", logoFileName);
+    }
+    fetcher.submit(formData, { method: "post" });
   };
 
   const discard = () => {
@@ -1679,7 +1723,16 @@ export default function SettingsPage() {
   };
 
   const resetFromShopify = () => {
-    fetcher.submit({ intent: "reset" }, { method: "post" });
+    // Keep an uploaded (possibly unsaved) logo when filling name/address from Shopify.
+    const formData = new FormData();
+    formData.set("intent", "reset");
+    if (storeDetails.logoDataUrl) {
+      formData.set("logoDataUrl", storeDetails.logoDataUrl);
+      if (storeDetails.logoFileName) {
+        formData.set("logoFileName", storeDetails.logoFileName);
+      }
+    }
+    fetcher.submit(formData, { method: "post" });
   };
 
   const switchSection = (section: SettingsSection) => {

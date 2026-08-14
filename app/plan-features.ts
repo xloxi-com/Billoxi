@@ -334,8 +334,8 @@ export const PLAN_COMPARISON_ROWS: readonly PlanComparisonRow[] = [
   {
     category: "Admin",
     feature: "Shopify order page extensions (download / print)",
-    starter: "No",
-    premium: "No",
+    starter: "Yes",
+    premium: "Yes",
     ultimate: "Yes",
   },
   {
@@ -374,6 +374,7 @@ export const BILLIOXI_PLANS: readonly PlanDefinition[] = [
     highlights: [
       "All 6 document types",
       "50 orders / month",
+      "Shopify Admin order extensions",
       "All templates + full editor",
       "Print & PDF download",
       "Live preview & convert docs",
@@ -409,14 +410,13 @@ export const BILLIOXI_PLANS: readonly PlanDefinition[] = [
     trialDays: 7,
     monthlyOrderLimit: null,
     tagline:
-      "For high-volume stores that need customer downloads, admin shortcuts, and unlimited orders.",
+      "For high-volume stores that need customer downloads, unlimited orders, and priority support.",
     appStoreCopy:
-      "Unlimited documents, customer download links in order emails, Shopify Admin shortcuts & priority support.",
+      "Unlimited documents, customer download links in order emails & priority support.",
     highlights: [
       "Everything in PREMIUM",
       "Unlimited orders",
       "Customer download links in emails",
-      "Shopify Admin order extensions",
       "Activity / event log",
       "Priority email support",
     ],
