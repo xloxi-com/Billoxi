@@ -42,8 +42,8 @@ import {
   clearShopBillingStateCache,
   isBillingPeriod,
   isPlanId,
+  isShopifyBillingTestMode,
   loadShopBillingState,
-  shopUsesTestCharges,
   type BillingPeriod,
 } from "../billing-plans";
 import {
@@ -83,20 +83,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, billing, session, redirect } = await requireAdminAuth(request);
+  const { billing, session, redirect } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "subscribe");
-  const isTest = await shopUsesTestCharges(admin);
 
   if (intent === "downgrade-free") {
     try {
       clearShopBillingStateCache(billing);
-      const {
-        hasActivePlan,
-        activeSubscriptionId,
-        activeSubscriptionIsTest,
-        appSubscriptions,
-      } = await loadShopBillingState(billing, admin);
+      const { hasActivePlan, activeSubscriptionId, appSubscriptions } =
+        await loadShopBillingState(billing);
 
       const subscriptionId =
         activeSubscriptionId || appSubscriptions[0]?.id || null;
@@ -104,7 +99,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (hasActivePlan && subscriptionId) {
         await billing.cancel({
           subscriptionId,
-          isTest: activeSubscriptionIsTest ?? isTest,
+          isTest: isShopifyBillingTestMode(),
           prorate: true,
         });
       }
@@ -141,19 +136,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // After Shopify approves the charge, land on Home (Billoxi).
   const returnUrl = `https://admin.shopify.com/store/${storeHandle}/apps/${apiKey}/app`;
 
-  try {
-    return await billing.request({
-      plan,
-      isTest,
-      returnUrl,
-      replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
-    });
-  } catch (error) {
-    if (error instanceof Response) throw error;
-    const message =
-      error instanceof Error ? error.message : "Could not start billing.";
-    return Response.json({ ok: false, error: message }, { status: 400 });
-  }
+  return billing.request({
+    plan,
+    isTest: isShopifyBillingTestMode(),
+    returnUrl,
+    replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
+  });
 };
 
 function PlanValue({

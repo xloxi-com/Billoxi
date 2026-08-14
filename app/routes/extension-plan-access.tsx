@@ -39,11 +39,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   try {
-    const { admin, billing } = await authenticate.admin(request);
-    const { hasActivePlan, currentPlanId } = await loadShopBillingState(
-      billing,
-      admin,
-    );
+    const { billing } = await authenticate.admin(request);
+    const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
     return corsJson(request, {
       ok: true,
       hasActivePlan,

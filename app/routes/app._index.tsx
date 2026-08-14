@@ -197,10 +197,7 @@ export function shouldRevalidate({
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session, billing } = await requireAdminAuth(request);
   const shop = session.shop;
-  const { hasActivePlan, currentPlanId } = await loadShopBillingState(
-    billing,
-    admin,
-  );
+  const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
   const planId = currentPlanId;
   const canEventLog =
     Boolean(planId) && planHasCapability(planId!, "eventLog");
