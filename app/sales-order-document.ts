@@ -4999,7 +4999,15 @@ export function mergeTemplateSettings(
     selectedCustomFields: Array.isArray(input.selectedCustomFields)
       ? input.selectedCustomFields
           .filter(
-            (entry): entry is { id: string; name: string; width?: number } =>
+            (
+              entry,
+            ): entry is {
+              id: string;
+              name: string;
+              width?: number;
+              namespace?: string;
+              key?: string;
+            } =>
               Boolean(
                 entry &&
                   typeof entry === "object" &&
@@ -5008,27 +5016,26 @@ export function mergeTemplateSettings(
               ),
           )
           .map((entry) => {
-            const widthRaw = (entry as { width?: unknown }).width;
+            const widthRaw = entry.width;
             const width =
               typeof widthRaw === "number" && Number.isFinite(widthRaw)
                 ? Math.max(1, widthRaw)
                 : undefined;
+            const namespace =
+              typeof entry.namespace === "string" && entry.namespace
+                ? entry.namespace
+                : undefined;
+            const key =
+              typeof entry.key === "string" && entry.key ? entry.key : undefined;
             return {
               id: entry.id,
               name:
-                typeof (entry as { name?: unknown }).name === "string" &&
-                (entry as { name: string }).name.trim()
-                  ? (entry as { name: string }).name.trim()
+                typeof entry.name === "string" && entry.name.trim()
+                  ? entry.name.trim()
                   : "Custom field",
               ...(width != null ? { width } : {}),
-              ...((entry as { namespace?: unknown }).namespace &&
-              typeof (entry as { namespace?: unknown }).namespace === "string"
-                ? { namespace: (entry as { namespace: string }).namespace }
-                : {}),
-              ...((entry as { key?: unknown }).key &&
-              typeof (entry as { key?: unknown }).key === "string"
-                ? { key: (entry as { key: string }).key }
-                : {}),
+              ...(namespace ? { namespace } : {}),
+              ...(key ? { key } : {}),
             };
           })
       : defaults.selectedCustomFields,
