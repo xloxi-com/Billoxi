@@ -1,0 +1,18 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "t:name"
+handle = "download-sales-order-action"
+uid = "1e1a25e3-f9f5-4919-a34f-a38652abab37"
+type = "ui_extension"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
+
+[[extensions.targeting]]
+module = "./src/Action.jsx"
+target = "admin.order-details.action.render"
+
+[extensions.targeting.should_render]
+module = "./src/ShouldRender.js"
