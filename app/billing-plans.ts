@@ -136,7 +136,9 @@ async function fetchShopBillingState(
   try {
     const { hasActivePayment, appSubscriptions } = await billing.check({
       plans: [...ALL_BILLING_PLAN_NAMES],
-      isTest: isShopifyBillingTestMode(),
+      // Include test subscriptions so Partner development stores stay gated
+      // after approving a test charge.
+      isTest: true,
     });
 
     const active = hasActivePayment ? appSubscriptions[0] : null;
@@ -177,10 +179,48 @@ export function clearShopBillingStateCache(billing: BillingCheckApi) {
   billingStateByApi.delete(billing as object);
 }
 
-/** Test charges by default; set SHOPIFY_BILLING_TEST=false for live charges. */
+type AdminGraphql = {
+  graphql: (query: string) => Promise<Response>;
+};
+
+const SHOP_PLAN_QUERY = `#graphql
+  query ShopPartnerDevelopment {
+    shop {
+      plan {
+        partnerDevelopment
+      }
+    }
+  }
+`;
+
+/** Partner development stores cannot add a card — they need test charges. */
+export async function isPartnerDevelopmentShop(
+  admin: AdminGraphql,
+): Promise<boolean> {
+  try {
+    const response = await admin.graphql(SHOP_PLAN_QUERY);
+    const payload = (await response.json()) as {
+      data?: { shop?: { plan?: { partnerDevelopment?: boolean } } };
+    };
+    return Boolean(payload.data?.shop?.plan?.partnerDevelopment);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Test charges by default so hosted apps (NODE_ENV=production) can still be
+ * approved on stores with no payment method. Set SHOPIFY_BILLING_TEST=false
+ * for live merchant charges. Development stores always stay on test charges.
+ */
 export function isShopifyBillingTestMode(): boolean {
   const raw = process.env.SHOPIFY_BILLING_TEST?.trim().toLowerCase();
-  if (raw === "false" || raw === "0") return false;
-  if (raw === "true" || raw === "1") return true;
-  return process.env.NODE_ENV !== "production";
+  return raw !== "false" && raw !== "0";
+}
+
+export async function shouldUseTestBillingCharge(
+  admin: AdminGraphql,
+): Promise<boolean> {
+  if (isShopifyBillingTestMode()) return true;
+  return isPartnerDevelopmentShop(admin);
 }

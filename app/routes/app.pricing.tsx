@@ -42,7 +42,7 @@ import {
   clearShopBillingStateCache,
   isBillingPeriod,
   isPlanId,
-  isShopifyBillingTestMode,
+  shouldUseTestBillingCharge,
   loadShopBillingState,
   type BillingPeriod,
 } from "../billing-plans";
@@ -83,9 +83,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { billing, session, redirect } = await requireAdminAuth(request);
+  const { admin, billing, session, redirect } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "subscribe");
+  const isTest = await shouldUseTestBillingCharge(admin);
 
   if (intent === "downgrade-free") {
     try {
@@ -99,7 +100,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (hasActivePlan && subscriptionId) {
         await billing.cancel({
           subscriptionId,
-          isTest: isShopifyBillingTestMode(),
+          isTest,
           prorate: true,
         });
       }
@@ -138,7 +139,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   return billing.request({
     plan,
-    isTest: isShopifyBillingTestMode(),
+    isTest,
     returnUrl,
     replacementBehavior: BillingReplacementBehavior.ApplyImmediately,
   });
