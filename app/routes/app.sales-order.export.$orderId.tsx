@@ -168,7 +168,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         documentNumber: documentNumber || order.name,
         documentDate:
           currentMeta?.draftedAt?.toISOString() || order.createdAt,
-        referenceNumber: order.name,
       },
       templateId: template.templateId,
       settings: {
@@ -186,13 +185,15 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   if (isCreditNote) {
-    const shopSelectedCreditNoteTemplateId = await loadSelectedTemplateForShop(
-      session.shop,
-      "credit-note",
-    );
+    const [shopSelectedCreditNoteTemplateId, shopSelectedSo] =
+      await Promise.all([
+        loadSelectedTemplateForShop(session.shop, "credit-note"),
+        loadSelectedTemplateForShop(session.shop, "sales-order"),
+      ]);
     const templateId = resolveCreditNoteTemplateId(
       shopSelectedCreditNoteTemplateId || url.searchParams.get("template"),
     );
+    const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
 
     const [order, template] = await Promise.all([
       fetchSalesOrderDocument(admin, orderGid, {
@@ -214,9 +215,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       );
     }
 
-    const [creditMeta, invoiceMeta] = await Promise.all([
+    const [creditMeta, invoiceMeta, soNumbers] = await Promise.all([
       getCreditNoteMetaByOrderGids(session.shop, [order.id]),
       getInvoicedMetaByOrderGids(session.shop, [order.id]),
+      getSalesOrderDocumentNumbersByOrderGids(
+        session.shop,
+        salesOrderTemplateId,
+        [order.id],
+      ),
     ]);
     const currentCredit = creditMeta.get(order.id);
     if (!currentCredit) {
@@ -227,13 +233,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
 
     const currentInvoice = invoiceMeta.get(order.id);
-    let invoiceRef = currentInvoice?.documentNumber?.trim() || "";
-    if (!invoiceRef && currentInvoice) {
-      const ensured = await ensureInvoiceDocumentNumbers(session.shop, [
-        order.id,
-      ]);
-      invoiceRef = ensured.get(order.id)?.trim() || "";
-    }
 
     const documentNumber =
       currentCredit.documentNumber ||
@@ -250,7 +249,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order: {
         ...order,
         documentNumber,
-        referenceNumber: invoiceRef || undefined,
+        referenceNumber: soNumbers.get(order.id) || undefined,
         documentDate,
       },
       templateId: template.templateId,
@@ -324,7 +323,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order: {
         ...order,
         documentNumber,
-        referenceNumber: soNumbers.get(order.id) ?? order.name,
+        referenceNumber: soNumbers.get(order.id) || undefined,
         documentDate:
           currentMeta.convertedAt?.toISOString() || order.createdAt,
       },
@@ -345,7 +344,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
 
     const [order, template, returnMeta, soNumbers] = await Promise.all([
-      fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
+      fetchSalesOrderDocument(admin, orderGid, {
+        shop: session.shop,
+        asReturn: true,
+      }),
       loadDocumentTemplateSettings(session.shop, "return", templateId, admin),
       getReturnMetaByOrderGids(session.shop, [orderGid]),
       getSalesOrderDocumentNumbersByOrderGids(
@@ -383,7 +385,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order: {
         ...order,
         documentNumber,
-        referenceNumber: soNumbers.get(order.id) ?? order.name,
+        referenceNumber: soNumbers.get(order.id) || undefined,
         documentDate:
           currentMeta.convertedAt?.toISOString() || order.createdAt,
       },
@@ -444,14 +446,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order.name;
     const documentDate =
       currentMeta.invoicedAt?.toISOString() || order.createdAt;
-    const referenceNumber = soNumbers.get(order.id) ?? order.name;
 
     return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
         documentNumber,
-        referenceNumber,
+        referenceNumber: soNumbers.get(order.id) || undefined,
         documentDate,
       },
       templateId: template.templateId,

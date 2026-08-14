@@ -54,28 +54,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
   params.selectedView =
     INVOICED_VIEW_INDEX >= 0 ? INVOICED_VIEW_INDEX : params.selectedView;
 
+  const soTemplatePromise = loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const pagePromise = soTemplatePromise.then((shopSelectedTemplateId) =>
+    loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      resolveSalesOrderTemplateId(shopSelectedTemplateId),
+    ),
+  );
   const [
     shopSelectedTemplateId,
     shopSelectedInvoiceTemplateId,
     smtpSettings,
     planId,
+    page,
   ] = await Promise.all([
-    loadSelectedTemplateForShop(session.shop, "sales-order"),
+    soTemplatePromise,
     loadSelectedTemplateForShop(session.shop, "invoice"),
     loadSmtpSettingsForShop(session.shop),
-    getShopPlanIdForGating(billing),
+    getShopPlanIdForGating(billing, session.shop),
+    pagePromise,
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
   );
-  let page = await loadSalesOrdersPage(
-    admin,
-    session.shop,
-    params,
-    selectedTemplateId,
-  );
 
-  // Heal only when this page has refunded invoices that still need a CN.
+  // Heal refunded invoices in the background — never block list TTFB.
   const healCandidates = page.orders.filter((order) => {
     if (!order.invoiced) return false;
     if (order.creditNote && !order.creditNoteVoided) return false;
@@ -83,7 +91,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return status === "REFUNDED" || status === "PARTIALLY_REFUNDED";
   });
   if (healCandidates.length > 0) {
-    const healed = await ensureAutoCreditNotesForOrders(
+    void ensureAutoCreditNotesForOrders(
       session.shop,
       healCandidates.map((order) => ({
         orderGid: order.id,
@@ -91,15 +99,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
         hasInvoice: order.invoiced,
         hasCreditNote: Boolean(order.creditNote) && !order.creditNoteVoided,
       })),
-    );
-    if (healed.created > 0) {
-      page = await loadSalesOrdersPage(
-        admin,
-        session.shop,
-        params,
-        selectedTemplateId,
-      );
-    }
+    ).catch((error) => {
+      console.warn("[invoice-list] background CN heal failed:", error);
+    });
   }
 
   return {

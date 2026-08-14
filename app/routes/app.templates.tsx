@@ -80,11 +80,54 @@ import "../templates.css";
 import "../template-editor.css";
 import "../sales-order-document.css";
 
-const SalesOrderLiveDocument = lazy(() =>
+const loadSalesOrderLiveDocument = () =>
   import("../components/sales-order-live-document").then((mod) => ({
     default: mod.SalesOrderLiveDocument,
-  })),
-);
+  }));
+
+const SalesOrderLiveDocument = lazy(loadSalesOrderLiveDocument);
+
+/** Cap concurrent live gallery thumbs so many cards don't fight for main thread. */
+const GALLERY_THUMB_MAX = 2;
+let galleryThumbActive = 0;
+const galleryThumbWaiters: Array<() => void> = [];
+
+function acquireGalleryThumbSlot(): Promise<void> {
+  if (galleryThumbActive < GALLERY_THUMB_MAX) {
+    galleryThumbActive += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    galleryThumbWaiters.push(() => {
+      galleryThumbActive += 1;
+      resolve();
+    });
+  });
+}
+
+function releaseGalleryThumbSlot() {
+  galleryThumbActive = Math.max(0, galleryThumbActive - 1);
+  const next = galleryThumbWaiters.shift();
+  if (next) next();
+}
+
+/** Gallery cards: no CDN product images (biggest thumb latency). */
+function galleryPreviewOrder(
+  templateId: string,
+  shopCurrencyCode: string,
+  documentNumber: string,
+) {
+  const base = templateId.startsWith("credit-")
+    ? sampleCreditNoteForShop(shopCurrencyCode)
+    : sampleSalesOrderForShop(shopCurrencyCode);
+  return {
+    ...base,
+    name: "#1008",
+    documentNumber,
+    referenceNumber: base.referenceNumber || "SO-0001",
+    lineItems: base.lineItems.map((item) => ({ ...item, imageUrl: "" })),
+  };
+}
 
 type DocumentType =
   | "sales-order"
@@ -196,9 +239,8 @@ function buildPreviewBundle(args: {
     settings.logoDataUrl = args.storeDetails.logoDataUrl;
     settings.logoFileName = args.storeDetails.logoFileName;
   }
-  // Pin document-type header + repair stale Sales Order titles without loading
-  // the full multi-language label packs on the gallery client.
-  settings.header = { ...settings.header, ...defaults.header };
+  // Pin document-type header defaults, then keep merchant toggles on top.
+  settings.header = { ...defaults.header, ...settings.header };
   const title = settings.transactionLabels.documentTitle?.trim() ?? "";
   const knownTitles = new Set([
     "SALES ORDER",
@@ -459,6 +501,7 @@ function buildPreviewSettings(
   settings: TemplateEditorSettings,
   templateId: string,
   storeLogoDataUrl?: string,
+  opts?: { galleryCard?: boolean },
 ) {
   const preset = getSalesOrderTemplatePreset(templateId);
   const previewSettings: TemplateEditorSettings = {
@@ -523,6 +566,13 @@ function buildPreviewSettings(
     showLogo: true,
   };
 
+  // Gallery thumbs: hide product images (CDN was stalling Modern cards).
+  if (opts?.galleryCard) {
+    previewSettings.columns = previewSettings.columns.map((col) =>
+      col.showImage ? { ...col, showImage: false } : col,
+    );
+  }
+
   return previewSettings;
 }
 
@@ -530,28 +580,33 @@ function SalesOrderCardThumbnail({
   templateId,
   preview,
   shopCurrencyCode,
+  onReady,
 }: {
   templateId: string;
   preview: SalesOrderPreviewBundle;
   shopCurrencyCode: string;
+  onReady?: () => void;
 }) {
   const previewSettings = buildPreviewSettings(
     preview.settings,
     templateId,
     preview.storeDetails.logoDataUrl,
+    { galleryCard: true },
   );
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
-  const previewOrder = {
-    ...(templateId.startsWith("credit-")
-      ? sampleCreditNoteForShop(shopCurrencyCode)
-      : sampleSalesOrderForShop(shopCurrencyCode)),
-    name: "#1008",
+  const previewOrder = galleryPreviewOrder(
+    templateId,
+    shopCurrencyCode,
     documentNumber,
-  };
+  );
 
   return (
     <div aria-hidden="true" className="template-card-thumb">
-      <PaperScaleFrame className="template-card-thumb__scale" fit="contain">
+      <PaperScaleFrame
+        className="template-card-thumb__scale"
+        fit="contain"
+        optimistic
+      >
         <div
           className="template-editor__paper template-editor__paper--portrait template-editor__paper--a4 template-card-thumb__paper"
           style={{
@@ -568,11 +623,22 @@ function SalesOrderCardThumbnail({
               showLogoPlaceholder={false}
               order={previewOrder}
             />
+            <GalleryThumbReadyBeacon onReady={onReady} />
           </Suspense>
         </div>
       </PaperScaleFrame>
     </div>
   );
+}
+
+/** Fires after the lazy live document mounts (not merely after scale). */
+function GalleryThumbReadyBeacon({ onReady }: { onReady?: () => void }) {
+  useEffect(() => {
+    if (!onReady) return;
+    const id = requestAnimationFrame(() => onReady());
+    return () => cancelAnimationFrame(id);
+  }, [onReady]);
+  return null;
 }
 
 function TemplateThumbnailFallback() {
@@ -600,6 +666,9 @@ function DeferredSalesOrderCardThumbnail({
   const hostRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [slotGranted, setSlotGranted] = useState(false);
+  const [liveReady, setLiveReady] = useState(false);
+  const slotHeldRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -620,23 +689,66 @@ function DeferredSalesOrderCardThumbnail({
           observer.disconnect();
         }
       },
-      { rootMargin: "120px" },
+      // Smaller margin = fewer cards race to mount at once.
+      { rootMargin: "40px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
   }, [mounted]);
 
+  useEffect(() => {
+    if (!mounted || !visible) return;
+    let cancelled = false;
+    void acquireGalleryThumbSlot().then(() => {
+      if (cancelled) {
+        releaseGalleryThumbSlot();
+        return;
+      }
+      slotHeldRef.current = true;
+      setSlotGranted(true);
+    });
+    return () => {
+      cancelled = true;
+      if (slotHeldRef.current) {
+        slotHeldRef.current = false;
+        releaseGalleryThumbSlot();
+      }
+    };
+  }, [mounted, visible]);
+
+  const handleLiveReady = useCallback(() => {
+    setLiveReady(true);
+    if (slotHeldRef.current) {
+      slotHeldRef.current = false;
+      releaseGalleryThumbSlot();
+    }
+  }, []);
+
   return (
-    <div ref={hostRef}>
-      {mounted && visible ? (
-        <SalesOrderCardThumbnail
-          templateId={template.id}
-          preview={preview}
-          shopCurrencyCode={shopCurrencyCode}
-        />
-      ) : (
-        <TemplateThumbnail template={template} />
-      )}
+    <div ref={hostRef} style={{ position: "relative" }}>
+      {/* CSS sketch stays until live thumb paints — no blank spinner gap. */}
+      {!liveReady ? <TemplateThumbnail template={template} /> : null}
+      {mounted && visible && slotGranted ? (
+        <div
+          style={
+            liveReady
+              ? undefined
+              : {
+                  position: "absolute",
+                  inset: 0,
+                  opacity: 0,
+                  pointerEvents: "none",
+                }
+          }
+        >
+          <SalesOrderCardThumbnail
+            templateId={template.id}
+            preview={preview}
+            shopCurrencyCode={shopCurrencyCode}
+            onReady={handleLiveReady}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -700,6 +812,7 @@ export default function TemplatesPage() {
   } = useLoaderData<typeof loader>();
   const { t, language } = useAdminI18n();
   const selectFetcher = useFetcher<typeof action>();
+  const storeBrandWarmFetcher = useFetcher();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -721,6 +834,52 @@ export default function TemplatesPage() {
 
   // Live card thumbs for the visible document type only (~15, not all 60).
   // Cards mount via IntersectionObserver so first paint stays light.
+  useEffect(() => {
+    if (isEditRoute) return;
+    let cancelled = false;
+    const preload = () => {
+      if (!cancelled) void loadSalesOrderLiveDocument();
+    };
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (typeof requestIdleCallback === "function") {
+      idleId = requestIdleCallback(preload);
+    } else {
+      timeoutId = setTimeout(preload, 100);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, [isEditRoute]);
+
+  // Warm store logo cache so Edit opens with brand ready (logo is deferred from edit loader).
+  useEffect(() => {
+    if (isEditRoute) return;
+    if (!selectedTemplates[activeType]) return;
+    if (storeBrandWarmFetcher.data || storeBrandWarmFetcher.state !== "idle") {
+      return;
+    }
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const warm = () => storeBrandWarmFetcher.load("/app/templates/store-brand");
+    if (typeof requestIdleCallback === "function") {
+      idleId = requestIdleCallback(warm, { timeout: 2500 });
+    } else {
+      timeoutId = setTimeout(warm, 500);
+    }
+    return () => {
+      if (idleId !== undefined && typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- warm once per selection
+  }, [isEditRoute, activeType, selectedTemplates]);
+
   const salesOrderPreviews = useMemo(() => {
     if (isEditRoute) return {} as Record<string, SalesOrderPreviewBundle>;
     const series = numberSeries as NumberSeriesMap;
@@ -895,10 +1054,14 @@ export default function TemplatesPage() {
   }
 
   const salesOrderPreview = salesOrderPreviewBundle;
+  const selectedEditPath = selectedTemplates[activeType]
+    ? `/app/templates/edit/${activeType}/${selectedTemplates[activeType]}`
+    : null;
 
   return (
     <AppProvider i18n={enTranslations}>
     <div className="templates-polaris-shell">
+    {selectedEditPath ? <PrefetchPageLinks page={selectedEditPath} /> : null}
     <s-page heading={t("pages.templates")} inlineSize="large">
       <div className="templates-page">
         <s-stack direction="block" gap="base">

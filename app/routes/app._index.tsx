@@ -207,7 +207,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = session.shop;
 
   // Billing is often memoized from the shell loader on the same request.
-  const billingPromise = loadShopBillingState(billing);
+  const billingPromise = loadShopBillingState(billing, shop);
   const monthlyUsagePromise = loadShopMonthlyUsage(shop);
   const installedAtPromise = loadShopInstalledAt(shop);
   const syncFlagsPromise = loadNumberSyncFlagsForShop(shop);

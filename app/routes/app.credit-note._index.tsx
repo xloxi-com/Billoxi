@@ -46,26 +46,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const params = parseSalesOrdersSearchParams(url);
 
+  const soTemplatePromise = loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const pagePromise = soTemplatePromise.then((shopSelectedTemplateId) =>
+    loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      resolveSalesOrderTemplateId(shopSelectedTemplateId),
+      { listFilter: "credit-note" },
+    ),
+  );
   const [
     shopSelectedTemplateId,
     shopSelectedCreditNoteTemplateId,
     smtpSettings,
     planId,
+    page,
   ] = await Promise.all([
-    loadSelectedTemplateForShop(session.shop, "sales-order"),
+    soTemplatePromise,
     loadSelectedTemplateForShop(session.shop, "credit-note"),
     loadSmtpSettingsForShop(session.shop),
-    getShopPlanIdForGating(billing),
+    getShopPlanIdForGating(billing, session.shop),
+    pagePromise,
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
-  );
-  const page = await loadSalesOrdersPage(
-    admin,
-    session.shop,
-    params,
-    selectedTemplateId,
-    { listFilter: "credit-note" },
   );
 
   return {

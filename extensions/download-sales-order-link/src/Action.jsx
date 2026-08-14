@@ -38,7 +38,7 @@ function Extension() {
           }
           return;
         }
-        const res = await fetch("/extension-plan-access", {
+        const res = await fetch("/extension-plan-access?quota=1", {
           method: "GET",
           headers: {
             Authorization: `Bearer ${idToken}`,

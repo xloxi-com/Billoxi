@@ -16,7 +16,7 @@ export async function getShopPlanIdForShop(
     const ctx = await unauthenticated.admin(shop);
     const billing = (ctx as { billing?: BillingCheckApi }).billing;
     if (billing) {
-      const state = await loadShopBillingState(billing);
+      const state = await loadShopBillingState(billing, shop);
       return state.currentPlanId;
     }
     return loadShopPlanIdFromAdmin(ctx.admin);

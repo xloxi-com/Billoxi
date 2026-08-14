@@ -90,9 +90,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "downgrade-free") {
     try {
-      clearShopBillingStateCache(billing);
+      clearShopBillingStateCache(billing, session.shop);
       const { hasActivePlan, activeSubscriptionId, appSubscriptions } =
-        await loadShopBillingState(billing);
+        await loadShopBillingState(billing, session.shop);
 
       const subscriptionId =
         activeSubscriptionId || appSubscriptions[0]?.id || null;
@@ -105,7 +105,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
       }
 
-      clearShopBillingStateCache(billing);
+      clearShopBillingStateCache(billing, session.shop);
       // Back to plan picker (FREE gate).
       return redirect("/app/pricing");
     } catch (error) {
@@ -130,7 +130,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  clearShopBillingStateCache(billing);
+  clearShopBillingStateCache(billing, session.shop);
   const plan = billingPlanName(planIdRaw, periodRaw);
   const storeHandle = session.shop.replace(/\.myshopify\.com$/i, "");
   const apiKey = process.env.SHOPIFY_API_KEY || "";

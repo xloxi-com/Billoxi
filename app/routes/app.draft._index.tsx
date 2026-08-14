@@ -50,17 +50,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const params = parseSalesOrdersSearchParams(url);
   const hasScope = sessionHasDraftOrdersScope(session.scope);
 
-  const [shopSelectedDraftTemplateId, smtpSettings, planId] = await Promise.all([
-    loadSelectedTemplateForShop(session.shop, "draft"),
-    loadSmtpSettingsForShop(session.shop),
-    getShopPlanIdForGating(billing),
-  ]);
-
-  // Never redirect to /auth inside the embedded iframe (causes a blank page).
-  // Load what we can and surface a permissions banner instead.
-  const page = hasScope
-    ? await loadShopifyDraftOrdersPage(admin, session.shop, params)
-    : {
+  const pagePromise = hasScope
+    ? loadShopifyDraftOrdersPage(admin, session.shop, params)
+    : Promise.resolve({
         orders: [],
         pageInfo: {
           hasNextPage: false,
@@ -76,7 +68,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
         sortSelected: params.sortSelected,
         scopeError:
           "Missing read_draft_orders permission. Click Update permissions, approve access, then reopen Draft.",
-      };
+      });
+
+  // Never redirect to /auth inside the embedded iframe (causes a blank page).
+  // Load what we can and surface a permissions banner instead.
+  const [shopSelectedDraftTemplateId, smtpSettings, planId, page] =
+    await Promise.all([
+      loadSelectedTemplateForShop(session.shop, "draft"),
+      loadSmtpSettingsForShop(session.shop),
+      getShopPlanIdForGating(billing, session.shop),
+      pagePromise,
+    ]);
 
   return {
     ...page,

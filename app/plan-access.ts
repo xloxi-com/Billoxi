@@ -88,8 +88,9 @@ type BillingCheckApi = Parameters<typeof loadShopBillingState>[0];
 /** Resolve the merchant's active plan for server-side feature gates. */
 export async function getShopPlanIdForGating(
   billing: BillingCheckApi,
+  shop?: string,
 ): Promise<PlanId> {
-  const state: ShopBillingState = await loadShopBillingState(billing);
+  const state: ShopBillingState = await loadShopBillingState(billing, shop);
   return state.currentPlanId ?? PLACEHOLDER_CURRENT_PLAN_ID;
 }
 

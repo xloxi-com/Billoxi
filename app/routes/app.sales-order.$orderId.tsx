@@ -324,6 +324,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       })
     : fetchSalesOrderDocument(admin, orderGid, {
         asCreditNote: isCreditNote,
+        asReturn: isReturn,
         shop: session.shop,
         bypassCache,
       });
@@ -462,9 +463,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let orderDraft = false;
 
   if (isCreditNote) {
-    const [creditMeta, invoiceMeta] = await Promise.all([
+    const [creditMeta, invoiceMeta, soNumbers] = await Promise.all([
       creditNoteMetaPromise!,
       invoiceMetaPromise!,
+      salesOrderNumbersPromise!,
     ]);
     const currentMeta = creditMeta.get(order.id) ?? creditMeta.get(orderGid);
     const currentInvoice = invoiceMeta.get(order.id) ?? invoiceMeta.get(orderGid);
@@ -487,15 +489,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     invoiceCustomerNote = currentMeta?.customerNote ?? null;
     invoiceTerms = currentMeta?.terms ?? currentInvoice?.terms ?? null;
 
-    // Invoice Ref# must be the invoice document number (INV-…), not SO / order name.
-    let invoiceRef = currentInvoice?.documentNumber?.trim() || "";
-    if (!invoiceRef && currentInvoice) {
-      const ensured = await ensureInvoiceDocumentNumbers(session.shop, [
-        order.id,
-      ]);
-      invoiceRef = ensured.get(order.id)?.trim() || "";
-    }
-    referenceNumber = invoiceRef || undefined;
+    // Ref# = Billoxi sales-order number; Shopify # is order.name (separate row).
+    referenceNumber =
+      soNumbers.get(order.id) || soNumbers.get(orderGid) || undefined;
   } else if (isInvoice) {
     const [invoiceMeta, creditNoteGids, soNumbers] = await Promise.all([
       invoiceMetaPromise!,
@@ -520,7 +516,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     referenceNumber =
       soNumbers.get(order.id) || soNumbers.get(orderGid) || undefined;
   } else if (isDraft) {
-    // Shopify DraftOrder — Billoxi DFT- from Settings series; keep #D… as reference.
+    // Shopify DraftOrder — Billoxi DFT- from Settings series; Shopify #D… via order.name.
     orderDraft = true;
     let draftNumber = "";
     const draftMeta = await draftMetaPromise!;
@@ -532,7 +528,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     documentNumber = draftNumber || order.name;
     documentDate =
       currentMeta?.draftedAt?.toISOString() || order.createdAt;
-    referenceNumber = order.name;
+    // Drafts have no SO- number — hide sales-order Ref# row (no referenceNumber).
+    referenceNumber = undefined;
     invoiceCustomerNote = currentMeta?.customerNote ?? null;
     invoiceTerms = currentMeta?.terms ?? null;
   } else if (isPackingSlip) {
@@ -554,7 +551,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order.name;
     documentDate =
       currentMeta?.convertedAt?.toISOString() || order.createdAt;
-    referenceNumber = existingSalesOrderNumber || order.name;
+    referenceNumber = existingSalesOrderNumber || undefined;
   } else if (isReturn) {
     const [returnMeta, soNumbers] = await Promise.all([
       returnMetaPromise!,
@@ -574,7 +571,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       order.name;
     documentDate =
       currentMeta?.convertedAt?.toISOString() || order.createdAt;
-    referenceNumber = existingSalesOrderNumber || order.name;
+    referenceNumber = existingSalesOrderNumber || undefined;
   } else {
     const [soDetailsInitial, invoicedGids, packingGids, returnGids, draftGids] =
       await salesOrderFlagsPromise!;
@@ -630,6 +627,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       soDetails?.documentDate?.toISOString() || order.createdAt;
     invoiceCustomerNote = soDetails?.customerNote ?? null;
     invoiceTerms = soDetails?.terms ?? null;
+    referenceNumber = documentNumber || undefined;
   }
 
   // Sidebar is non-blocking — document paints first, list streams in.

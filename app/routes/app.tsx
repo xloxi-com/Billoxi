@@ -3,7 +3,7 @@ import type {
   LoaderFunctionArgs,
   ShouldRevalidateFunctionArgs,
 } from "react-router";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Outlet,
   useLoaderData,
@@ -46,7 +46,7 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
   ).replace(/\.data$/i, "");
 
   const [billingState, savedAdminLanguage] = await Promise.all([
-    loadShopBillingState(billing),
+    loadShopBillingState(billing, session.shop),
     loadAdminLanguage(session.shop),
   ]);
 
@@ -102,6 +102,9 @@ function documentSectionBase(pathname: string) {
   return match?.[1] ?? null;
 }
 
+/** Delay so warm/cached navigations never flash the full-page spinner. */
+const NAV_LOADER_DELAY_MS = 160;
+
 function AppNavLoader({ label }: { label: string }) {
   const navigation = useNavigation();
   const location = useLocation();
@@ -110,13 +113,24 @@ function AppNavLoader({ label }: { label: string }) {
   const sameDocumentSwitch =
     Boolean(documentSectionBase(from)) &&
     documentSectionBase(from) === documentSectionBase(to);
-  const showLoader =
+  const shouldShow =
     navigation.state === "loading" &&
     !navigation.formMethod &&
     Boolean(to) &&
     to !== from &&
     !sameDocumentSwitch;
-  if (!showLoader) return null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!shouldShow) {
+      setVisible(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setVisible(true), NAV_LOADER_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [shouldShow, to, from]);
+
+  if (!visible) return null;
 
   return (
     <div

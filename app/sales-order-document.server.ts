@@ -17,6 +17,7 @@ import {
   reconcileTaxSummaryToOrderTotal,
   reconcilePaymentAmounts,
   adaptDocumentForCreditNote,
+  adaptDocumentForReturn,
   formatQuantityDisplay,
   SALES_ORDER_TEMPLATE_PRESETS,
   INVOICE_TEMPLATE_PRESETS,
@@ -27,6 +28,8 @@ import {
   buildCustomerMetafieldValueMap,
   type CreditNoteRefundSource,
   type CreditNoteRefundLineSource,
+  type ReturnDocumentSource,
+  type ReturnDocumentLineSource,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
@@ -587,7 +590,7 @@ export async function loadDocumentTemplateSettings(
     documentType === "sales-order"
       ? resolveSalesOrderTemplateId(templateId)
       : templateId;
-  const cacheKey = `${shop}|${documentType}|${resolvedId}`;
+  const cacheKey = `${shop}|${documentType}|${resolvedId}|so-no-ref`;
   if (!preload) {
     const cached = templateSettingsCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
@@ -663,7 +666,8 @@ export async function loadDocumentTemplateSettings(
     },
   });
   const defaults = defaultTemplateSettings(templateName, resolvedId);
-  settings.header = { ...settings.header, ...defaults.header };
+  // Merchant header toggles (Ref# / Shopify order / payment) must win over defaults.
+  settings.header = { ...defaults.header, ...settings.header };
 
   // Draft / packing / credit / return: never show paid / balance-due payment rows.
   if (
@@ -682,6 +686,14 @@ export async function loadDocumentTemplateSettings(
     settings.header = {
       ...settings.header,
       showPaymentMethod: false,
+    };
+  }
+  if (documentType === "sales-order") {
+    // Sales Order# already appears under the title — hide meta Ref# / Shopify rows.
+    settings.header = {
+      ...settings.header,
+      showReference: false,
+      showShopifyOrder: false,
     };
   }
 
@@ -828,6 +840,42 @@ type OrderNode = {
       } | null> | null;
     } | null;
   } | null> | null;
+  returns?: {
+    nodes?: Array<{
+      id?: string | null;
+      name?: string | null;
+      status?: string | null;
+      returnLineItems?: {
+        nodes?: Array<{
+          quantity?: number | null;
+          withCodeDiscountedTotalPriceSet?: {
+            shopMoney?: { amount: string; currencyCode?: string };
+            presentmentMoney?: { amount: string; currencyCode?: string };
+          } | null;
+          fulfillmentLineItem?: {
+            lineItem?: {
+              title?: string | null;
+              variantTitle?: string | null;
+              name?: string | null;
+              sku?: string | null;
+              originalUnitPriceSet?: {
+                shopMoney?: { amount: string };
+                presentmentMoney?: { amount: string };
+              } | null;
+              image?: { url?: string | null } | null;
+              variant?: {
+                sku?: string | null;
+                barcode?: string | null;
+                product?: {
+                  featuredImage?: { url?: string | null } | null;
+                } | null;
+              } | null;
+            } | null;
+          } | null;
+        } | null> | null;
+      } | null;
+    } | null> | null;
+  } | null;
   taxLines?: Array<{
     title?: string | null;
     rate?: number | null;
@@ -1061,6 +1109,74 @@ function creditNoteRefundSourceFromOrder(
   };
 }
 
+const SKIPPED_RETURN_STATUSES = new Set(["CANCELED", "CANCELLED", "DECLINED"]);
+
+function returnDocumentSourceFromOrder(order: OrderNode): ReturnDocumentSource {
+  const returnLineItems: ReturnDocumentLineSource[] = [];
+
+  for (const ret of order.returns?.nodes ?? []) {
+    if (!ret) continue;
+    const status = String(ret.status || "").toUpperCase();
+    if (SKIPPED_RETURN_STATUSES.has(status)) continue;
+
+    for (const node of ret.returnLineItems?.nodes ?? []) {
+      if (!node) continue;
+      const qty = Number(node.quantity) || 0;
+      if (qty <= 0) continue;
+
+      const line = node.fulfillmentLineItem?.lineItem;
+      const title =
+        line?.title?.trim() || line?.name?.trim() || "Returned item";
+      const variantTitle = (() => {
+        const raw = line?.variantTitle?.trim() || "";
+        if (
+          !raw ||
+          raw.toLowerCase() === "default title" ||
+          raw.toLowerCase() === title.toLowerCase()
+        ) {
+          return "";
+        }
+        return raw;
+      })();
+
+      const discounted = moneyAmount(
+        node.withCodeDiscountedTotalPriceSet?.shopMoney,
+      );
+      const unit = moneyAmount(line?.originalUnitPriceSet?.shopMoney);
+      const unitN = Number(unit) || 0;
+      const subtotal =
+        discounted && Number(discounted) > 0
+          ? discounted
+          : unitN > 0
+            ? (unitN * qty).toFixed(2)
+            : "0.00";
+
+      returnLineItems.push({
+        quantity: qty,
+        subtotal,
+        tax: "0.00",
+        title,
+        variantTitle,
+        imageUrl:
+          line?.image?.url?.trim() ||
+          line?.variant?.product?.featuredImage?.url?.trim() ||
+          "",
+        sku: line?.variant?.sku?.trim() || line?.sku?.trim() || "",
+        barcode: line?.variant?.barcode?.trim() || "",
+      });
+    }
+  }
+
+  // Open returns may not have refunds yet; closed/refunded returns still prefer
+  // returnLineItems. If Shopify returns are empty, fall back to refund lines.
+  if (returnLineItems.length === 0) {
+    const refundSource = creditNoteRefundSourceFromOrder(order);
+    return { returnLineItems: refundSource.refundLineItems };
+  }
+
+  return { returnLineItems };
+}
+
 export async function fetchSalesOrderDocument(
   admin: {
     graphql: (
@@ -1069,10 +1185,15 @@ export async function fetchSalesOrderDocument(
     ) => Promise<Response>;
   },
   orderGid: string,
-  options?: { asCreditNote?: boolean; shop?: string; bypassCache?: boolean },
+  options?: {
+    asCreditNote?: boolean;
+    asReturn?: boolean;
+    shop?: string;
+    bypassCache?: boolean;
+  },
 ): Promise<SalesOrderDocumentData | null> {
   const shopKey = options?.shop || "_";
-  const cacheKey = `${shopKey}|${orderGid}|cn:${options?.asCreditNote ? "1" : "0"}`;
+  const cacheKey = `${shopKey}|${orderGid}|cn:${options?.asCreditNote ? "1" : "0"}|ret:${options?.asReturn ? "1" : "0"}`;
   if (!options?.bypassCache) {
     const cached = orderDocumentCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
@@ -1250,6 +1371,44 @@ export async function fetchSalesOrderDocument(
             refundShippingLines(first: 10) {
               nodes {
                 subtotalAmountSet { shopMoney { amount } presentmentMoney { amount } }
+              }
+            }
+          }
+          returns(first: 20) {
+            nodes {
+              id
+              name
+              status
+              returnLineItems(first: 100) {
+                nodes {
+                  ... on ReturnLineItem {
+                    quantity
+                    withCodeDiscountedTotalPriceSet {
+                      shopMoney { amount currencyCode }
+                      presentmentMoney { amount currencyCode }
+                    }
+                    fulfillmentLineItem {
+                      lineItem {
+                        title
+                        variantTitle
+                        name
+                        sku
+                        originalUnitPriceSet {
+                          shopMoney { amount }
+                          presentmentMoney { amount }
+                        }
+                        image { url }
+                        variant {
+                          sku
+                          barcode
+                          product {
+                            featuredImage { url }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -1532,6 +1691,18 @@ export async function fetchSalesOrderDocument(
       value: creditNoteDoc,
     });
     return creditNoteDoc;
+  }
+
+  if (options?.asReturn) {
+    const returnDoc = adaptDocumentForReturn(
+      document,
+      returnDocumentSourceFromOrder(order),
+    );
+    orderDocumentCache.set(cacheKey, {
+      expires: Date.now() + ORDER_DOCUMENT_TTL_MS,
+      value: returnDoc,
+    });
+    return returnDoc;
   }
 
   orderDocumentCache.set(cacheKey, {

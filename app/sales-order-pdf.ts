@@ -935,10 +935,18 @@ async function buildSalesOrderVectorPdf({
   if (settings.header.showDate) {
     metaRows.push([settings.transactionLabels.date, orderDate]);
   }
-  metaRows.push([
-    settings.transactionLabels.reference,
-    order.referenceNumber || order.name,
-  ]);
+  if (settings.header.showReference !== false && order.referenceNumber) {
+    metaRows.push([
+      settings.transactionLabels.reference,
+      order.referenceNumber,
+    ]);
+  }
+  if (settings.header.showShopifyOrder === true && order.name) {
+    metaRows.push([
+      settings.transactionLabels.shopifyOrder || "Shopify Order#",
+      order.name,
+    ]);
+  }
   if (
     settings.header.showExpectedShipmentDate &&
     order.expectedShipmentDate

@@ -1,87 +1,91 @@
 /**
- * Show Download return only when:
- * - shop has a paid Billoxi plan (not FREE), and
- * - the order has a Shopify return (or was already converted to a Billoxi return).
+ * Show return actions only when the order has a Shopify return,
+ * and the shop has a paid plan with admin extensions.
  */
-async function hasPaidPlan() {
+const PLAN_CACHE_KEY = "billoxi.plan.adminExtensions.v1";
+const PLAN_CACHE_TTL_MS = 60_000;
+
+function readCachedPlanDisplay() {
   try {
-    const idToken = await shopify.auth.idToken();
-    if (!idToken) return false;
-    const res = await fetch("/extension-plan-access", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) return false;
-    const payload = await res.json();
-    return Boolean(payload?.ok && payload?.adminExtensions);
-  } catch (err) {
-    console.error("[billoxi] plan should-render failed", err);
-    return false;
+    const raw = sessionStorage.getItem(PLAN_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.display !== "boolean" || typeof parsed?.at !== "number") {
+      return null;
+    }
+    if (Date.now() - parsed.at > PLAN_CACHE_TTL_MS) return null;
+    return parsed.display;
+  } catch {
+    return null;
   }
 }
 
-export default async () => {
-  if (!(await hasPaidPlan())) return { display: false };
-
-  const orderGid = shopify?.data?.selected?.[0]?.id;
-  if (!orderGid) return { display: false };
-
+function writeCachedPlanDisplay(display) {
   try {
-    const response = await fetch("shopify:admin/api/graphql.json", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `query OrderHasReturn($id: ID!) {
-          order(id: $id) {
-            returnStatus
-            returns(first: 1) {
-              nodes { id }
-            }
-          }
-        }`,
-        variables: { id: orderGid },
-      }),
-    });
-
-    if (response.ok) {
-      const payload = await response.json();
-      const order = payload?.data?.order;
-      const status = String(order?.returnStatus || "NO_RETURN");
-      const hasReturnNodes = (order?.returns?.nodes?.length || 0) > 0;
-      if (hasReturnNodes || (status && status !== "NO_RETURN")) {
-        return { display: true };
-      }
-    }
-  } catch (err) {
-    console.error("[billoxi] return should-render graphql failed", err);
+    sessionStorage.setItem(
+      PLAN_CACHE_KEY,
+      JSON.stringify({ display, at: Date.now() }),
+    );
+  } catch {
+    /* ignore */
   }
+}
 
+async function orderHasShopifyReturn(orderGid) {
+  const response = await fetch("shopify:admin/api/graphql.json", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: `query BilloxiOrderReturnStatus($id: ID!) {
+        order(id: $id) {
+          returnStatus
+        }
+      }`,
+      variables: { id: orderGid },
+    }),
+  });
+  const json = await response.json();
+  if (json?.errors?.length) {
+    throw new Error(json.errors[0]?.message || "Return status query failed");
+  }
+  const status = json?.data?.order?.returnStatus;
+  return Boolean(status && status !== "NO_RETURN");
+}
+
+async function hasAdminExtensionsPlan() {
+  const cached = readCachedPlanDisplay();
+  if (cached != null) return cached;
+
+  const idToken = await shopify.auth.idToken();
+  if (!idToken) return false;
+
+  const res = await fetch("/extension-plan-access", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) return false;
+  const payload = await res.json();
+  const display = Boolean(payload?.ok && payload?.adminExtensions);
+  writeCachedPlanDisplay(display);
+  return display;
+}
+
+export default async () => {
   try {
-    const orderId = String(orderGid).split("/").pop();
-    if (!orderId) return { display: false };
-    const idToken = await shopify.auth.idToken();
-    if (!idToken) return { display: false };
+    const orderGid = shopify.data?.selected?.[0]?.id;
+    if (!orderGid) return { display: false };
 
-    const qs = new URLSearchParams({
-      orderId,
-      document: "return",
-      statusOnly: "1",
-    });
-    const res = await fetch(`/extension-document-pdf?${qs}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) return { display: false };
-    const payload = await res.json();
-    return { display: Boolean(payload?.ok && payload?.isConverted) };
+    // Most orders have no return — fail fast before plan network call.
+    const hasReturn = await orderHasShopifyReturn(orderGid);
+    if (!hasReturn) return { display: false };
+
+    const planOk = await hasAdminExtensionsPlan();
+    return { display: planOk };
   } catch (err) {
-    console.error("[billoxi] return should-render status failed", err);
+    console.error("[billoxi] return should-render failed", err);
     return { display: false };
   }
 };

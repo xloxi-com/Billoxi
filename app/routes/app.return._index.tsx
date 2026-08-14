@@ -59,53 +59,47 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const params = parseSalesOrdersSearchParams(url);
   const hasScope = sessionHasReturnsScope(session.scope);
 
-  const [shopSelectedTemplateId, shopSelectedReturnTemplateId, smtpSettings, planId] =
-    await Promise.all([
-      loadSelectedTemplateForShop(session.shop, "sales-order"),
-      loadSelectedTemplateForShop(session.shop, "return"),
-      loadSmtpSettingsForShop(session.shop),
-      getShopPlanIdForGating(billing),
-    ]);
-  const selectedTemplateId = resolveSalesOrderTemplateId(
-    shopSelectedTemplateId,
-  );
-
-  let scopeError: string | null = null;
-  const syncPromise = hasScope
-    ? syncShopifyReturnsForShop(admin, session.shop).catch((error) => {
-        console.error("Return list Shopify sync failed:", error);
-        return {
-          marked: 0,
-          scopeError:
-            error instanceof Error
-              ? error.message
-              : "Could not sync Shopify returns.",
-        };
-      })
-    : Promise.resolve({
-        marked: 0,
-        scopeError:
-          "Missing read_returns permission. Update app scopes, then reopen Return.",
-      });
-
-  let page = await loadSalesOrdersPage(
-    admin,
+  const soTemplatePromise = loadSelectedTemplateForShop(
     session.shop,
-    params,
-    selectedTemplateId,
-    { listFilter: "return" },
+    "sales-order",
   );
-  const sync = await syncPromise;
-  if (sync.scopeError) scopeError = sync.scopeError;
-  if (sync.marked > 0) {
-    page = await loadSalesOrdersPage(
+  const pagePromise = soTemplatePromise.then((shopSelectedTemplateId) =>
+    loadSalesOrdersPage(
       admin,
       session.shop,
       params,
-      selectedTemplateId,
+      resolveSalesOrderTemplateId(shopSelectedTemplateId),
       { listFilter: "return" },
-    );
+    ),
+  );
+
+  const scopeError = hasScope
+    ? null
+    : "Missing read_returns permission. Update app scopes, then reopen Return.";
+
+  // Sync Shopify returns in the background — list paints from DB first.
+  if (hasScope) {
+    void syncShopifyReturnsForShop(admin, session.shop).catch((error) => {
+      console.error("Return list Shopify sync failed:", error);
+    });
   }
+
+  const [
+    shopSelectedTemplateId,
+    shopSelectedReturnTemplateId,
+    smtpSettings,
+    planId,
+    page,
+  ] = await Promise.all([
+    soTemplatePromise,
+    loadSelectedTemplateForShop(session.shop, "return"),
+    loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing, session.shop),
+    pagePromise,
+  ]);
+  const selectedTemplateId = resolveSalesOrderTemplateId(
+    shopSelectedTemplateId,
+  );
 
   return {
     ...page,

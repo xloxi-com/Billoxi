@@ -39,6 +39,7 @@ export type TemplateLabelPack = {
     orderNumber: string;
     date: string;
     reference: string;
+    shopifyOrder?: string;
     expectedShipmentDate: string;
     paymentMethod: string;
   };
@@ -101,6 +102,7 @@ const en: TemplateLabelPack = {
     orderNumber: "Sales Order#",
     date: "Order Date",
     reference: "Ref#",
+    shopifyOrder: "Shopify Order#",
     expectedShipmentDate: "Expected Shipment Date",
     paymentMethod: "Payment Method",
   },
@@ -3841,6 +3843,10 @@ export function applyTemplateLanguageLabels<T extends ApplyTemplateLabelsInput>(
       ...settings.transactionLabels,
       ...transaction,
       organization,
+      shopifyOrder:
+        transaction.shopifyOrder ||
+        settings.transactionLabels.shopifyOrder ||
+        "Shopify Order#",
     },
     columns,
     billingDetails: settings.billingDetails.map((field) => ({

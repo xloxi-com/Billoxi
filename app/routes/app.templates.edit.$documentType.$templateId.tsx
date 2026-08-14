@@ -268,6 +268,11 @@ type TemplateEditorSettings = {
   margins: { top: number; bottom: number; left: number; right: number };
   /** Premium look upgrade marker (v2 = tax/paid/due + preset colors/fonts). */
   designVersion?: number;
+  /**
+   * After this is saved once, `header.showShopifyOrder` is honored.
+   * Until then Shopify Order# stays off (product default).
+   */
+  shopifyOrderDefaultReset?: boolean;
   /** @deprecated Prefer taxSummary.enabled */
   showTaxSummaryTable?: boolean;
   taxSummary: {
@@ -301,6 +306,8 @@ type TemplateEditorSettings = {
     showDocumentTitle: boolean;
     showOrderNumber: boolean;
     showDate: boolean;
+    showReference: boolean;
+    showShopifyOrder: boolean;
     showExpectedShipmentDate: boolean;
     showPaymentMethod: boolean;
   };
@@ -317,6 +324,7 @@ type TemplateEditorSettings = {
     orderNumber: string;
     date: string;
     reference: string;
+    shopifyOrder: string;
     expectedShipmentDate: string;
     paymentMethod: string;
   };
@@ -957,10 +965,10 @@ function reconcileSettingsForDocumentType(
     },
   });
 
-  // Always pin document-type header defaults (billing/shipping/payment toggles).
+  // Pin document-type header defaults, then keep merchant toggles on top.
   next = {
     ...next,
-    header: { ...next.header, ...defaults.header },
+    header: { ...defaults.header, ...next.header },
   };
 
   // Repair stale saves where title/order labels belong to another document type.
@@ -1005,7 +1013,7 @@ function reconcileSettingsForDocumentType(
     });
     next = {
       ...next,
-      header: { ...next.header, ...defaults.header },
+      header: { ...defaults.header, ...next.header },
     };
   }
 
@@ -1026,6 +1034,18 @@ function reconcileSettingsForDocumentType(
     };
   }
 
+  // Sales Order# is already under the title — no Ref# / Shopify Order# meta rows.
+  if (documentType === "sales-order") {
+    next = {
+      ...next,
+      header: {
+        ...next.header,
+        showReference: false,
+        showShopifyOrder: false,
+      },
+    };
+  }
+
   return next;
 }
 
@@ -1036,7 +1056,7 @@ function mergeSettings(
 ): TemplateEditorSettings {
   const defaults = createDefaultSettings(defaultName, templateId);
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return defaults;
+    return { ...defaults, shopifyOrderDefaultReset: true };
   }
 
   const input = value as Partial<TemplateEditorSettings> & {
@@ -1071,6 +1091,7 @@ function mergeSettings(
     designVersion: isPremiumSales
       ? PREMIUM_DESIGN_VERSION
       : Number(restInput.designVersion ?? 1) || 1,
+    shopifyOrderDefaultReset: true,
     taxSummary: isPremiumSales
       ? defaults.taxSummary.enabled
         ? {
@@ -1349,6 +1370,10 @@ function mergeSettings(
         showShipping,
         showCustomerDetails,
         showCustomer: showBilling || showShipping || showCustomerDetails,
+        showReference: merged.showReference !== false,
+        showShopifyOrder:
+          restInput.shopifyOrderDefaultReset === true &&
+          incoming.showShopifyOrder === true,
         showExpectedShipmentDate: merged.showExpectedShipmentDate === true,
         showPaymentMethod: merged.showPaymentMethod !== false,
       };
@@ -1390,6 +1415,10 @@ function mergeSettings(
       reference:
         input.transactionLabels?.reference ??
         defaults.transactionLabels.reference,
+      shopifyOrder:
+        input.transactionLabels?.shopifyOrder ??
+        defaults.transactionLabels.shopifyOrder ??
+        "Shopify Order#",
       expectedShipmentDate:
         input.transactionLabels?.expectedShipmentDate ??
         defaults.transactionLabels.expectedShipmentDate,
@@ -1766,8 +1795,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const { session, admin } = await requireAdminAuth(request);
-  // Critical path only — metafields load after paint via /app/templates/custom-fields.
-  const [customization, storeDetails, lastAllocated, numberSeries] =
+  // Critical path only — logo + metafields hydrate after paint (store-brand /
+  // custom-fields). Skip logo base64 here so Edit click isn't waiting on a fat JSON.
+  const [customization, storeDetails, lastAllocated, numberSeries, shopCurrencyCode] =
     await Promise.all([
       prisma.templateCustomization.findUnique({
         where: {
@@ -1778,7 +1808,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           },
         },
       }),
-      loadStoreDetailsForShop(session.shop, admin),
+      loadStoreDetailsForShop(session.shop, admin, { includeLogo: false }),
       prisma.salesOrderDocumentNumber.findFirst({
         where: {
           shop: session.shop,
@@ -1803,10 +1833,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
                   ? "return"
                   : "sales-order",
       ),
+      fetchShopCurrencyCode(admin, session.shop),
     ]);
-
-  // Usually a cache hit after store-details warm-up.
-  const shopCurrencyCode = await fetchShopCurrencyCode(admin, session.shop);
 
   let settings = mergeSettings(
     customization?.settings,
@@ -1817,10 +1845,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   if (storeDetails.name) {
     settings.transactionLabels.organization = storeDetails.name;
   }
-  if (storeDetails.logoDataUrl) {
-    settings.logoDataUrl = storeDetails.logoDataUrl;
-    settings.logoFileName = storeDetails.logoFileName;
-  }
+  // Logo is loaded via /app/templates/store-brand after first paint.
+  delete settings.logoDataUrl;
+  delete settings.logoFileName;
   settings.numbering = numberingFromSeries(numberSeries);
   settings = reconcileSettingsForDocumentType(
     settings,
@@ -1913,6 +1940,38 @@ function withNormalizedTotalLabels(
     totals: mergeTotalsSettings(
       value.totals,
       createDefaultSettings(value.name, templateId).totals,
+    ),
+  };
+}
+
+/**
+ * Normalize settings the same way the form displays them so opening the editor
+ * does not look "dirty" before the merchant edits anything.
+ */
+function hydrateEditorSettings(
+  value: TemplateEditorSettings,
+  templateId?: string,
+): TemplateEditorSettings {
+  const withTotals = withNormalizedTotalLabels(value, templateId);
+  return {
+    ...withTotals,
+    language: normalizeTemplateLanguage(withTotals.language),
+    dateFormat: normalizeTemplateDateFormat(withTotals.dateFormat),
+    currencyDisplay: normalizeTemplateCurrencyDisplay(
+      withTotals.currencyDisplay,
+    ),
+    billingDetails: normalizeCustomerDetails(
+      withTotals.billingDetails,
+      defaultBillingDetails,
+    ),
+    shippingDetails: normalizeCustomerDetails(
+      withTotals.shippingDetails,
+      defaultShippingDetails,
+    ),
+    customerBlockDetails: normalizeCustomerDetails(
+      withTotals.customerBlockDetails,
+      defaultCustomerBlockDetails,
+      { allowMetafieldKeys: true },
     ),
   };
 }
@@ -2018,6 +2077,11 @@ export default function TemplateEditorPage() {
   const navigate = useNavigate();
   const { language } = useAdminI18n();
   const fetcher = useFetcher<typeof action>();
+  const brandFetcher = useFetcher<{
+    name: string;
+    logoDataUrl: string | null;
+    logoFileName: string | null;
+  }>();
   const customFieldsFetcher = useFetcher<{ sources: CustomFieldSource[] }>();
   const [customFieldSources, setCustomFieldSources] = useState<
     CustomFieldSource[]
@@ -2027,12 +2091,14 @@ export default function TemplateEditorPage() {
   const [customFieldsRefreshing, setCustomFieldsRefreshing] = useState(false);
   const customFieldsSawLoadingRef = useRef(false);
 
-  const refreshCustomFieldSources = () => {
+  const refreshCustomFieldSources = (fresh = true) => {
     setCustomFieldsLoadRequested(true);
     setCustomFieldsRefreshing(true);
     customFieldsSawLoadingRef.current = false;
     customFieldsFetcher.load(
-      `/app/templates/custom-fields?fresh=1&t=${Date.now()}`,
+      fresh
+        ? `/app/templates/custom-fields?fresh=1&t=${Date.now()}`
+        : "/app/templates/custom-fields",
     );
   };
 
@@ -2062,6 +2128,24 @@ export default function TemplateEditorPage() {
     customFieldsFetcher.state,
     customFieldsFetcher.data,
   ]);
+
+  // Store logo is deferred so Edit navigation stays light.
+  useEffect(() => {
+    if (brandFetcher.state !== "idle" || brandFetcher.data) return;
+    brandFetcher.load("/app/templates/store-brand");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
+  }, []);
+
+  const storeBrand = useMemo(
+    () => ({
+      name: brandFetcher.data?.name || data.storeDetails.name,
+      logoDataUrl:
+        brandFetcher.data?.logoDataUrl || data.storeDetails.logoDataUrl,
+      logoFileName:
+        brandFetcher.data?.logoFileName || data.storeDetails.logoFileName,
+    }),
+    [brandFetcher.data, data.storeDetails],
+  );
 
   const customFieldsLoading = customFieldsRefreshing;
   const customerMetafieldSources = useMemo(
@@ -2099,6 +2183,7 @@ export default function TemplateEditorPage() {
   const isCreditNoteEditor = data.documentType === "credit-note";
   const isPackingSlipEditor =
     data.documentType === "packing-slip" || data.documentType === "return";
+  const isSalesOrderEditor = data.documentType === "sales-order";
   const packingMoneyColumnKeys = new Set([
     "rate",
     "discount",
@@ -2147,10 +2232,10 @@ export default function TemplateEditorPage() {
   const [activeSection, setActiveSection] =
     useState<EditorSection>("general");
   const [settings, setSettings] = useState<TemplateEditorSettings>(() =>
-    withNormalizedTotalLabels(data.settings, data.templateId),
+    hydrateEditorSettings(data.settings, data.templateId),
   );
   const [savedSettings, setSavedSettings] = useState<TemplateEditorSettings>(
-    () => withNormalizedTotalLabels(data.settings, data.templateId),
+    () => hydrateEditorSettings(data.settings, data.templateId),
   );
   const [logoError, setLogoError] = useState("");
   const [openHeaderPanel, setOpenHeaderPanel] = useState<string | null>(
@@ -2158,14 +2243,32 @@ export default function TemplateEditorPage() {
   );
 
   useEffect(() => {
-    if (!customFieldsLoadRequested) {
-      refreshCustomFieldSources();
+    if (customFieldsLoadRequested) return;
+    let cancelled = false;
+    const start = () => {
+      if (!cancelled) refreshCustomFieldSources(false);
+    };
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (typeof requestIdleCallback === "function") {
+      idleId = requestIdleCallback(start, { timeout: 2000 });
+    } else {
+      timeoutId = setTimeout(start, 400);
     }
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount
   }, [customFieldsLoadRequested]);
 
   useEffect(() => {
     if (customerMetafieldSources.length === 0) return;
-    setSettings((current) => {
+
+    const applySync = (current: TemplateEditorSettings) => {
       const nextDetails = syncCustomerMetafieldFields(
         current.customerBlockDetails,
         customerMetafieldSources,
@@ -2177,7 +2280,11 @@ export default function TemplateEditorPage() {
         return current;
       }
       return { ...current, customerBlockDetails: nextDetails };
-    });
+    };
+
+    // Update live + baseline together so auto-synced metafields do not open Save bar.
+    setSettings(applySync);
+    setSavedSettings(applySync);
   }, [customerMetafieldSources]);
 
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
@@ -2234,13 +2341,13 @@ export default function TemplateEditorPage() {
       transactionLabels: {
         ...deferredSettings.transactionLabels,
         organization:
-          data.storeDetails.name ||
+          storeBrand.name ||
           deferredSettings.transactionLabels.organization,
       },
-      ...(data.storeDetails.logoDataUrl
+      ...(storeBrand.logoDataUrl
         ? {
-            logoDataUrl: data.storeDetails.logoDataUrl,
-            logoFileName: data.storeDetails.logoFileName,
+            logoDataUrl: storeBrand.logoDataUrl,
+            logoFileName: storeBrand.logoFileName,
           }
         : {}),
     };
@@ -2255,7 +2362,7 @@ export default function TemplateEditorPage() {
         showLogo: true,
       },
     };
-  }, [data.storeDetails, data.templateId, deferredSettings]);
+  }, [storeBrand, data.templateId, deferredSettings]);
   const lastAllocatedSequence =
     (fetcher.data &&
     "lastAllocatedSequence" in fetcher.data &&
@@ -2267,15 +2374,21 @@ export default function TemplateEditorPage() {
     lastAllocatedSequence,
   );
   const previewOrder = useMemo(
-    () => ({
-      ...(data.documentType === "credit-note"
-        ? sampleCreditNoteForShop(data.shopCurrencyCode)
-        : sampleSalesOrderForShop(data.shopCurrencyCode)),
-      documentNumber: formatTransactionNumber(
-        previewSettings.numbering,
-        nextSequence,
-      ),
-    }),
+    () => {
+      const sample =
+        data.documentType === "credit-note"
+          ? sampleCreditNoteForShop(data.shopCurrencyCode)
+          : sampleSalesOrderForShop(data.shopCurrencyCode);
+      return {
+        ...sample,
+        documentNumber: formatTransactionNumber(
+          previewSettings.numbering,
+          nextSequence,
+        ),
+        // Keep SO- as Ref# in preview (never fall back to INV-/CN-/DFT- document #).
+        referenceNumber: sample.referenceNumber || "SO-0001",
+      };
+    },
     [
       data.documentType,
       data.shopCurrencyCode,
@@ -2346,28 +2459,15 @@ export default function TemplateEditorPage() {
   }, [settings.fontFamily]);
 
   useEffect(() => {
-    setSettings((current) => {
-      const next = {
-        ...current,
-        billingDetails: normalizeCustomerDetails(
-          current.billingDetails,
-          defaultBillingDetails,
-        ),
-        shippingDetails: normalizeCustomerDetails(
-          current.shippingDetails,
-          defaultShippingDetails,
-        ),
-        customerBlockDetails: normalizeCustomerDetails(
-          current.customerBlockDetails,
-          defaultCustomerBlockDetails,
-          { allowMetafieldKeys: true },
-        ),
-      };
-      // Separate clone so Discard can restore without sharing the live object.
-      setSavedSettings(JSON.parse(JSON.stringify(next)) as TemplateEditorSettings);
-      return next;
-    });
-  }, []);
+    // Reset editor when switching templates (state survives route param changes).
+    const next = hydrateEditorSettings(data.settings, data.templateId);
+    setSettings(
+      JSON.parse(JSON.stringify(next)) as TemplateEditorSettings,
+    );
+    setSavedSettings(
+      JSON.parse(JSON.stringify(next)) as TemplateEditorSettings,
+    );
+  }, [data.documentType, data.templateId]);
 
   const updateSettings = (updates: Partial<TemplateEditorSettings>) => {
     setSettings((current) => ({ ...current, ...updates }));
@@ -3801,16 +3901,16 @@ export default function TemplateEditorPage() {
                                 </Button>
                               </BlockStack>
                             </Banner>
-                            {data.storeDetails.logoDataUrl ? (
+                            {storeBrand.logoDataUrl ? (
                               <InlineStack
                                 gap="300"
                                 blockAlign="start"
                                 wrap={false}
                               >
                                 <Thumbnail
-                                  source={data.storeDetails.logoDataUrl}
+                                  source={storeBrand.logoDataUrl}
                                   alt={
-                                    data.storeDetails.logoFileName ||
+                                    storeBrand.logoFileName ||
                                     teT(language, "te.tx.orgLogoAlt")
                                   }
                                   size="small"
@@ -3994,7 +4094,15 @@ export default function TemplateEditorPage() {
                                   ["documentTitle", "te.tx.documentTitle"],
                                   ["orderNumber", "te.tx.orderNumberLabel"],
                                   ["date", "te.tx.dateLabel"],
-                                  ["reference", "te.tx.referenceLabel"],
+                                  ...(!isSalesOrderEditor
+                                    ? ([
+                                        ["reference", "te.tx.referenceLabel"],
+                                        [
+                                          "shopifyOrder",
+                                          "te.tx.shopifyOrderLabel",
+                                        ],
+                                      ] as const)
+                                    : []),
                                   ...(!isCreditNoteEditor
                                     ? ([
                                         [
@@ -4016,7 +4124,11 @@ export default function TemplateEditorPage() {
                                 <TextField
                                   key={key}
                                   label={teT(language, labelKey)}
-                                  value={settings.transactionLabels[key]}
+                                  value={
+                                    settings.transactionLabels[
+                                      key as keyof typeof settings.transactionLabels
+                                    ] || ""
+                                  }
                                   onChange={(value) =>
                                     updateSettings({
                                       transactionLabels: {
@@ -4028,6 +4140,50 @@ export default function TemplateEditorPage() {
                                   autoComplete="off"
                                 />
                               ))}
+                              {!isSalesOrderEditor ? (
+                                <>
+                                  <Checkbox
+                                    label={teT(language, "te.tx.showReference")}
+                                    checked={
+                                      settings.header.showReference !== false
+                                    }
+                                    helpText={teT(
+                                      language,
+                                      "te.tx.showReferenceHelp",
+                                    )}
+                                    onChange={(showReference) =>
+                                      updateSettings({
+                                        header: {
+                                          ...settings.header,
+                                          showReference,
+                                        },
+                                      })
+                                    }
+                                  />
+                                  <Checkbox
+                                    label={teT(
+                                      language,
+                                      "te.tx.showShopifyOrder",
+                                    )}
+                                    checked={
+                                      settings.header.showShopifyOrder === true
+                                    }
+                                    helpText={teT(
+                                      language,
+                                      "te.tx.showShopifyOrderHelp",
+                                    )}
+                                    onChange={(showShopifyOrder) =>
+                                      updateSettings({
+                                        shopifyOrderDefaultReset: true,
+                                        header: {
+                                          ...settings.header,
+                                          showShopifyOrder,
+                                        },
+                                      })
+                                    }
+                                  />
+                                </>
+                              ) : null}
                               {!isCreditNoteEditor ? (
                                 <Checkbox
                                   label={teT(language, "te.tx.showExpectedShip")}
@@ -4204,7 +4360,7 @@ export default function TemplateEditorPage() {
                                 <InlineStack gap="200" wrap>
                                   <Button
                                     variant="primary"
-                                    onClick={refreshCustomFieldSources}
+                                    onClick={() => refreshCustomFieldSources(true)}
                                     loading={customFieldsLoading}
                                   >
                                     {teT(language, "te.table.refresh")}
@@ -4256,7 +4412,7 @@ export default function TemplateEditorPage() {
                                     {teT(language, "te.table.createMetafield")}
                                   </Button>
                                   <Button
-                                    onClick={refreshCustomFieldSources}
+                                    onClick={() => refreshCustomFieldSources(true)}
                                     loading={customFieldsLoading}
                                   >
                                     {teT(language, "te.table.refresh")}
@@ -4438,7 +4594,7 @@ export default function TemplateEditorPage() {
                                     {teT(language, "te.table.manageMetafields")}
                                   </Button>
                                   <Button
-                                    onClick={refreshCustomFieldSources}
+                                    onClick={() => refreshCustomFieldSources(true)}
                                     loading={customFieldsLoading}
                                   >
                                     {teT(language, "te.table.refresh")}

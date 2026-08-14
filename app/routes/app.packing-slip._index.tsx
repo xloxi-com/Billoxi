@@ -45,22 +45,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const params = parseSalesOrdersSearchParams(url);
 
-  const [shopSelectedTemplateId, shopSelectedPackingTemplateId, smtpSettings, planId] =
-    await Promise.all([
-      loadSelectedTemplateForShop(session.shop, "sales-order"),
-      loadSelectedTemplateForShop(session.shop, "packing-slip"),
-      loadSmtpSettingsForShop(session.shop),
-      getShopPlanIdForGating(billing),
-    ]);
+  const soTemplatePromise = loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const pagePromise = soTemplatePromise.then((shopSelectedTemplateId) =>
+    loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      resolveSalesOrderTemplateId(shopSelectedTemplateId),
+      { listFilter: "packing-slip" },
+    ),
+  );
+  const [
+    shopSelectedTemplateId,
+    shopSelectedPackingTemplateId,
+    smtpSettings,
+    planId,
+    page,
+  ] = await Promise.all([
+    soTemplatePromise,
+    loadSelectedTemplateForShop(session.shop, "packing-slip"),
+    loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing, session.shop),
+    pagePromise,
+  ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
-  );
-  const page = await loadSalesOrdersPage(
-    admin,
-    session.shop,
-    params,
-    selectedTemplateId,
-    { listFilter: "packing-slip" },
   );
 
   return {

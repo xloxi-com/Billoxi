@@ -216,6 +216,12 @@ export type TemplateEditorSettings = {
    * Used to upgrade older saved customizations once without wiping later edits.
    */
   designVersion?: number;
+  /**
+   * Once true, merchant `showShopifyOrder` is respected.
+   * Missing/false → Shopify Order# stays off (product default), even if an older
+   * save still has header.showShopifyOrder: true from the previous default.
+   */
+  shopifyOrderDefaultReset?: boolean;
   /** @deprecated Prefer taxSummary.enabled */
   showTaxSummaryTable?: boolean;
   taxSummary: {
@@ -251,6 +257,10 @@ export type TemplateEditorSettings = {
     showDocumentTitle: boolean;
     showOrderNumber: boolean;
     showDate: boolean;
+    /** Billoxi sales-order number (SO-…) in the meta box. */
+    showReference: boolean;
+    /** Shopify order name (#1234) in the meta box. */
+    showShopifyOrder: boolean;
     showExpectedShipmentDate: boolean;
     showPaymentMethod: boolean;
   };
@@ -269,6 +279,7 @@ export type TemplateEditorSettings = {
     orderNumber: string;
     date: string;
     reference: string;
+    shopifyOrder: string;
     expectedShipmentDate: string;
     paymentMethod: string;
   };
@@ -504,8 +515,8 @@ export type SalesOrderDocumentData = {
   /** Template sales-order document number, e.g. SO-0001 */
   documentNumber?: string;
   /**
-   * Value shown as Ref# on the document.
-   * Invoice documents use the sales-order number (SO-*); otherwise Shopify name.
+   * Billoxi sales-order number (SO-…) shown as Ref# when enabled.
+   * Shopify order name stays on `name` (e.g. #1013).
    */
   referenceNumber?: string;
   /**
@@ -3368,6 +3379,13 @@ export type CreditNoteRefundSource = {
   shippingRefunded: number;
 };
 
+/** Shopify return line → return PDF line (qty/amount from the return, not the full order). */
+export type ReturnDocumentLineSource = CreditNoteRefundLineSource;
+
+export type ReturnDocumentSource = {
+  returnLineItems: ReturnDocumentLineSource[];
+};
+
 function emptyCreditLine(
   title: string,
   amount: string,
@@ -3509,6 +3527,85 @@ export function adaptDocumentForCreditNote(
     balanceDue: "0.00",
     // Credit Total already shows the refund — hide duplicate Credit Amount row.
     refundedAmount: "0.00",
+    taxSummary,
+  };
+}
+
+/**
+ * Rebuild return document lines from Shopify returnLineItems (returned qty only).
+ * Keeps order.refundedAmount for the Refunded Amount row when money was refunded.
+ */
+export function adaptDocumentForReturn(
+  order: SalesOrderDocumentData,
+  source?: ReturnDocumentSource | null,
+): SalesOrderDocumentData {
+  const productLines = source?.returnLineItems ?? [];
+  if (productLines.length === 0) {
+    return {
+      ...order,
+      paidAmount: "0.00",
+      balanceDue: "0.00",
+    };
+  }
+
+  let subtotalN = 0;
+  let taxN = 0;
+  const lineItems = productLines.map((item) => {
+    const qty = Number(item.quantity) || 0;
+    const sub =
+      Math.round((parseAmountNumber(item.subtotal) || 0) * 100) / 100;
+    const taxAmt =
+      Math.round((parseAmountNumber(item.tax) || 0) * 100) / 100;
+    const rate = qty > 0 ? sub / qty : sub;
+    subtotalN += sub;
+    taxN += taxAmt;
+    const taxPct =
+      sub > 0 && taxAmt > 0
+        ? `${((taxAmt / sub) * 100).toFixed(2)}%`
+        : "0.00%";
+    return {
+      title: item.title || "Returned item",
+      variantTitle: item.variantTitle || "",
+      imageUrl: item.imageUrl || "",
+      quantity: formatQuantityDisplay(qty || 1),
+      rate: rate.toFixed(2),
+      compareAtPrice: "",
+      discount: "0.00",
+      discountPercentage: "0.00%",
+      taxPercentage: taxPct,
+      taxAmount: taxAmt.toFixed(2),
+      amount: sub.toFixed(2),
+      sku: item.sku || "",
+      barcode: item.barcode || "",
+    };
+  });
+
+  const totalN = Math.round((subtotalN + taxN) * 100) / 100;
+  const taxSummary =
+    taxN > 0
+      ? [
+          {
+            title: "Tax",
+            rate:
+              subtotalN > 0
+                ? `${((taxN / subtotalN) * 100).toFixed(2)}%`
+                : "0.00%",
+            taxableAmount: subtotalN.toFixed(2),
+            taxAmount: taxN.toFixed(2),
+          },
+        ]
+      : [];
+
+  return {
+    ...order,
+    lineItems,
+    subtotal: subtotalN.toFixed(2),
+    discount: "0.00",
+    shippingPrice: "0.00",
+    tax: taxN > 0 ? taxN.toFixed(2) : "0.00",
+    total: totalN.toFixed(2),
+    paidAmount: "0.00",
+    balanceDue: "0.00",
     taxSummary,
   };
 }
@@ -4091,6 +4188,8 @@ export function defaultTemplateSettings(
   const isReturn = templateId.startsWith("return-");
   const isCreditNote = templateId.startsWith("credit-");
   const isPackingSlip = templateId.startsWith("packing-");
+  const isSalesOrderDoc =
+    !isInvoice && !isDraft && !isReturn && !isCreditNote && !isPackingSlip;
   const isNonPaymentDoc = isDraft || isReturn || isCreditNote || isPackingSlip;
   return {
     name,
@@ -4129,6 +4228,9 @@ export function defaultTemplateSettings(
       showDocumentTitle: true,
       showOrderNumber: true,
       showDate: true,
+      // Sales Order# is already the title line — skip redundant Ref# / Shopify rows.
+      showReference: !isSalesOrderDoc,
+      showShopifyOrder: false,
       showExpectedShipmentDate: isPackingSlip,
       showPaymentMethod: !isNonPaymentDoc,
     },
@@ -4189,13 +4291,10 @@ export function defaultTemplateSettings(
               : isInvoice
                 ? "Invoice Date"
                 : "Order Date",
-      reference: isPackingSlip
+      reference: isPackingSlip || isReturn
         ? "Order Ref#"
-        : isCreditNote
-          ? "Invoice Ref#"
-          : isReturn
-            ? "Order Ref#"
-            : "Ref#",
+        : "Ref#",
+      shopifyOrder: "Shopify Order#",
       expectedShipmentDate: "Expected Shipment Date",
       paymentMethod: "Payment Method",
     },
@@ -4287,7 +4386,7 @@ export function mergeTemplateSettings(
 ): TemplateEditorSettings {
   const defaults = defaultTemplateSettings(defaultName, templateId);
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return defaults;
+    return { ...defaults, shopifyOrderDefaultReset: true };
   }
   const input = value as Partial<TemplateEditorSettings>;
   const isPremiumSales = isPremiumTemplatePreset(templateId);
@@ -4315,6 +4414,8 @@ export function mergeTemplateSettings(
     designVersion: isPremiumSales
       ? PREMIUM_DESIGN_VERSION
       : Number(input.designVersion ?? 1) || 1,
+    // Persist on next Save so later loads can honor an explicit merchant choice.
+    shopifyOrderDefaultReset: true,
     taxSummary: isPremiumSales
       ? defaults.taxSummary.enabled
         ? {
@@ -4585,6 +4686,12 @@ export function mergeTemplateSettings(
         showShipping,
         showCustomerDetails,
         showCustomer: showBilling || showShipping || showCustomerDetails,
+        showReference: merged.showReference !== false,
+        // Off by default. Older saves may still have true from the previous
+        // product default — only honor that after shopifyOrderDefaultReset.
+        showShopifyOrder:
+          input.shopifyOrderDefaultReset === true &&
+          incoming.showShopifyOrder === true,
         showExpectedShipmentDate: merged.showExpectedShipmentDate === true,
         showPaymentMethod: merged.showPaymentMethod !== false,
       };
@@ -4692,6 +4799,9 @@ export function mergeTemplateSettings(
       reference:
         input.transactionLabels?.reference ??
         defaults.transactionLabels.reference,
+      shopifyOrder:
+        input.transactionLabels?.shopifyOrder ??
+        defaults.transactionLabels.shopifyOrder,
       expectedShipmentDate:
         input.transactionLabels?.expectedShipmentDate ??
         defaults.transactionLabels.expectedShipmentDate,

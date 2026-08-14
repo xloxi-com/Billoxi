@@ -1071,53 +1071,40 @@ export async function loadShopifyDraftOrdersPage(
     const nodes = result.data.draftOrders.nodes;
     const gids = nodes.map((node) => node.id);
 
-    // After DB reset / install: assign DFT- numbers on first Draft list load.
-    if (!(await hasDraftOrderNumbersSynced(shop))) {
-      try {
-        await syncDraftOrderNumbersForShop(shop, admin);
-      } catch (error) {
+    // After DB reset / install: assign DFT- numbers in the background.
+    const numbersSynced = await hasDraftOrderNumbersSynced(shop);
+    if (!numbersSynced) {
+      void syncDraftOrderNumbersForShop(shop, admin).catch((error) => {
         console.warn(
           "[draft-orders] auto number sync failed:",
           shop,
           error,
         );
-      }
-    }
-
-    // Fill any new drafts missing a DFT- number (Reference keeps Shopify #D…).
-    if (gids.length > 0 && (await hasDraftOrderNumbersSynced(shop))) {
-      let draftMeta = await getDraftMetaByOrderGids(shop, gids);
-      const missing = gids.filter(
-        (gid) => !draftMeta.get(gid)?.documentNumber?.trim(),
-      );
-      if (missing.length > 0) {
-        for (const gid of missing) {
-          try {
-            await markOrderDraft(shop, gid);
-          } catch (error) {
-            console.error("Draft number allocate failed:", gid, error);
-          }
-        }
-        draftMeta = await getDraftMetaByOrderGids(shop, gids);
-      }
-      return {
-        orders: nodes.map((node) =>
-          toDraftRow(node, draftMeta.get(node.id)?.documentNumber),
-        ),
-        pageInfo: result.data.draftOrders.pageInfo,
-        query: params.query,
-        selectedView: 0,
-        availableViews: [0],
-        paymentStatus: params.paymentStatus,
-        fulfillmentStatus: params.fulfillmentStatus,
-        sortSelected,
-      };
+      });
     }
 
     const draftMeta =
       gids.length > 0
         ? await getDraftMetaByOrderGids(shop, gids)
         : new Map();
+
+    // Fill missing DFT- numbers in the background — don't block list TTFB.
+    if (gids.length > 0 && numbersSynced) {
+      const missing = gids.filter(
+        (gid) => !draftMeta.get(gid)?.documentNumber?.trim(),
+      );
+      if (missing.length > 0) {
+        void (async () => {
+          for (const gid of missing) {
+            try {
+              await markOrderDraft(shop, gid);
+            } catch (error) {
+              console.error("Draft number allocate failed:", gid, error);
+            }
+          }
+        })();
+      }
+    }
 
     return {
       orders: nodes.map((node) =>

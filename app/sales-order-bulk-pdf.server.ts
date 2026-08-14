@@ -238,7 +238,6 @@ async function prepareOrdersForPdf(args: {
           documentNumber,
           documentDate:
             meta?.draftedAt?.toISOString() || order.createdAt,
-          referenceNumber: order.name,
         };
 
         const settings: TemplateEditorSettings = {
@@ -276,15 +275,16 @@ async function prepareOrdersForPdf(args: {
   }
 
   if (documentKind === "credit-note") {
-    const shopSelected = await loadSelectedTemplateForShop(
-      args.shop,
-      "credit-note",
-    );
+    const [shopSelected, shopSelectedSo] = await Promise.all([
+      loadSelectedTemplateForShop(args.shop, "credit-note"),
+      loadSelectedTemplateForShop(args.shop, "sales-order"),
+    ]);
     // Prefer the UI template (download/email) over shop Active when provided.
     const templateId = resolveCreditNoteTemplateId(
       args.templateId || shopSelected,
     );
-    const [template, creditMeta, invoiceMeta] = await Promise.all([
+    const salesOrderTemplateId = resolveSalesOrderTemplateId(shopSelectedSo);
+    const [template, creditMeta, invoiceMeta, soNumbers] = await Promise.all([
       loadDocumentTemplateSettings(
         args.shop,
         "credit-note",
@@ -293,6 +293,11 @@ async function prepareOrdersForPdf(args: {
       ),
       getCreditNoteMetaByOrderGids(args.shop, orderGids),
       getInvoicedMetaByOrderGids(args.shop, orderGids),
+      getSalesOrderDocumentNumbersByOrderGids(
+        args.shop,
+        salesOrderTemplateId,
+        orderGids,
+      ),
     ]);
 
     const missingNumbers = orderGids.filter((gid) => {
@@ -302,15 +307,6 @@ async function prepareOrdersForPdf(args: {
     const ensuredCn =
       missingNumbers.length > 0
         ? await ensureCreditNoteDocumentNumbers(args.shop, missingNumbers)
-        : new Map<string, string>();
-
-    const missingInvoiceRefs = orderGids.filter((gid) => {
-      const invoice = invoiceMeta.get(gid);
-      return invoice && !invoice.documentNumber?.trim();
-    });
-    const ensuredInv =
-      missingInvoiceRefs.length > 0
-        ? await ensureInvoiceDocumentNumbers(args.shop, missingInvoiceRefs)
         : new Map<string, string>();
 
     const built = await mapPool(
@@ -332,17 +328,13 @@ async function prepareOrdersForPdf(args: {
           credit.documentNumber?.trim() ||
           ensuredCn.get(order.id)?.trim() ||
           order.name;
-        const invoiceRef =
-          invoice?.documentNumber?.trim() ||
-          ensuredInv.get(order.id)?.trim() ||
-          "";
         const note =
           credit.customerNote || credit.reason || invoice?.customerNote || null;
 
         const enrichedOrder: SalesOrderDocumentData = {
           ...order,
           documentNumber,
-          referenceNumber: invoiceRef || undefined,
+          referenceNumber: soNumbers.get(order.id) || undefined,
           documentDate: credit.convertedAt?.toISOString() || order.createdAt,
         };
 
@@ -433,7 +425,7 @@ async function prepareOrdersForPdf(args: {
           meta.documentNumber?.trim() ||
           ensured.get(order.id)?.trim() ||
           order.name;
-        const referenceNumber = soNumbers.get(order.id) ?? order.name;
+        const referenceNumber = soNumbers.get(order.id) || undefined;
 
         const enrichedOrder: SalesOrderDocumentData = {
           ...order,
@@ -534,7 +526,7 @@ async function prepareOrdersForPdf(args: {
         const enrichedOrder: SalesOrderDocumentData = {
           ...order,
           documentNumber,
-          referenceNumber: soNumbers.get(order.id) ?? order.name,
+          referenceNumber: soNumbers.get(order.id) || undefined,
           documentDate: meta.convertedAt?.toISOString() || order.createdAt,
         };
 
@@ -602,6 +594,7 @@ async function prepareOrdersForPdf(args: {
 
         const order = await fetchSalesOrderDocument(args.admin, orderGid, {
           shop: args.shop,
+          asReturn: true,
         });
         if (!order) return null;
 
@@ -614,7 +607,7 @@ async function prepareOrdersForPdf(args: {
         const enrichedOrder: SalesOrderDocumentData = {
           ...order,
           documentNumber,
-          referenceNumber: soNumbers.get(order.id) ?? order.name,
+          referenceNumber: soNumbers.get(order.id) || undefined,
           documentDate: meta.convertedAt?.toISOString() || order.createdAt,
         };
 

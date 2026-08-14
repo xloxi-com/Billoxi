@@ -130,6 +130,13 @@ const billingStateByApi = new WeakMap<
   Promise<ShopBillingState>
 >();
 
+/** Cross-request shop cache — child navs skip billing.check for a short window. */
+const BILLING_SHOP_TTL_MS = 60_000;
+const billingStateByShop = new Map<
+  string,
+  { expires: number; data: Promise<ShopBillingState> }
+>();
+
 async function fetchShopBillingState(
   billing: BillingCheckApi,
 ): Promise<ShopBillingState> {
@@ -164,19 +171,39 @@ async function fetchShopBillingState(
 
 export async function loadShopBillingState(
   billing: BillingCheckApi,
+  shop?: string,
 ): Promise<ShopBillingState> {
   const key = billing as object;
   let pending = billingStateByApi.get(key);
-  if (!pending) {
-    pending = fetchShopBillingState(billing);
-    billingStateByApi.set(key, pending);
+  if (pending) return pending;
+
+  if (shop) {
+    const hit = billingStateByShop.get(shop);
+    if (hit && hit.expires > Date.now()) {
+      billingStateByApi.set(key, hit.data);
+      return hit.data;
+    }
+  }
+
+  pending = fetchShopBillingState(billing);
+  billingStateByApi.set(key, pending);
+  if (shop) {
+    billingStateByShop.set(shop, {
+      expires: Date.now() + BILLING_SHOP_TTL_MS,
+      data: pending,
+    });
   }
   return pending;
 }
 
 /** After cancel/subscribe, drop memo so the next load sees fresh status. */
-export function clearShopBillingStateCache(billing: BillingCheckApi) {
+export function clearShopBillingStateCache(
+  billing: BillingCheckApi,
+  shop?: string,
+) {
   billingStateByApi.delete(billing as object);
+  if (shop) billingStateByShop.delete(shop);
+  else billingStateByShop.clear();
 }
 
 type AdminGraphql = {

@@ -495,8 +495,21 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                 <dd>{orderDate}</dd>
               </>
             ) : null}
-            <dt>{settings.transactionLabels.reference}</dt>
-            <dd>{order.referenceNumber || order.name}</dd>
+            {settings.header.showReference !== false &&
+            order.referenceNumber ? (
+              <>
+                <dt>{settings.transactionLabels.reference}</dt>
+                <dd>{order.referenceNumber}</dd>
+              </>
+            ) : null}
+            {settings.header.showShopifyOrder === true && order.name ? (
+              <>
+                <dt>
+                  {settings.transactionLabels.shopifyOrder || "Shopify Order#"}
+                </dt>
+                <dd>{order.name}</dd>
+              </>
+            ) : null}
             {settings.header.showExpectedShipmentDate &&
             order.expectedShipmentDate ? (
               <>

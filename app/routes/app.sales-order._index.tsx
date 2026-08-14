@@ -415,19 +415,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   const params = parseSalesOrdersSearchParams(url);
-  const [shopSelectedTemplateId, smtpSettings, planId] = await Promise.all([
-    loadSelectedTemplateForShop(session.shop, "sales-order"),
-    loadSmtpSettingsForShop(session.shop),
-    getShopPlanIdForGating(billing),
-  ]);
+  const templatePromise = loadSelectedTemplateForShop(
+    session.shop,
+    "sales-order",
+  );
+  const pagePromise = templatePromise.then((shopSelectedTemplateId) =>
+    loadSalesOrdersPage(
+      admin,
+      session.shop,
+      params,
+      resolveSalesOrderTemplateId(shopSelectedTemplateId),
+    ),
+  );
+  const [shopSelectedTemplateId, smtpSettings, planId, page] =
+    await Promise.all([
+      templatePromise,
+      loadSmtpSettingsForShop(session.shop),
+      getShopPlanIdForGating(billing, session.shop),
+      pagePromise,
+    ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
-  );
-  const page = await loadSalesOrdersPage(
-    admin,
-    session.shop,
-    params,
-    selectedTemplateId,
   );
   return {
     ...page,

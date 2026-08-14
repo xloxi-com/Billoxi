@@ -14,6 +14,8 @@ import {
 export const sampleSalesOrder: SalesOrderDocumentData = {
   id: "gid://shopify/Order/0",
   name: "#1008",
+  /** Demo Billoxi sales-order number — Ref# must not use invoice/draft series. */
+  referenceNumber: "SO-0001",
   createdAt: "2026-07-19T10:00:00.000Z",
   expectedShipmentDate: "2026-07-25T12:00:00.000Z",
   paymentMethod: "Bank Transfer",
@@ -156,8 +158,8 @@ export function sampleCreditNoteForShop(
       ...base,
       financialStatus: "REFUNDED",
       refundedAmount: base.total,
-      // Invoice Ref# on credit notes — never the Shopify order name.
-      referenceNumber: "INV-0001",
+      // Ref# = sales order number when available; Shopify # is order.name.
+      referenceNumber: "SO-0001",
     },
     {
       refundLineItems: base.lineItems.map((item) => ({
