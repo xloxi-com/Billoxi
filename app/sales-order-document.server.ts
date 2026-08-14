@@ -41,7 +41,7 @@ import { getInvoicedOrderGids } from "./order-invoice-status.server";
 import type { StoreDetails } from "./store-details";
 import type { Prisma } from "@prisma/client";
 
-const ORDER_DOCUMENT_TTL_MS = 120_000;
+const ORDER_DOCUMENT_TTL_MS = 300_000;
 const orderDocumentCache = new Map<
   string,
   { expires: number; value: SalesOrderDocumentData }
@@ -63,7 +63,7 @@ type CachedDocumentTemplate = {
   storeDetails: StoreDetails;
 };
 
-const TEMPLATE_SETTINGS_TTL_MS = 60_000;
+const TEMPLATE_SETTINGS_TTL_MS = 180_000;
 const templateSettingsCache = new Map<
   string,
   { expires: number; value: CachedDocumentTemplate }

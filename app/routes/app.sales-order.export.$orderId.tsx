@@ -22,6 +22,7 @@ import {
   resolveDocumentNotes,
   resolveSalesOrderTemplateId,
   toOrderGid,
+  type TemplateEditorSettings,
 } from "../sales-order-document";
 import { toDraftOrderGid } from "../sales-order-ids";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
@@ -36,6 +37,7 @@ import {
   getReturnMetaByOrderGids,
 } from "../order-return-status.server";
 import { getDraftMetaByOrderGids, markOrderDraft } from "../order-invoice-draft-status.server";
+import type { StoreDetails } from "../store-details";
 
 function resolveInvoiceTemplateId(value: string | null | undefined) {
   if (value && findTemplatePreset(value)?.id.startsWith("invoice-")) {
@@ -72,6 +74,39 @@ function resolveReturnTemplateId(value: string | null | undefined) {
   return DEFAULT_RETURN_TEMPLATE_ID;
 }
 
+function stripLogoFromStoreDetails(storeDetails: StoreDetails): StoreDetails {
+  const { logoDataUrl: _logo, logoFileName: _name, ...rest } = storeDetails;
+  return rest;
+}
+
+/** Client already has the shop logo cached — omit large base64 from JSON. */
+function withOptionalLogoOmit<T extends {
+  storeDetails: StoreDetails;
+  settings: TemplateEditorSettings;
+}>(payload: T, omitLogo: boolean): T {
+  if (!omitLogo) return payload;
+  const { logoDataUrl: _sLogo, logoFileName: _sName, ...settingsRest } =
+    payload.settings;
+  return {
+    ...payload,
+    storeDetails: stripLogoFromStoreDetails(payload.storeDetails),
+    settings: settingsRest as TemplateEditorSettings,
+  };
+}
+
+function exportPayloadResponse(
+  payload: {
+    ok: true;
+    order: unknown;
+    templateId: string;
+    settings: TemplateEditorSettings;
+    storeDetails: StoreDetails;
+  },
+  omitLogo: boolean,
+) {
+  return Response.json(withOptionalLogoOmit(payload, omitLogo));
+}
+
 /**
  * JSON payload for client-side DOM vector PDF (same pipeline as document Download).
  * GET /app/sales-order/export/:orderId?template=...&document=sales-order|invoice|draft|credit-note|packing-slip|return
@@ -84,6 +119,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   }
 
   const url = new URL(request.url);
+  const omitLogo = url.searchParams.get("omitLogo") === "1";
   const documentKind = url.searchParams.get("document") || "sales-order";
   const isInvoice = documentKind === "invoice";
   const isDraft = documentKind === "draft";
@@ -125,7 +161,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       currentMeta = refreshed.get(order.id);
     }
 
-    return Response.json({
+    return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
@@ -146,7 +182,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         terms: currentMeta?.terms ?? template.settings.terms,
       },
       storeDetails: template.storeDetails,
-    });
+    }, omitLogo);
   }
 
   if (isCreditNote) {
@@ -209,7 +245,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       currentCredit.convertedAt?.toISOString() || order.createdAt;
     const creditNoteNote = currentCredit.customerNote || null;
 
-    return Response.json({
+    return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
@@ -230,7 +266,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         terms: currentCredit.terms ?? currentInvoice?.terms ?? template.settings.terms,
       },
       storeDetails: template.storeDetails,
-    });
+    }, omitLogo);
   }
 
   if (isPackingSlip) {
@@ -283,7 +319,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       soNumbers.get(order.id) ||
       order.name;
 
-    return Response.json({
+    return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
@@ -295,7 +331,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       templateId: template.templateId,
       settings: template.settings,
       storeDetails: template.storeDetails,
-    });
+    }, omitLogo);
   }
 
   if (isReturn) {
@@ -342,7 +378,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       soNumbers.get(order.id) ||
       order.name;
 
-    return Response.json({
+    return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
@@ -354,7 +390,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       templateId: template.templateId,
       settings: template.settings,
       storeDetails: template.storeDetails,
-    });
+    }, omitLogo);
   }
 
   if (isInvoice) {
@@ -370,9 +406,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       shopSelectedSalesOrderTemplateId,
     );
 
-    const [order, template] = await Promise.all([
+    const [order, template, invoiceMeta] = await Promise.all([
       fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
       loadDocumentTemplateSettings(session.shop, "invoice", templateId, admin),
+      getInvoicedMetaByOrderGids(session.shop, [orderGid]),
     ]);
 
     if (!order) {
@@ -382,9 +419,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       );
     }
 
-    const invoiceMeta = await getInvoicedMetaByOrderGids(session.shop, [
-      order.id,
-    ]);
     const currentMeta = invoiceMeta.get(order.id);
     if (!currentMeta) {
       return Response.json(
@@ -412,7 +446,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       currentMeta.invoicedAt?.toISOString() || order.createdAt;
     const referenceNumber = soNumbers.get(order.id) ?? order.name;
 
-    return Response.json({
+    return exportPayloadResponse({
       ok: true,
       order: {
         ...order,
@@ -432,7 +466,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         terms: currentMeta.terms ?? template.settings.terms,
       },
       storeDetails: template.storeDetails,
-    });
+    }, omitLogo);
   }
 
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(
@@ -443,28 +477,22 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     shopSelectedTemplateId || url.searchParams.get("template"),
   );
 
-  const [order, template] = await Promise.all([
+  const [order, template, documentNumbers, soDetails] = await Promise.all([
     fetchSalesOrderDocument(admin, orderGid, { shop: session.shop }),
     loadSalesOrderTemplateSettings(session.shop, templateId, admin),
+    getSalesOrderDocumentNumbersByOrderGids(session.shop, templateId, [
+      orderGid,
+    ]),
+    getSalesOrderDocumentDetails(session.shop, templateId, orderGid),
   ]);
 
   if (!order) {
     return Response.json({ ok: false, error: "Order not found" }, { status: 404 });
   }
 
-  const documentNumbers = await getSalesOrderDocumentNumbersByOrderGids(
-    session.shop,
-    template.templateId,
-    [order.id],
-  );
   const documentNumber = documentNumbers.get(order.id) ?? order.name;
-  const soDetails = await getSalesOrderDocumentDetails(
-    session.shop,
-    template.templateId,
-    order.id,
-  );
 
-  return Response.json({
+  return exportPayloadResponse({
     ok: true,
     order: {
       ...order,
@@ -482,7 +510,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       terms: soDetails?.terms ?? template.settings.terms,
     },
     storeDetails: template.storeDetails,
-  });
+  }, omitLogo);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

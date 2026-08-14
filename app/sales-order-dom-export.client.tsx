@@ -29,6 +29,9 @@ type DocumentKind =
   | "packing-slip"
   | "return";
 
+/** Reused across list PDF downloads in this tab — logo is identical per shop. */
+let cachedExportLogoDataUrl: string | undefined;
+
 function resolveDocumentFontFamily(value: string | undefined): string {
   if (!value) return "Inter, system-ui, sans-serif";
   return value;
@@ -154,6 +157,10 @@ async function fetchExportPayload(
     template: templateId,
     document: documentKind,
   });
+  // After the first export in this tab, skip shipping the logo again (often 100KB–1MB+).
+  if (cachedExportLogoDataUrl) {
+    params.set("omitLogo", "1");
+  }
   const response = await fetch(
     `/app/sales-order/export/${encodeURIComponent(numericId)}?${params}`,
   );
@@ -179,6 +186,16 @@ async function fetchExportPayload(
         ? `Failed to load ${label} for PDF`
         : payload.error || `Failed to load ${label} for PDF`,
     );
+  }
+
+  const logoFromPayload = payload.storeDetails?.logoDataUrl?.trim();
+  if (logoFromPayload) {
+    cachedExportLogoDataUrl = logoFromPayload;
+  } else if (cachedExportLogoDataUrl) {
+    payload.storeDetails = {
+      ...payload.storeDetails,
+      logoDataUrl: cachedExportLogoDataUrl,
+    };
   }
 
   return payload;
@@ -419,10 +436,21 @@ export async function downloadSalesOrdersDomPdfZipFromList(args: {
   const pdfMod = await import("./sales-order-pdf");
   pdfMod.warmDomVectorPdfDeps();
 
-  // Fetch all export payloads concurrently (network-bound).
-  const payloads = await mapPool(orderIds, 8, (orderId) =>
-    fetchExportPayload(orderId, args.templateId, documentKind),
+  // Fetch first payload alone so the logo is cached; later requests omit it.
+  const [firstId, ...restIds] = orderIds;
+  const firstPayload = await fetchExportPayload(
+    firstId!,
+    args.templateId,
+    documentKind,
   );
+  args.onProgress?.(0, total);
+  const restPayloads =
+    restIds.length > 0
+      ? await mapPool(restIds, 8, (orderId) =>
+          fetchExportPayload(orderId, args.templateId, documentKind),
+        )
+      : [];
+  const payloads = [firstPayload, ...restPayloads];
 
   const zip = createJSZip();
   const usedNames = new Set<string>();

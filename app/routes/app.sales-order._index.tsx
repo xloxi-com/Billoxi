@@ -853,7 +853,7 @@ function ListPerfHelpers({
   useEffect(() => {
     if (listMode !== "sales-order") return;
 
-    const POLL_MS = 20_000;
+    const POLL_MS = 45_000;
     const id = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       if (busyRef.current) return;
@@ -881,18 +881,45 @@ function ListPerfHelpers({
   useEffect(() => {
     const root = document.querySelector(".sales-orders-page");
     if (!root) return;
+    let hoverTimer: number | null = null;
+    const clearHoverTimer = () => {
+      if (hoverTimer != null) {
+        window.clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+    };
     const onOver = (event: Event) => {
       const row = (event.target as HTMLElement | null)?.closest?.("tr[id]");
       const orderId = row?.getAttribute("id");
-      if (!orderId) return;
+      if (!orderId) {
+        clearHoverTimer();
+        return;
+      }
       const path = resolvePathRef.current(orderId);
       if (!path || lastPrefetchPathRef.current === path) return;
       if (prefetchStateRef.current !== "idle") return;
-      lastPrefetchPathRef.current = path;
-      loadRef.current(path);
+      clearHoverTimer();
+      // Delay so scrolling the table does not fan out heavy detail loaders.
+      hoverTimer = window.setTimeout(() => {
+        hoverTimer = null;
+        if (prefetchStateRef.current !== "idle") return;
+        if (lastPrefetchPathRef.current === path) return;
+        lastPrefetchPathRef.current = path;
+        loadRef.current(path);
+      }, 280);
+    };
+    const onLeave = (event: Event) => {
+      const next = (event as PointerEvent).relatedTarget as Node | null;
+      if (next && root.contains(next)) return;
+      clearHoverTimer();
     };
     root.addEventListener("pointerover", onOver);
-    return () => root.removeEventListener("pointerover", onOver);
+    root.addEventListener("pointerleave", onLeave);
+    return () => {
+      clearHoverTimer();
+      root.removeEventListener("pointerover", onOver);
+      root.removeEventListener("pointerleave", onLeave);
+    };
   }, []);
 
   return null;

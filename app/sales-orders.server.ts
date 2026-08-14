@@ -1170,7 +1170,7 @@ export async function loadSalesOrdersPage(
   if (!params.bypassCache) {
     const cached = listCache.get(cacheKeyBase);
     if (cached && cached.expires > now) {
-      // Sales Orders list: heal "—" gaps on cached pages (new orders / missed webhook).
+      // Heal "—" gaps in the background — never block a warm cache hit.
       if (
         !isInvoicedView &&
         !isCreditNoteView &&
@@ -1185,30 +1185,34 @@ export async function loadSalesOrdersPage(
           .filter((order) => !String(order.salesOrderNumber || "").trim())
           .map((order) => order.id);
         if (missingGids.length > 0) {
-          await waitForSalesOrderNumberSync(shop);
-          const synced = await hasCompletedSalesOrderNumberSync(shop);
-          if (synced) {
-            const ensured = await ensureSalesOrderDocumentNumbers(
-              shop,
-              templateId,
-              missingGids,
-            );
-            let changed = false;
-            const orders = cached.data.orders.map((order) => {
-              const next = ensured.get(order.id)?.trim();
-              if (!next || order.salesOrderNumber === next) return order;
-              changed = true;
-              return { ...order, salesOrderNumber: next };
-            });
-            if (changed) {
-              const data = { ...cached.data, orders };
-              listCache.set(cacheKeyBase, {
-                expires: now + CACHE_TTL_MS,
-                data,
+          void (async () => {
+            try {
+              await waitForSalesOrderNumberSync(shop);
+              if (!(await hasCompletedSalesOrderNumberSync(shop))) return;
+              const ensured = await ensureSalesOrderDocumentNumbers(
+                shop,
+                templateId,
+                missingGids,
+              );
+              const fresh = listCache.get(cacheKeyBase);
+              if (!fresh) return;
+              let changed = false;
+              const orders = fresh.data.orders.map((order) => {
+                const next = ensured.get(order.id)?.trim();
+                if (!next || order.salesOrderNumber === next) return order;
+                changed = true;
+                return { ...order, salesOrderNumber: next };
               });
-              return { ...data, selectedView, availableViews };
+              if (changed) {
+                listCache.set(cacheKeyBase, {
+                  expires: Date.now() + CACHE_TTL_MS,
+                  data: { ...fresh.data, orders },
+                });
+              }
+            } catch (error) {
+              console.warn("[sales-orders] background SO number heal failed:", error);
             }
-          }
+          })();
         }
       }
 
@@ -1257,33 +1261,34 @@ export async function loadSalesOrdersPage(
     });
   }
 
-  // After DB reset / install: assign numbers on first list open (idempotent).
-  // Runs only on cache miss so warm polls/navigations skip the sync-flag queries.
-  // Overlaps Shopify GraphQL (kicked off above) with these DB flag checks.
-  try {
-    if (
-      !isInvoicedView &&
-      !isCreditNoteView &&
-      !isPackingSlipView &&
-      !isReturnView &&
-      !isDraftView &&
-      !(await hasCompletedSalesOrderNumberSync(shop))
-    ) {
-      await syncSalesOrderNumbersForShop(shop, admin);
-    } else if (
-      isInvoicedView &&
-      !(await hasInvoiceOrderNumbersSynced(shop))
-    ) {
-      await syncInvoiceOrderNumbersForShop(shop, admin);
-    } else if (
-      isReturnView &&
-      !(await hasReturnOrderNumbersSynced(shop))
-    ) {
-      await syncReturnOrderNumbersForShop(shop, admin);
+  // After DB reset / install: backfill numbers in the background (idempotent).
+  // Never block the list spinner on a full-shop GraphQL sync.
+  void (async () => {
+    try {
+      if (
+        !isInvoicedView &&
+        !isCreditNoteView &&
+        !isPackingSlipView &&
+        !isReturnView &&
+        !isDraftView &&
+        !(await hasCompletedSalesOrderNumberSync(shop))
+      ) {
+        await syncSalesOrderNumbersForShop(shop, admin);
+      } else if (
+        isInvoicedView &&
+        !(await hasInvoiceOrderNumbersSynced(shop))
+      ) {
+        await syncInvoiceOrderNumbersForShop(shop, admin);
+      } else if (
+        isReturnView &&
+        !(await hasReturnOrderNumbersSynced(shop))
+      ) {
+        await syncReturnOrderNumbersForShop(shop, admin);
+      }
+    } catch (error) {
+      console.warn("[sales-orders] auto number sync failed:", shop, error);
     }
-  } catch (error) {
-    console.warn("[sales-orders] auto number sync failed:", shop, error);
-  }
+  })();
 
   const buildPage = async (
     nodes: RawSalesOrder[],
@@ -1408,7 +1413,7 @@ export async function loadSalesOrdersPage(
 
     // Do not invent historical numbers newest-first (list is date desc).
     // Before Sync: leave "—" — Settings Sync assigns oldest → newest (FS-0001…).
-    // After Sync: only fill gaps, oldest-first among this page.
+    // After Sync: fill gaps in background so the list TTFB stays fast.
     if (
       !forceInvoiced &&
       !forceCreditNote &&
@@ -1421,26 +1426,31 @@ export async function loadSalesOrdersPage(
         (gid) => !documentNumbers.get(gid)?.trim(),
       );
       if (missing.length > 0) {
-        await waitForSalesOrderNumberSync(shop);
-        const synced = await hasCompletedSalesOrderNumberSync(shop);
-        if (synced) {
-          const missingOldestFirst = nodes
-            .filter((order) => missing.includes(order.id))
-            .sort(
-              (a, b) =>
-                new Date(a.createdAt).getTime() -
-                new Date(b.createdAt).getTime(),
-            )
-            .map((order) => order.id);
-          const ensured = await ensureSalesOrderDocumentNumbers(
-            shop,
-            templateId,
-            missingOldestFirst,
-          );
-          for (const [gid, num] of ensured) {
-            if (num?.trim()) documentNumbers.set(gid, num);
+        const missingOldestFirst = nodes
+          .filter((order) => missing.includes(order.id))
+          .sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() -
+              new Date(b.createdAt).getTime(),
+          )
+          .map((order) => order.id);
+        void (async () => {
+          try {
+            await waitForSalesOrderNumberSync(shop);
+            if (!(await hasCompletedSalesOrderNumberSync(shop))) return;
+            await ensureSalesOrderDocumentNumbers(
+              shop,
+              templateId,
+              missingOldestFirst,
+            );
+            listCache.delete(cacheKeyBase);
+          } catch (error) {
+            console.warn(
+              "[sales-orders] background SO gap-fill failed:",
+              error,
+            );
           }
-        }
+        })();
       }
     }
 
@@ -1613,6 +1623,70 @@ export async function loadSalesOrdersPage(
   ) => {
     if (sourceGids.length === 0) return emptyPage();
 
+    const sortSelected =
+      params.sortSelected in SORT_OPTIONS
+        ? params.sortSelected
+        : ("date desc" as SortSelected);
+
+    const needsShopifyPreFilter = Boolean(
+      params.paymentStatus ||
+        params.fulfillmentStatus ||
+        params.query.trim(),
+    );
+    // Date / document-number sorts can page from DB meta before hitting Shopify.
+    const canPageBeforeShopify =
+      !needsShopifyPreFilter &&
+      (sortSelected === "date asc" ||
+        sortSelected === "date desc" ||
+        sortSelected === "order asc" ||
+        sortSelected === "order desc");
+
+    if (canPageBeforeShopify) {
+      const reverse = SORT_OPTIONS[sortSelected].reverse;
+      const dir = reverse ? -1 : 1;
+      const sortedGids = [...sourceGids].sort((a, b) => {
+        if (sortSelected === "order asc" || sortSelected === "order desc") {
+          const aNum = numericDocRank(
+            metaForSort.get(a)?.searchNumber || "",
+          );
+          const bNum = numericDocRank(
+            metaForSort.get(b)?.searchNumber || "",
+          );
+          if (aNum !== bNum) return (aNum - bNum) * dir;
+          return a.localeCompare(b) * dir;
+        }
+        const aAt = metaForSort.get(a)?.sortAt ?? 0;
+        const bAt = metaForSort.get(b)?.sortAt ?? 0;
+        if (aAt !== bAt) {
+          return (aAt - bAt) * (sortSelected === "date asc" ? 1 : -1);
+        }
+        return a.localeCompare(b);
+      });
+      const { pageItems: pageGidRows, pageInfo } = paginateItems(
+        sortedGids.map((id) => ({ id })),
+        params.after,
+        params.before,
+      );
+      const pageGids = pageGidRows.map((row) => row.id);
+      const fetched = await loadOrdersByGids(admin, pageGids);
+      const byId = new Map(fetched.map((order) => [order.id, order]));
+      const pageItems = pageGids
+        .map((gid) => byId.get(gid))
+        .filter((order): order is RawSalesOrder => Boolean(order));
+      const data = await buildPage(
+        pageItems,
+        pageInfo,
+        forceInvoiced,
+        forceCreditNote,
+        forcePackingSlip,
+        forceDraft,
+        forceReturn,
+      );
+      listCache.set(cacheKeyBase, { expires: now + CACHE_TTL_MS, data });
+      pruneCache(now);
+      return data;
+    }
+
     const gidsToFetch = sourceGids.slice(0, MAX_INVOICED_FETCH);
     let orders = await loadOrdersByGids(admin, gidsToFetch);
 
@@ -1667,10 +1741,6 @@ export async function loadSalesOrdersPage(
       });
     }
 
-    const sortSelected =
-      params.sortSelected in SORT_OPTIONS
-        ? params.sortSelected
-        : ("date desc" as SortSelected);
     const dateByGid = new Map<string, number>();
     const documentNumberByGid = new Map<string, string>();
     for (const [gid, meta] of metaForSort) {
