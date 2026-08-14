@@ -56,6 +56,7 @@ import {
 import {
   formatEventLogTime,
   formatOrderIdLabel,
+  isInternalShopifyOrderIdLabel,
   orderIdHref,
 } from "../document-event-log";
 import {
@@ -187,18 +188,33 @@ export function shouldRevalidate({
   formMethod,
   currentUrl,
   nextUrl,
+  defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
   if (formMethod && formMethod.toUpperCase() !== "GET") return true;
   if (currentUrl.search !== nextUrl.search) return true;
-  // Always refresh analytics when navigating back to Home.
-  if (homePagePath(nextUrl.pathname) === "/app") return true;
-  return false;
+  // Keep Home warm when bouncing back — activity listener refreshes analytics.
+  if (
+    homePagePath(currentUrl.pathname) === "/app" &&
+    homePagePath(nextUrl.pathname) === "/app"
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session, billing } = await requireAdminAuth(request);
   const shop = session.shop;
-  const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
+
+  // Billing is often memoized from the shell loader on the same request.
+  const billingPromise = loadShopBillingState(billing);
+  const monthlyUsagePromise = loadShopMonthlyUsage(shop);
+  const installedAtPromise = loadShopInstalledAt(shop);
+  const syncFlagsPromise = loadNumberSyncFlagsForShop(shop);
+  const smtpPromise = loadSmtpSettingsForShop(shop);
+  const setupPromise = loadSetupGuideProgress(shop);
+
+  const { hasActivePlan, currentPlanId } = await billingPromise;
   const planId = currentPlanId;
   const canEventLog =
     Boolean(planId) && planHasCapability(planId!, "eventLog");
@@ -223,17 +239,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     setupProgress,
     orderQuota,
   ] = await Promise.all([
-    loadShopMonthlyUsage(shop),
+    monthlyUsagePromise,
     canDashboardChart
       ? loadDailyUsageSeries(shop, 14)
       : Promise.resolve([]),
-    loadShopInstalledAt(shop),
+    installedAtPromise,
     canEventLog
       ? loadRecentDocumentEvents(shop, 15)
       : Promise.resolve([]),
-    loadNumberSyncFlagsForShop(shop),
-    loadSmtpSettingsForShop(shop),
-    loadSetupGuideProgress(shop),
+    syncFlagsPromise,
+    smtpPromise,
+    setupPromise,
     loadOrderQuotaStatus(shop, planId ?? PLACEHOLDER_CURRENT_PLAN_ID),
   ]);
   const salesOrderSynced = syncFlags.salesOrder;
@@ -241,9 +257,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const draftSynced = syncFlags.draft;
   const returnSynced = syncFlags.return;
 
-  const eventLogs = canEventLog
+  // Skip GraphQL name enrich when events already carry a merchant order name.
+  const needsNameEnrich =
+    canEventLog &&
+    rawEventLogs.some((row) =>
+      Boolean(
+        row.orderGid &&
+          isInternalShopifyOrderIdLabel(row.orderName, row.orderGid),
+      ),
+    );
+  const eventLogs = needsNameEnrich
     ? await enrichDocumentEventsWithOrderNames(admin, rawEventLogs)
-    : [];
+    : rawEventLogs;
 
   const trialEndsAt = new Date(installedAt);
   trialEndsAt.setDate(trialEndsAt.getDate() + planSummary.trialDays);

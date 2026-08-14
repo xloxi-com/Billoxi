@@ -39,12 +39,16 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
   // One-shot historical number backfill after install (idempotent).
   scheduleInstallNumberSync(session.shop, admin);
 
-  const billingState = await loadShopBillingState(billing);
   // Prefer normalized `url` (no .data). Fall back strips .data from request.url
   // because future.v8_passThroughRequests leaves the raw suffix on request.url.
   const pathname = (
     url?.pathname || new URL(request.url).pathname
   ).replace(/\.data$/i, "");
+
+  const [billingState, savedAdminLanguage] = await Promise.all([
+    loadShopBillingState(billing),
+    loadAdminLanguage(session.shop),
+  ]);
 
   // No paid plan yet (fresh install / FREE): force Pricing until they subscribe.
   // Billoxi / Home / any other route → /app/pricing.
@@ -52,7 +56,6 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
     throw redirect("/app/pricing");
   }
 
-  const savedAdminLanguage = await loadAdminLanguage(session.shop);
   const adminLanguage = normalizeAdminUiLanguage(
     savedAdminLanguage,
     DEFAULT_ADMIN_UI_LANGUAGE,

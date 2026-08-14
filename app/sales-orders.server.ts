@@ -1261,33 +1261,37 @@ export async function loadSalesOrdersPage(
     });
   }
 
-  // After DB reset / install: backfill numbers (idempotent). Await when unsynced
-  // so the first list paint after a wipe gets SO numbers instead of "—".
-  const needsSalesOrderSync =
-    !isInvoicedView &&
-    !isCreditNoteView &&
-    !isPackingSlipView &&
-    !isReturnView &&
-    !isDraftView &&
-    !(await hasCompletedSalesOrderNumberSync(shop));
-  const needsInvoiceSync =
-    isInvoicedView && !(await hasInvoiceOrderNumbersSynced(shop));
-  const needsReturnSync =
-    isReturnView && !(await hasReturnOrderNumbersSynced(shop));
-
-  if (needsSalesOrderSync || needsInvoiceSync || needsReturnSync) {
+  // After DB reset / install: backfill numbers in the background (idempotent).
+  // Never block list TTFB on a full-shop GraphQL sync — install sync + gap-fill
+  // also cover this; numbers appear on the next poll / revalidate.
+  void (async () => {
     try {
-      if (needsSalesOrderSync) {
+      const [soDone, invDone, retDone] = await Promise.all([
+        !isInvoicedView &&
+        !isCreditNoteView &&
+        !isPackingSlipView &&
+        !isReturnView &&
+        !isDraftView
+          ? hasCompletedSalesOrderNumberSync(shop)
+          : Promise.resolve(true),
+        isInvoicedView
+          ? hasInvoiceOrderNumbersSynced(shop)
+          : Promise.resolve(true),
+        isReturnView
+          ? hasReturnOrderNumbersSynced(shop)
+          : Promise.resolve(true),
+      ]);
+      if (!soDone) {
         await syncSalesOrderNumbersForShop(shop, admin);
-      } else if (needsInvoiceSync) {
+      } else if (!invDone) {
         await syncInvoiceOrderNumbersForShop(shop, admin);
-      } else if (needsReturnSync) {
+      } else if (!retDone) {
         await syncReturnOrderNumbersForShop(shop, admin);
       }
     } catch (error) {
       console.warn("[sales-orders] auto number sync failed:", shop, error);
     }
-  }
+  })();
 
   const buildPage = async (
     nodes: RawSalesOrder[],

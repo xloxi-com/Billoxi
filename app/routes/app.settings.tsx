@@ -464,8 +464,8 @@ function stopInputShortcutPropagation(
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin, billing } = await requireAdminAuth(request);
-  const currentPlanId = await getShopPlanIdForGating(billing);
   const [
+    currentPlanId,
     selectedSalesOrderTemplateIdRaw,
     storeDetails,
     smtpSettings,
@@ -481,6 +481,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     invoiceDigitWidth,
     savedAdminLanguage,
   ] = await Promise.all([
+    getShopPlanIdForGating(billing),
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadStoreDetailsForShop(session.shop, admin),
     loadSmtpSettingsForShop(session.shop),
