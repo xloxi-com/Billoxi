@@ -370,12 +370,52 @@
  * Packing slips hide Bill To — keep remaining blocks in configured order
  * without pinning fixed grid columns (addressBlockOrder controls layout).
  */
+.live-document--packing-slip .live-document__address-blocks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(2em, 10%, 5em);
+  row-gap: 1.35em;
+}
+
+.live-document--packing-slip .live-document__address-blocks > .live-document__customer {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.live-document--packing-slip .live-document__address-blocks > .live-document__customer--empty {
+  display: none;
+}
+
+/*
+ * Credit notes hide Ship To — Bill To and Customer Details in two columns.
+ */
+.live-document--credit-note .live-document__address-blocks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: clamp(2em, 10%, 5em);
+  row-gap: 1.35em;
+}
+
+.live-document--credit-note .live-document__address-blocks > .live-document__customer {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.live-document--credit-note .live-document__address-blocks > .live-document__customer--empty {
+  display: none;
+}
 
 /*
  * European right-aligns party blocks for invoice Bill To.
  * On packing slips those blocks must sit left; org / totals / qty stay right.
  */
 .live-document--packing-slip.live-document--european
+  .live-document__address-blocks
+  > .live-document__customer {
+  order: unset;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.live-document--credit-note.live-document--european
   .live-document__address-blocks
   > .live-document__customer {
   order: unset;
@@ -1553,6 +1593,41 @@
 .live-document--studio.live-document--logo-right .live-document__title {
   align-items: flex-start;
   text-align: left;
+}
+
+/* Credit Note + Studio — title/metadata right-aligned; tighter header rhythm */
+.live-document--credit-note.live-document--studio .live-document__header {
+  margin-bottom: 2.35em;
+}
+
+.live-document--credit-note.live-document--studio.live-document--logo-left
+  .live-document__title {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.live-document--credit-note.live-document--studio.live-document--logo-left
+  .live-document__metadata {
+  margin-left: auto;
+  margin-right: 0;
+  text-align: right;
+}
+
+.live-document--credit-note.live-document--studio.live-document--logo-right
+  .live-document__title {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.live-document--credit-note.live-document--studio.live-document--logo-right
+  .live-document__metadata {
+  margin-left: 0;
+  margin-right: auto;
+  text-align: left;
+}
+
+.live-document--credit-note.live-document--studio .live-document__details {
+  margin-bottom: 1.65em;
 }
 
 .live-document--horizon .live-document__header {

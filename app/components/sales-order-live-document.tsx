@@ -155,6 +155,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const logoPosition = salesOrderLogoPosition(templateId, settings);
   const metaStyle = salesOrderMetaStyle(templateId, settings);
   const isPackingSlip = templateId.startsWith("packing-");
+  const isCreditNote = templateId.startsWith("credit-");
   const orderDate = formatOrderDate(
     order.documentDate || order.createdAt,
     settings.dateFormat,
@@ -435,7 +436,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
 
   return (
     <div
-      className={`live-document live-document--${styleName} live-document--logo-${logoPosition} live-document--meta-${metaStyle}${isPackingSlip ? " live-document--packing-slip" : ""}`}
+      className={`live-document live-document--${styleName} live-document--logo-${logoPosition} live-document--meta-${metaStyle}${isPackingSlip ? " live-document--packing-slip" : ""}${isCreditNote ? " live-document--credit-note" : ""}`}
       style={appearanceCssVars(
         settings.appearance ?? defaultTemplateAppearance,
       )}
@@ -530,6 +531,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
             ).map((block) => {
               if (block === "billing") {
                 if (!settings.header.showBilling) {
+                  // Packing slips never use Bill To — omit the slot so Ship To
+                  // aligns with the organization block on the left.
+                  if (isPackingSlip) return null;
                   return (
                     <div
                       key="billing-empty"
@@ -556,6 +560,9 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
               }
               if (block === "shipping") {
                 if (!settings.header.showShipping) {
+                  // Credit notes omit Ship To — drop the slot so Bill To / Customer
+                  // Details share a clean two-column row.
+                  if (isPackingSlip || isCreditNote) return null;
                   return (
                     <div
                       key="shipping-empty"
@@ -581,6 +588,7 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                 );
               }
               if (!settings.header.showCustomerDetails) {
+                if (isPackingSlip) return null;
                 return (
                   <div
                     key="customer-empty"

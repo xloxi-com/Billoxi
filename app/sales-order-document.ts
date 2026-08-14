@@ -4146,7 +4146,11 @@ export function defaultTemplateSettings(
       { key: "phone", enabled: true, label: "Phone" },
       { key: "email", enabled: true, label: "Email" },
     ],
-    addressBlockOrder: [...DEFAULT_ADDRESS_BLOCK_ORDER],
+    addressBlockOrder: isPackingSlip
+      ? (["shipping", "customer", "billing"] as AddressBlockKey[])
+      : isCreditNote
+        ? (["billing", "customer", "shipping"] as AddressBlockKey[])
+        : [...DEFAULT_ADDRESS_BLOCK_ORDER],
     transactionLabels: {
       organization: "Organization",
       customer: "Bill To",
