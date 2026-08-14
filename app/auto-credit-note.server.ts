@@ -9,6 +9,7 @@ import {
 } from "./order-credit-note-status.server";
 import { invalidateSalesOrdersCache } from "./sales-orders.server";
 import { unauthenticated } from "./shopify.server";
+import { shopHasCapability } from "./plan-access.server";
 
 export type AutoCreditNoteTrigger =
   | "cancel"
@@ -32,6 +33,10 @@ export async function maybeAutoCreateCreditNote(
   trigger: AutoCreditNoteTrigger,
   reason: string,
 ): Promise<{ created: boolean; documentNumber?: string; skipped?: string }> {
+  if (!(await shopHasCapability(shop, "autoCreditNote"))) {
+    return { created: false, skipped: "plan" };
+  }
+
   const settings = await loadCreditNoteSettingsForShop(shop);
   const enabled =
     trigger === "cancel"

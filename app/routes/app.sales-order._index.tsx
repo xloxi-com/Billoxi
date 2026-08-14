@@ -21,10 +21,8 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
-import {
-  getCurrentPlanId,
-  planHasCapability,
-} from "../plan-access";
+import { planHasCapability, smtpReadyForPlan, getShopPlanIdForGating } from "../plan-access";
+import { useAppPlan } from "../use-app-plan";
 import { usePlanUpgradeModal } from "../components/plan-lock";
 import type { PlanId } from "../plan-features";
 import {
@@ -414,12 +412,13 @@ const BULK_CONFIRM_COPY: Record<
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   const params = parseSalesOrdersSearchParams(url);
-  const [shopSelectedTemplateId, smtpSettings] = await Promise.all([
+  const [shopSelectedTemplateId, smtpSettings, planId] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -434,7 +433,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "sales-order" as
       | "sales-order"
       | "invoice"
@@ -930,7 +929,7 @@ export default function SalesOrderPage() {
   const { language, t } = useAdminI18n();
   const revalidator = useRevalidator();
   const navigate = useNavigate();
-  const currentPlanId: PlanId = getCurrentPlanId();
+  const { currentPlanId } = useAppPlan();
   const { guard: planGuard, modal: planUpgradeModal } =
     usePlanUpgradeModal(currentPlanId);
   const [searchParams, setSearchParams] = useSearchParams();

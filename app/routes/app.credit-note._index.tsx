@@ -23,6 +23,7 @@ import {
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { getShopPlanIdForGating, smtpReadyForPlan } from "../plan-access";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -37,7 +38,7 @@ export const links: LinksFunction = salesOrdersLinks;
  * marked in OrderCreditNoteStatus.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
@@ -49,10 +50,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     shopSelectedTemplateId,
     shopSelectedCreditNoteTemplateId,
     smtpSettings,
+    planId,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadSelectedTemplateForShop(session.shop, "credit-note"),
     loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -69,7 +72,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "credit-note" as const,
     pageHeading: "Credit Note",
     invoiceTemplateId: null as string | null,

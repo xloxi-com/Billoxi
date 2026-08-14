@@ -26,6 +26,7 @@ import {
   loadSmtpSettingsForShop,
 } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { getShopPlanIdForGating, smtpReadyForPlan } from "../plan-access";
 import { syncShopifyReturnsForShop } from "../shopify-returns.server";
 import SalesOrdersListPage, {
   action,
@@ -49,7 +50,7 @@ function sessionHasReturnsScope(scope: string | undefined | null): boolean {
  * Requires `read_returns` scope.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
@@ -58,11 +59,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const params = parseSalesOrdersSearchParams(url);
   const hasScope = sessionHasReturnsScope(session.scope);
 
-  const [shopSelectedTemplateId, shopSelectedReturnTemplateId, smtpSettings] =
+  const [shopSelectedTemplateId, shopSelectedReturnTemplateId, smtpSettings, planId] =
     await Promise.all([
       loadSelectedTemplateForShop(session.shop, "sales-order"),
       loadSelectedTemplateForShop(session.shop, "return"),
       loadSmtpSettingsForShop(session.shop),
+      getShopPlanIdForGating(billing),
     ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -109,7 +111,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "return" as const,
     pageHeading: "Return",
     invoiceTemplateId: null as string | null,

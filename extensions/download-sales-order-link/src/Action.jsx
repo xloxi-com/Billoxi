@@ -47,9 +47,9 @@ function Extension() {
         });
         const payload = res.ok ? await res.json() : null;
         if (!cancelled) {
-          setHasActivePlan(Boolean(payload?.ok && payload?.hasActivePlan));
+          setHasActivePlan(Boolean(payload?.ok && payload?.adminExtensions));
           setPlanReady(true);
-          if (!(payload?.ok && payload?.hasActivePlan)) {
+          if (!(payload?.ok && payload?.adminExtensions)) {
             setPreparing(false);
           }
         }

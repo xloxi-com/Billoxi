@@ -55,11 +55,14 @@ import {
   usePlanUpgradeModal,
 } from "../components/plan-lock";
 import {
-  getCurrentPlanId,
+  getShopPlanIdForGating,
   planHasCapability,
+  upgradeMessage,
   type PlanCapability,
 } from "../plan-access";
 import type { PlanId } from "../plan-features";
+import { isPlanId } from "../billing-plans";
+import { useAppPlan } from "../use-app-plan";
 
 import type { EmailBodyEditorHandle } from "../components/email-body-editor";
 import { AppearanceColorField } from "../components/appearance-color-field";
@@ -460,7 +463,8 @@ function stopInputShortcutPropagation(
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { session, admin } = await requireAdminAuth(request);
+  const { session, admin, billing } = await requireAdminAuth(request);
+  const currentPlanId = await getShopPlanIdForGating(billing);
   const [
     selectedSalesOrderTemplateIdRaw,
     storeDetails,
@@ -516,6 +520,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     invoiceSettings,
     multiCurrencySettings,
     shopDomain: session.shop,
+    currentPlanId,
     downloadLinkSnippets: customerDownloadSnippetsForShop(session.shop, request),
     adminLanguage: normalizeAdminUiLanguage(
       savedAdminLanguage,
@@ -525,6 +530,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 const SETTINGS_CLIENT_TTL_MS = 120_000;
+const SETTINGS_CACHE_VERSION = "plan-v2";
 const settingsClientCache = new Map<string, { expires: number; data: unknown }>();
 
 function bustSettingsClientCache() {
@@ -548,7 +554,7 @@ export async function clientLoader({
   serverLoader,
 }: ClientLoaderFunctionArgs) {
   const url = new URL(request.url);
-  const key = url.pathname;
+  const key = `${SETTINGS_CACHE_VERSION}|${url.pathname}`;
   const hit = settingsClientCache.get(key);
   if (hit && hit.expires > Date.now()) return hit.data;
   const data = await serverLoader();
@@ -560,7 +566,7 @@ export async function clientLoader({
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session, admin } = await requireAdminAuth(request);
+  const { session, admin, billing } = await requireAdminAuth(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -587,6 +593,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "save-credit-notes") {
+    const planId = await getShopPlanIdForGating(billing);
+    if (!planHasCapability(planId, "autoCreditNote")) {
+      return Response.json(
+        { saved: false, error: upgradeMessage("autoCreditNote", planId) },
+        { status: 403 },
+      );
+    }
     const raw = formData.get("creditNoteSettings");
     const rawInvoice = formData.get("invoiceSettings");
     if (typeof raw !== "string") {
@@ -642,6 +655,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "save-multi-currency") {
+    const planId = await getShopPlanIdForGating(billing);
+    if (!planHasCapability(planId, "multiCurrency")) {
+      return Response.json(
+        { saved: false, error: upgradeMessage("multiCurrency", planId) },
+        { status: 403 },
+      );
+    }
     const raw = formData.get("multiCurrencySettings");
     if (typeof raw !== "string") {
       return Response.json(
@@ -673,6 +693,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "save-smtp") {
+    const planId = await getShopPlanIdForGating(billing);
+    if (!planHasCapability(planId, "smtp")) {
+      return Response.json(
+        { saved: false, error: upgradeMessage("smtp", planId) },
+        { status: 403 },
+      );
+    }
     const raw = formData.get("smtpSettings");
     if (typeof raw !== "string") {
       return Response.json(
@@ -712,7 +739,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "save-email-templates") {
-    if (!planHasCapability(getCurrentPlanId(), "emailTemplates")) {
+    const currentPlanId = await getShopPlanIdForGating(billing);
+    if (!planHasCapability(currentPlanId, "emailTemplates")) {
       return Response.json(
         {
           saved: false,
@@ -1019,7 +1047,9 @@ export default function SettingsPage() {
     null,
   );
   const handledFetcherDataRef = useRef<unknown>(null);
-  const currentPlanId: PlanId = getCurrentPlanId();
+  const { currentPlanId: shellPlanId } = useAppPlan();
+  const currentPlanId: PlanId =
+    isPlanId(data.currentPlanId) ? data.currentPlanId : shellPlanId;
   const { guard: planGuard, modal: planUpgradeModal } =
     usePlanUpgradeModal(currentPlanId);
   const isSaving = fetcher.state !== "idle";
@@ -1980,9 +2010,15 @@ export default function SettingsPage() {
                       <Card>
                         <BlockStack gap="400">
                           <BlockStack gap="100">
-                            <Text as="h2" variant="headingMd">
-                              {settingsT(language, "set.invoiceTitle")}
-                            </Text>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="h2" variant="headingMd">
+                                {settingsT(language, "set.invoiceTitle")}
+                              </Text>
+                              <PlanFeatureBadge
+                                capability="autoInvoice"
+                                currentPlanId={currentPlanId}
+                              />
+                            </InlineStack>
                             <Text as="p" tone="subdued">
                               {settingsT(language, "set.invoiceDesc")}
                             </Text>

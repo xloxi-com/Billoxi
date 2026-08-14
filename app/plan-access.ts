@@ -3,12 +3,8 @@
  * Pricing CTAs use Shopify Billing; gating still falls back to PLACEHOLDER_CURRENT_PLAN_ID when no subscription.
  */
 
-import {
-  PLACEHOLDER_CURRENT_PLAN_ID,
-  getPlanById,
-  planRank,
-  type PlanId,
-} from "./plan-features";
+import { loadShopBillingState, type ShopBillingState } from "./billing-plans";
+import { PLACEHOLDER_CURRENT_PLAN_ID, getPlanById, planRank, type PlanId } from "./plan-features";
 
 export type PlanCapability =
   | "bulkActions"
@@ -22,6 +18,25 @@ export type PlanCapability =
   | "adminExtensions"
   | "dashboardChart"
   | "eventLog";
+
+/** PREMIUM+ features. ULTIMATE also includes these. */
+export const PREMIUM_CAPABILITIES: readonly PlanCapability[] = [
+  "bulkActions",
+  "smtp",
+  "emailTemplates",
+  "emailAttachPdf",
+  "autoInvoice",
+  "autoCreditNote",
+  "multiCurrency",
+  "dashboardChart",
+] as const;
+
+/** ULTIMATE-only features (locked on PREMIUM and STARTER). */
+export const ULTIMATE_ONLY_CAPABILITIES: readonly PlanCapability[] = [
+  "customerDownloadLinks",
+  "adminExtensions",
+  "eventLog",
+] as const;
 
 /** Minimum plan required for each capability. */
 export const PLAN_CAPABILITY_MIN: Record<PlanCapability, PlanId> = {
@@ -63,8 +78,26 @@ export function planHasCapability(
   return planRank(planId) >= planRank(PLAN_CAPABILITY_MIN[capability]);
 }
 
+/** @deprecated Client code should use `useAppPlan()`. Server: `getShopPlanIdForGating(billing)`. */
 export function getCurrentPlanId(): PlanId {
   return PLACEHOLDER_CURRENT_PLAN_ID;
+}
+
+type BillingCheckApi = Parameters<typeof loadShopBillingState>[0];
+
+/** Resolve the merchant's active plan for server-side feature gates. */
+export async function getShopPlanIdForGating(
+  billing: BillingCheckApi,
+): Promise<PlanId> {
+  const state: ShopBillingState = await loadShopBillingState(billing);
+  return state.currentPlanId ?? PLACEHOLDER_CURRENT_PLAN_ID;
+}
+
+export function smtpReadyForPlan(
+  planId: PlanId,
+  smtpConfigured: boolean,
+): boolean {
+  return smtpConfigured && planHasCapability(planId, "smtp");
 }
 
 export function planBadgeLabel(minPlan: PlanId): string {

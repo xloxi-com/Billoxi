@@ -8,14 +8,24 @@ import {
 import { requireAdminAuth } from "../shopify-context.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
+import { getShopPlanIdForGating, planHasCapability } from "../plan-access";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const formData = await request.formData();
   const orderIds = formData
     .getAll("orderIds")
     .map((value) => String(value).trim())
     .filter(Boolean);
+  if (orderIds.length > 1) {
+    const planId = await getShopPlanIdForGating(billing);
+    if (!planHasCapability(planId, "bulkActions")) {
+      return Response.json(
+        { ok: false, error: "Bulk download needs the PREMIUM plan." },
+        { status: 403 },
+      );
+    }
+  }
   const documentKind = String(formData.get("document") || "sales-order");
   const shopSelectedTemplateId = await loadSelectedTemplateForShop(
     session.shop,

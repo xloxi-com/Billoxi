@@ -4,6 +4,7 @@ import { assertValidShopifyWebhookHmac } from "../webhook-hmac.server";
 import { markOrderInvoiced } from "../order-invoice-status.server";
 import { invalidateSalesOrdersCache } from "../sales-orders.server";
 import { loadInvoiceSettingsForShop } from "../shop-settings.server";
+import { shopHasCapability } from "../plan-access.server";
 
 function orderGidFromPaidPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
@@ -43,6 +44,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
+    if (!(await shopHasCapability(shop, "autoInvoice"))) {
+      console.log(`orders/paid: skipped (auto invoice needs PREMIUM) → ${orderGid}`);
+      return new Response();
+    }
+
     const settings = await loadInvoiceSettingsForShop(shop);
     if (!settings.autoOnPaid) {
       console.log(`orders/paid: skipped (auto on paid off) → ${orderGid}`);

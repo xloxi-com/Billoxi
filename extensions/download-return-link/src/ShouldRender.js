@@ -16,7 +16,7 @@ async function hasPaidPlan() {
     });
     if (!res.ok) return false;
     const payload = await res.json();
-    return Boolean(payload?.ok && payload?.hasActivePlan);
+    return Boolean(payload?.ok && payload?.adminExtensions);
   } catch (err) {
     console.error("[billoxi] plan should-render failed", err);
     return false;

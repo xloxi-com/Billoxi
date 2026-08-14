@@ -18,6 +18,7 @@ import { parseSalesOrdersSearchParams } from "../sales-orders.server";
 import { loadShopifyDraftOrdersPage } from "../shopify-draft-orders.server";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { getShopPlanIdForGating, smtpReadyForPlan } from "../plan-access";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -40,7 +41,7 @@ function sessionHasDraftOrdersScope(scope: string | undefined | null): boolean {
  * Requires `read_draft_orders` scope.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
@@ -49,9 +50,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const params = parseSalesOrdersSearchParams(url);
   const hasScope = sessionHasDraftOrdersScope(session.scope);
 
-  const [shopSelectedDraftTemplateId, smtpSettings] = await Promise.all([
+  const [shopSelectedDraftTemplateId, smtpSettings, planId] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "draft"),
     loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing),
   ]);
 
   // Never redirect to /auth inside the embedded iframe (causes a blank page).
@@ -80,7 +82,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId: null as string | null,
     hasSelectedTemplate: false,
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "draft" as const,
     pageHeading: "Draft",
     invoiceTemplateId: resolveDraftTemplateId(shopSelectedDraftTemplateId),

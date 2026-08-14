@@ -18,13 +18,13 @@ import {
   settingsUpgradeMessage,
 } from "../admin-settings-i18n";
 import {
-  getCurrentPlanId,
   planBadgeLabel,
   planHasCapability,
   requiredPlanFor,
   type PlanCapability,
 } from "../plan-access";
 import { getPlanById, type PlanId } from "../plan-features";
+import { useAppPlan } from "../use-app-plan";
 
 /** Premium lock badge icon (crown/gem). */
 export function CrownIcon(props: SVGProps<SVGSVGElement>) {
@@ -86,12 +86,14 @@ export function PlanCrownBadge({ label }: { label?: string }) {
 
 export function PlanFeatureBadge({
   capability,
-  currentPlanId = getCurrentPlanId(),
+  currentPlanId: currentPlanIdProp,
 }: {
   capability: PlanCapability;
   currentPlanId?: PlanId;
 }) {
   const { language } = useAdminI18n();
+  const { currentPlanId: contextPlanId } = useAppPlan();
+  const currentPlanId = currentPlanIdProp ?? contextPlanId;
   if (planHasCapability(currentPlanId, capability)) return null;
   const required = planBadgeLabel(requiredPlanFor(capability));
   const tip = settingsTf(language, "set.planFeatureTitle", { plan: required });
@@ -131,7 +133,7 @@ export function PlanFeatureBadge({
 
 export function PlanLockBanner({
   capability,
-  currentPlanId = getCurrentPlanId(),
+  currentPlanId: currentPlanIdProp,
   onUpgrade,
 }: {
   capability: PlanCapability;
@@ -140,6 +142,8 @@ export function PlanLockBanner({
 }) {
   const navigate = useNavigate();
   const { language } = useAdminI18n();
+  const { currentPlanId: contextPlanId } = useAppPlan();
+  const currentPlanId = currentPlanIdProp ?? contextPlanId;
   if (planHasCapability(currentPlanId, capability)) return null;
 
   const required = getPlanById(requiredPlanFor(capability));
@@ -170,7 +174,7 @@ export function PlanLockBanner({
  */
 export function PlanLockOverlay({
   capability,
-  currentPlanId = getCurrentPlanId(),
+  currentPlanId: currentPlanIdProp,
   children,
   lockedFallback,
   onUpgrade,
@@ -181,6 +185,8 @@ export function PlanLockOverlay({
   lockedFallback?: ReactNode;
   onUpgrade?: () => void;
 }) {
+  const { currentPlanId: contextPlanId } = useAppPlan();
+  const currentPlanId = currentPlanIdProp ?? contextPlanId;
   const locked = !planHasCapability(currentPlanId, capability);
   if (!locked) return <>{children}</>;
 
@@ -236,9 +242,9 @@ export function PlanLockOverlay({
   );
 }
 
-export function usePlanUpgradeModal(
-  currentPlanId: PlanId = getCurrentPlanId(),
-) {
+export function usePlanUpgradeModal(currentPlanIdProp?: PlanId) {
+  const { currentPlanId: contextPlanId } = useAppPlan();
+  const currentPlanId = currentPlanIdProp ?? contextPlanId;
   const navigate = useNavigate();
   const { language } = useAdminI18n();
   const [open, setOpen] = useState(false);
@@ -308,8 +314,7 @@ export function usePlanUpgradeModal(
             >
               <Text as="p" tone="subdued" variant="bodySm">
                 You’re on {getPlanById(currentPlanId).name}. Upgrade to unlock
-                this feature. Billing checkout is not connected yet — pricing
-                page shows plan details.
+                this feature.
               </Text>
             </Box>
           </BlockStack>

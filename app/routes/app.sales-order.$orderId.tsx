@@ -87,6 +87,7 @@ import {
   loadSmtpSettingsForShop,
 } from "../shop-settings.server";
 import { isSmtpReadyForSend, SMTP_REQUIRED_NOTICE } from "../smtp-settings";
+import { getShopPlanIdForGating, planHasCapability, smtpReadyForPlan } from "../plan-access";
 import {
   ensureInvoiceDocumentNumbers,
   getInvoicedMetaByOrderGids,
@@ -291,7 +292,7 @@ function formatMoney(amount: string, currencyCode: string) {
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const { session, admin } = await requireAdminAuth(request);
+  const { session, admin, billing } = await requireAdminAuth(request);
   const orderId = params.orderId;
   if (!orderId) {
     throw new Response("Order not found", { status: 404 });
@@ -324,9 +325,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         bypassCache,
       });
 
-  const [selectedMap, smtpSettings] = await Promise.all([
+  const [selectedMap, smtpSettings, planId] = await Promise.all([
     loadSelectedTemplatesForShop(session.shop),
     loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing),
   ]);
   const shopSelectedTemplateId =
     selectedMap[
@@ -583,7 +585,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const financialStatus = (order.financialStatus || "").toUpperCase();
     if (!orderInvoiced && financialStatus === "PAID") {
       const invoiceSettings = await loadInvoiceSettingsForShop(session.shop);
-      if (invoiceSettings.autoOnPaid) {
+      if (
+        invoiceSettings.autoOnPaid &&
+        planHasCapability(planId, "autoInvoice")
+      ) {
         orderInvoiced = true;
         void markOrderInvoiced(session.shop, order.id)
           .then(() => invalidateSalesOrdersCache(session.shop))
@@ -761,7 +766,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     settings: settingsForClient,
     storeDetails: template.storeDetails,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     invoiceCustomerNote,
     invoiceTerms,
     creditNoteReason,

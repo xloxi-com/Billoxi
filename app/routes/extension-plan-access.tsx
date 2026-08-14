@@ -1,6 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 
 import { loadShopBillingState } from "../billing-plans";
+import { planHasCapability } from "../plan-access";
+import { PLACEHOLDER_CURRENT_PLAN_ID } from "../plan-features";
 import { authenticate } from "../shopify.server";
 
 /**
@@ -41,10 +43,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const { billing } = await authenticate.admin(request);
     const { hasActivePlan, currentPlanId } = await loadShopBillingState(billing);
+    const planId = currentPlanId ?? PLACEHOLDER_CURRENT_PLAN_ID;
     return corsJson(request, {
       ok: true,
       hasActivePlan,
       currentPlanId,
+      adminExtensions: planHasCapability(planId, "adminExtensions"),
     });
   } catch (error) {
     if (error instanceof Response) {

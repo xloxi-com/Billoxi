@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 
 import prisma from "./db.server";
-import { getCurrentPlanId, planHasCapability } from "./plan-access";
+import { planHasCapability } from "./plan-access";
 import {
   buildDocumentEventMessage,
   isDocumentEventAction,
@@ -23,6 +23,8 @@ export type RecordDocumentEventInput = {
   orderGid?: string | null;
   orderName?: string | null;
   processType?: DocumentEventProcessType | null;
+  /** When set, skip recording if the shop plan lacks eventLog. */
+  planId?: import("./plan-features").PlanId | null;
 };
 
 type EventLogRow = {
@@ -80,8 +82,13 @@ export async function recordDocumentEvent(
   args: RecordDocumentEventInput,
 ): Promise<void> {
   if (!args.shop || !isDocumentEventAction(args.action)) return;
-  // Event log is ULTIMATE-only — do not write updates on lower plans.
-  if (!planHasCapability(getCurrentPlanId(), "eventLog")) return;
+  // Event log is ULTIMATE-only — skip writes when caller passes a lower plan.
+  if (
+    args.planId != null &&
+    !planHasCapability(args.planId, "eventLog")
+  ) {
+    return;
+  }
   const count = Math.max(1, Math.min(args.count ?? 1, 500));
   const processType = isDocumentEventProcessType(args.processType)
     ? args.processType

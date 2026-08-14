@@ -21,6 +21,7 @@ import { incrementShopMonthlyUsage } from "../shop-monthly-usage.server";
 import { buildSalesOrderPdfFile } from "../sales-order-bulk-pdf.server";
 import { loadSelectedTemplateForShop } from "../shop-settings.server";
 import { unauthenticated } from "../shopify.server";
+import { shopHasCapability } from "../plan-access.server";
 
 function safeFileName(value: string) {
   return value.replace(/[^\w.\-]+/g, "_").slice(0, 120) || "document.pdf";
@@ -162,6 +163,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (orderIdParam && orderIdParam !== verified.orderId) {
     return new Response("Invalid download link.", { status: 403 });
+  }
+
+  if (!(await shopHasCapability(shop, "customerDownloadLinks"))) {
+    return new Response(
+      unavailableHtml(
+        "Download not available",
+        "Customer download links need the ULTIMATE plan.",
+      ),
+      { status: 403, headers: { "Content-Type": "text/html; charset=utf-8" } },
+    );
   }
 
   try {

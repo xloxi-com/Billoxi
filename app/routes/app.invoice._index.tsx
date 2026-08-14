@@ -23,6 +23,7 @@ import {
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { getShopPlanIdForGating, smtpReadyForPlan } from "../plan-access";
 import { INVOICED_VIEW_INDEX } from "../sales-orders";
 import { ensureAutoCreditNotesForOrders } from "../auto-credit-note.server";
 import SalesOrdersListPage, {
@@ -39,7 +40,7 @@ export const links: LinksFunction = salesOrdersLinks;
  * converted to invoice (OrderInvoiceStatus).
  */
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   // Invoice list defaults to newest created invoice first.
   if (!url.searchParams.get("sort")) {
@@ -57,10 +58,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     shopSelectedTemplateId,
     shopSelectedInvoiceTemplateId,
     smtpSettings,
+    planId,
   ] = await Promise.all([
     loadSelectedTemplateForShop(session.shop, "sales-order"),
     loadSelectedTemplateForShop(session.shop, "invoice"),
     loadSmtpSettingsForShop(session.shop),
+    getShopPlanIdForGating(billing),
   ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -103,7 +106,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "invoice" as const,
     pageHeading: "Invoice",
     invoiceTemplateId: resolveInvoiceTemplateId(shopSelectedInvoiceTemplateId),

@@ -193,6 +193,17 @@ const SHOP_PLAN_QUERY = `#graphql
   }
 `;
 
+const APP_SUBSCRIPTIONS_QUERY = `#graphql
+  query BilloxiActiveSubscriptions {
+    currentAppInstallation {
+      activeSubscriptions {
+        name
+        status
+      }
+    }
+  }
+`;
+
 /** Partner development stores cannot add a card — they need test charges. */
 export async function isPartnerDevelopmentShop(
   admin: AdminGraphql,
@@ -205,6 +216,43 @@ export async function isPartnerDevelopmentShop(
     return Boolean(payload.data?.shop?.plan?.partnerDevelopment);
   } catch {
     return false;
+  }
+}
+
+/** Active Shopify app subscription plan for webhook / unauthenticated paths. */
+export async function loadShopPlanIdFromAdmin(
+  admin: AdminGraphql,
+): Promise<PlanId | null> {
+  try {
+    const response = await admin.graphql(APP_SUBSCRIPTIONS_QUERY);
+    const payload = (await response.json()) as {
+      data?: {
+        currentAppInstallation?: {
+          activeSubscriptions?: Array<{
+            name?: string | null;
+            status?: string | null;
+          } | null> | null;
+        } | null;
+      };
+    };
+    const subs = (
+      payload.data?.currentAppInstallation?.activeSubscriptions ?? []
+    ).filter((row): row is { name?: string | null; status?: string | null } =>
+      Boolean(row),
+    );
+    if (subs.length === 0) return null;
+    const active = subs.filter((row) => {
+      const status = String(row.status || "ACTIVE").toUpperCase();
+      return status === "ACTIVE" || status === "ACCEPTED" || status === "PENDING";
+    });
+    const names = (active.length > 0 ? active : subs).map((row) => row.name);
+    for (const name of names) {
+      const planId = planIdFromBillingPlanName(name);
+      if (planId) return planId;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

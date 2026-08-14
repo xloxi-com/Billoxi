@@ -23,6 +23,7 @@ import {
 } from "../sales-orders.server";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend } from "../smtp-settings";
+import { getShopPlanIdForGating, smtpReadyForPlan } from "../plan-access";
 import SalesOrdersListPage, {
   action,
   headers as salesOrdersHeaders,
@@ -36,7 +37,7 @@ export const links: LinksFunction = salesOrdersLinks;
  * Packing slip list — Polaris IndexTable of orders marked as packing slip.
  */
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin, session } = await requireAdminAuth(request);
+  const { admin, session, billing } = await requireAdminAuth(request);
   const url = new URL(request.url);
   if (!url.searchParams.get("sort")) {
     url.searchParams.set("sort", "date desc");
@@ -44,11 +45,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const params = parseSalesOrdersSearchParams(url);
 
-  const [shopSelectedTemplateId, shopSelectedPackingTemplateId, smtpSettings] =
+  const [shopSelectedTemplateId, shopSelectedPackingTemplateId, smtpSettings, planId] =
     await Promise.all([
       loadSelectedTemplateForShop(session.shop, "sales-order"),
       loadSelectedTemplateForShop(session.shop, "packing-slip"),
       loadSmtpSettingsForShop(session.shop),
+      getShopPlanIdForGating(billing),
     ]);
   const selectedTemplateId = resolveSalesOrderTemplateId(
     shopSelectedTemplateId,
@@ -65,7 +67,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ...page,
     selectedTemplateId,
     hasSelectedTemplate: Boolean(shopSelectedTemplateId),
-    smtpReady: isSmtpReadyForSend(smtpSettings),
+    smtpReady: smtpReadyForPlan(planId, isSmtpReadyForSend(smtpSettings)),
     listMode: "packing-slip" as const,
     pageHeading: "Packing Slip",
     invoiceTemplateId: null as string | null,

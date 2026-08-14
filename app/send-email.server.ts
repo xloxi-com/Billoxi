@@ -24,6 +24,7 @@ import {
 } from "./shop-settings.server";
 import { incrementShopMonthlyUsage } from "./shop-monthly-usage.server";
 import { recordDocumentEvent } from "./document-event-log.server";
+import { shopHasCapability } from "./plan-access.server";
 
 export type SendDocumentEmailResult =
   | {
@@ -112,6 +113,13 @@ export async function sendDocumentEmail(args: {
     return { ok: false, error: "No customer email on this order" };
   }
 
+  if (!(await shopHasCapability(args.shop, "smtp"))) {
+    return {
+      ok: false,
+      error: "SMTP email needs the PREMIUM plan.",
+    };
+  }
+
   const [smtp, emailTemplates, storeDetails] = await Promise.all([
     loadSmtpSettingsForShop(args.shop),
     loadEmailTemplatesForShop(args.shop),
@@ -157,7 +165,10 @@ export async function sendDocumentEmail(args: {
     | { filename: string; content: Buffer; contentType: string }
     | undefined;
 
-  if (template.attachPdf) {
+  const canAttachPdf =
+    template.attachPdf && (await shopHasCapability(args.shop, "emailAttachPdf"));
+
+  if (canAttachPdf) {
     try {
       if (args.pdfAttachment?.content?.length) {
         pdfAttachment = {
