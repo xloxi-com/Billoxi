@@ -39,7 +39,7 @@ export const loader = async ({ request, url }: LoaderFunctionArgs) => {
   // One-shot historical number backfill after install (idempotent).
   scheduleInstallNumberSync(session.shop, admin);
 
-  const billingState = await loadShopBillingState(billing);
+  const billingState = await loadShopBillingState(billing, admin);
   // Prefer normalized `url` (no .data). Fall back strips .data from request.url
   // because future.v8_passThroughRequests leaves the raw suffix on request.url.
   const pathname = (

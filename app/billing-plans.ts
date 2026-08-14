@@ -117,12 +117,36 @@ type BillingCheckApi = {
   }>;
 };
 
+type AdminGraphqlClient = {
+  graphql: (query: string) => Promise<Response>;
+};
+
 export type ShopBillingState = {
   hasActivePlan: boolean;
   currentPlanId: PlanId | null;
   activeSubscriptionId: string | null;
+  /** True when the active Shopify subscription is a test charge. */
+  activeSubscriptionIsTest: boolean | null;
   appSubscriptions: Array<{ name: string; id: string }>;
 };
+
+const EMPTY_BILLING_STATE: ShopBillingState = {
+  hasActivePlan: false,
+  currentPlanId: null,
+  activeSubscriptionId: null,
+  activeSubscriptionIsTest: null,
+  appSubscriptions: [],
+};
+
+const SHOP_PARTNER_DEVELOPMENT_QUERY = `#graphql
+  query ShopPartnerDevelopment {
+    shop {
+      plan {
+        partnerDevelopment
+      }
+    }
+  }
+`;
 
 /** One billing.check per auth/billing object (parent + child loaders share it). */
 const billingStateByApi = new WeakMap<
@@ -130,43 +154,69 @@ const billingStateByApi = new WeakMap<
   Promise<ShopBillingState>
 >();
 
+const testChargesByAdmin = new WeakMap<object, Promise<boolean>>();
+
+function toBillingState(
+  result: {
+    hasActivePayment: boolean;
+    appSubscriptions: Array<{ name: string; id: string }>;
+  },
+  isTest: boolean,
+): ShopBillingState {
+  const active = result.hasActivePayment ? result.appSubscriptions[0] : null;
+  return {
+    hasActivePlan: result.hasActivePayment,
+    currentPlanId: result.hasActivePayment
+      ? resolveCurrentPlanId(result.appSubscriptions.map((item) => item.name))
+      : null,
+    activeSubscriptionId: active?.id ?? null,
+    activeSubscriptionIsTest: result.hasActivePayment ? isTest : null,
+    appSubscriptions: result.appSubscriptions,
+  };
+}
+
+async function checkPlans(billing: BillingCheckApi, isTest: boolean) {
+  return billing.check({
+    plans: [...ALL_BILLING_PLAN_NAMES],
+    isTest,
+  });
+}
+
 async function fetchShopBillingState(
   billing: BillingCheckApi,
+  admin?: AdminGraphqlClient,
 ): Promise<ShopBillingState> {
   try {
-    const { hasActivePayment, appSubscriptions } = await billing.check({
-      plans: [...ALL_BILLING_PLAN_NAMES],
-      isTest: isShopifyBillingTestMode(),
-    });
+    const preferredTest = admin
+      ? await shopUsesTestCharges(admin)
+      : isShopifyBillingTestMode();
+    const preferred = await checkPlans(billing, preferredTest);
+    if (preferred.hasActivePayment) {
+      return toBillingState(preferred, preferredTest);
+    }
 
-    const active = hasActivePayment ? appSubscriptions[0] : null;
+    // Dev-store test charges are invisible if we only check live (`isTest: false`).
+    const fallbackTest = !preferredTest;
+    const fallback = await checkPlans(billing, fallbackTest);
+    if (fallback.hasActivePayment) {
+      return toBillingState(fallback, fallbackTest);
+    }
 
-    return {
-      hasActivePlan: hasActivePayment,
-      currentPlanId: hasActivePayment
-        ? resolveCurrentPlanId(appSubscriptions.map((item) => item.name))
-        : null,
-      activeSubscriptionId: active?.id ?? null,
-      appSubscriptions,
-    };
+    return EMPTY_BILLING_STATE;
   } catch {
     // Don't break Pricing/Home if Shopify billing check fails.
-    return {
-      hasActivePlan: false,
-      currentPlanId: null,
-      activeSubscriptionId: null,
-      appSubscriptions: [],
-    };
+    return EMPTY_BILLING_STATE;
   }
 }
 
 export async function loadShopBillingState(
   billing: BillingCheckApi,
+  admin?: AdminGraphqlClient,
 ): Promise<ShopBillingState> {
   const key = billing as object;
   let pending = billingStateByApi.get(key);
   if (!pending) {
-    pending = fetchShopBillingState(billing);
+    pending = fetchShopBillingState(billing, admin);
     billingStateByApi.set(key, pending);
   }
   return pending;
@@ -183,4 +233,35 @@ export function isShopifyBillingTestMode(): boolean {
   if (raw === "false" || raw === "0") return false;
   if (raw === "true" || raw === "1") return true;
   return process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Development stores cannot accept live charges — always use test charges there,
+ * even when the app is running in production (e.g. billoxi-app.xloxi.com).
+ */
+export async function shopUsesTestCharges(
+  admin: AdminGraphqlClient,
+): Promise<boolean> {
+  const key = admin as object;
+  let pending = testChargesByAdmin.get(key);
+  if (!pending) {
+    pending = resolveShopUsesTestCharges(admin);
+    testChargesByAdmin.set(key, pending);
+  }
+  return pending;
+}
+
+async function resolveShopUsesTestCharges(
+  admin: AdminGraphqlClient,
+): Promise<boolean> {
+  try {
+    const response = await admin.graphql(SHOP_PARTNER_DEVELOPMENT_QUERY);
+    const json = (await response.json()) as {
+      data?: { shop?: { plan?: { partnerDevelopment?: boolean } } };
+    };
+    if (json.data?.shop?.plan?.partnerDevelopment) return true;
+  } catch {
+    // Fall through to env / NODE_ENV.
+  }
+  return isShopifyBillingTestMode();
 }
