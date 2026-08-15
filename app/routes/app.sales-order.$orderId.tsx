@@ -94,6 +94,7 @@ import {
   getInvoicedOrderGids,
   markOrderInvoiced,
   unmarkOrdersInvoiced,
+  voidOrdersInvoice,
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
 import {
@@ -117,6 +118,7 @@ import {
   getAllCreditNoteOrderGids,
   getCreditNoteOrderGids,
   ensureCreditNoteDocumentNumbers,
+  markOrderCreditNote,
   updateCreditNoteDocumentDetails,
   unmarkOrdersCreditNote,
 } from "../order-credit-note-status.server";
@@ -399,16 +401,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     : loadSalesOrderTemplateSettings(session.shop, templateId, admin);
 
   const metaGids = [orderGid];
-  const creditNoteMetaPromise = isCreditNote
-    ? getCreditNoteMetaByOrderGids(session.shop, metaGids)
-    : null;
+  const creditNoteMetaPromise =
+    isCreditNote || isInvoice
+      ? getCreditNoteMetaByOrderGids(session.shop, metaGids)
+      : null;
   const invoiceMetaPromise =
     isCreditNote || isInvoice
       ? getInvoicedMetaByOrderGids(session.shop, metaGids)
       : null;
-  const creditNoteGidsPromise = isInvoice
-    ? getCreditNoteOrderGids(session.shop, metaGids)
-    : null;
   const salesOrderNumbersPromise =
     isInvoice || isCreditNote || isPackingSlip || isReturn
       ? getSalesOrderDocumentNumbersByOrderGids(
@@ -456,6 +456,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   let invoiceTerms: string | null = null;
   let creditNoteReason: string | null = null;
   let creditNoteVoided = false;
+  let invoiceVoided = false;
   let hasCreditNote = false;
   let orderInvoiced = false;
   let orderPackingSlip = false;
@@ -493,13 +494,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     referenceNumber =
       soNumbers?.get(order.id) || soNumbers?.get(orderGid) || undefined;
   } else if (isInvoice) {
-    const [invoiceMeta, creditNoteGids, soNumbers] = await Promise.all([
+    const [invoiceMeta, creditNoteMeta, soNumbers] = await Promise.all([
       invoiceMetaPromise!,
-      creditNoteGidsPromise!,
+      creditNoteMetaPromise!,
       salesOrderNumbersPromise!,
     ]);
     const currentMeta = invoiceMeta.get(order.id) ?? invoiceMeta.get(orderGid);
-    hasCreditNote = creditNoteGids.has(order.id) || creditNoteGids.has(orderGid);
+    const currentCredit =
+      creditNoteMeta.get(order.id) ?? creditNoteMeta.get(orderGid);
+    hasCreditNote = Boolean(currentCredit);
+    creditNoteVoided = Boolean(currentCredit?.voidedAt);
+    invoiceVoided = Boolean(currentMeta?.voidedAt);
     orderInvoiced = Boolean(currentMeta);
     const ensured =
       currentMeta && !currentMeta.documentNumber
@@ -692,6 +697,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
               meta?.documentNumber ||
               (item.id === order.id ? documentNumber : item.documentNumber),
             createdAt: meta?.invoicedAt?.toISOString() || item.createdAt,
+            invoiceVoided: Boolean(meta?.voidedAt),
           };
         });
     }
@@ -739,7 +745,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
 
     return salesOrders;
-  })();
+  })().catch((error) => {
+    console.error("[document-sidebar] Failed to load sidebar list", error);
+    return [];
+  });
 
   // Keep logo only on storeDetails — avoids shipping base64 twice in the payload.
   const settingsForClient = { ...template.settings };
@@ -772,6 +781,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     invoiceTerms,
     creditNoteReason,
     creditNoteVoided,
+    invoiceVoided,
     hasCreditNote,
     // Status ribbons (Invoiced / Confirmed / Voided) are for admin app staff only (never included in print/PDF).
     isAdmin: true,
@@ -863,6 +873,42 @@ export async function action({ request, params }: ActionFunctionArgs) {
     });
   }
 
+  if (intent === "create-credit-note") {
+    if (documentMode !== "invoice") {
+      return Response.json(
+        { ok: false, error: "Credit notes can only be created from an invoice" },
+        { status: 400 },
+      );
+    }
+    const invoiceMeta = await getInvoicedMetaByOrderGids(session.shop, [
+      orderGid,
+    ]);
+    if (invoiceMeta.get(orderGid)?.voidedAt) {
+      return Response.json(
+        { ok: false, error: "Voided invoices cannot create a credit note" },
+        { status: 400 },
+      );
+    }
+    const reason = String(formData.get("reason") || "").trim();
+    try {
+      const documentNumber = await markOrderCreditNote(session.shop, orderGid, {
+        reason,
+      });
+      invalidateSalesOrderDocumentCache(session.shop, orderGid);
+      invalidateDraftOrderDocumentCache(session.shop, orderGid);
+      invalidateSalesOrdersCache(session.shop);
+      return Response.json({
+        ok: true,
+        document: "credit-note" as const,
+        documentNumber,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create credit note";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+  }
+
   if (intent === "delete-invoice") {
     const creditNoteGids = await getCreditNoteOrderGids(session.shop, [
       orderGid,
@@ -877,7 +923,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { status: 400 },
       );
     }
-    const deleted = await unmarkOrdersInvoiced(session.shop, [orderGid]);
+    let deleted: number;
+    try {
+      deleted = await unmarkOrdersInvoiced(session.shop, [orderGid]);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete invoice";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
     invalidateSalesOrderDocumentCache(session.shop, orderGid);
     invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);
@@ -885,6 +938,29 @@ export async function action({ request, params }: ActionFunctionArgs) {
       ok: true,
       deleted,
       document: "delete-invoice" as const,
+    });
+  }
+
+  if (intent === "void-invoice") {
+    if (documentMode !== "invoice") {
+      return Response.json(
+        { ok: false, error: "Only invoices can be voided from this page" },
+        { status: 400 },
+      );
+    }
+    try {
+      await voidOrdersInvoice(session.shop, [orderGid]);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to void invoice";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+    invalidateSalesOrderDocumentCache(session.shop, orderGid);
+    invalidateDraftOrderDocumentCache(session.shop, orderGid);
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      document: "void-invoice" as const,
     });
   }
 
@@ -1213,16 +1289,25 @@ export async function clientLoader({
     if (hit && hit.expires > Date.now()) return hit.data;
   }
 
-  const data = await serverLoader();
-  writePreviewClientCache(key, data);
-  void Promise.resolve(
-    (data as { salesOrders?: unknown }).salesOrders,
-  )
-    .then((salesOrders) => {
-      writePreviewClientCache(key, { ...(data as object), salesOrders });
-    })
-    .catch(() => undefined);
-  return data;
+  try {
+    const data = await serverLoader();
+    writePreviewClientCache(key, data);
+    void Promise.resolve(
+      (data as { salesOrders?: unknown }).salesOrders,
+    )
+      .then((salesOrders) => {
+        writePreviewClientCache(key, { ...(data as object), salesOrders });
+      })
+      .catch(() => undefined);
+    return data;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const hit = previewClientCache.get(key);
+    if (hit && /No result found for routeId/i.test(message)) {
+      return hit.data;
+    }
+    throw error;
+  }
 }
 
 export default function SalesOrderDocumentPage() {
@@ -1301,7 +1386,10 @@ export default function SalesOrderDocumentPage() {
 
   const [invoiceEditOpen, setInvoiceEditOpen] = useState(false);
   const [deleteInvoiceOpen, setDeleteInvoiceOpen] = useState(false);
+  const [voidInvoiceOpen, setVoidInvoiceOpen] = useState(false);
   const [convertInvoiceOpen, setConvertInvoiceOpen] = useState(false);
+  const [createCreditNoteOpen, setCreateCreditNoteOpen] = useState(false);
+  const [createCreditReason, setCreateCreditReason] = useState("");
   const [sidebarQuery, setSidebarQuery] = useState("");
   const [prefetchOrderHref, setPrefetchOrderHref] = useState<string | null>(
     null,
@@ -2058,6 +2146,7 @@ export default function SalesOrderDocumentPage() {
   }, [queuedAction, handleDownload, handlePrint, handleSend]);
 
   const creditNoteVoided = Boolean(data.creditNoteVoided);
+  const invoiceVoided = Boolean(data.invoiceVoided);
   const paymentStatus = data.paymentStatus ?? null;
   // Drafts / packing / return are not payment documents — hide Pending/Paid payment badges.
   const headerStatus =
@@ -2065,7 +2154,9 @@ export default function SalesOrderDocumentPage() {
       ? null
       : isCreditNote && creditNoteVoided
         ? "VOIDED"
-        : paymentStatus;
+        : isInvoice && invoiceVoided
+          ? "VOIDED"
+          : paymentStatus;
   const paymentLabel =
     adminPaymentStatusLabel(language, headerStatus) || formatStatus(headerStatus);
   const paymentStatusKey = (paymentStatus || "").toUpperCase();
@@ -2091,6 +2182,9 @@ export default function SalesOrderDocumentPage() {
 
     if (isIssuedDocument) {
       if (isCreditNote && creditNoteVoided) {
+        return { label: t("status.voided"), variant: "voided" as const };
+      }
+      if (isInvoice && invoiceVoided) {
         return { label: t("status.voided"), variant: "voided" as const };
       }
       if (isCancelledOrder) {
@@ -2165,6 +2259,15 @@ export default function SalesOrderDocumentPage() {
     (paymentStatusKey === "REFUNDED" ||
       paymentStatusKey === "PARTIALLY_REFUNDED");
 
+  const canCreateCreditNote =
+    isInvoice &&
+    !isCancelledOrder &&
+    !invoiceVoided &&
+    (!data.hasCreditNote || creditNoteVoided);
+  const canViewCreditNote =
+    isInvoice && data.hasCreditNote && !creditNoteVoided;
+  const canVoidInvoice = isInvoice && !invoiceVoided;
+
   const handleConvertToReturn = useCallback(() => {
     if (isConverting || isCancelledOrder || !canConvertToReturn) return;
     convertFetcher.submit(
@@ -2178,6 +2281,34 @@ export default function SalesOrderDocumentPage() {
     isConverting,
   ]);
 
+  const handleCreateCreditNote = useCallback(() => {
+    if (isConverting || !canCreateCreditNote) return;
+    setCreateCreditNoteOpen(true);
+  }, [canCreateCreditNote, isConverting]);
+
+  const confirmCreateCreditNote = useCallback(() => {
+    if (isConverting || !canCreateCreditNote) return;
+    const formData = new FormData();
+    formData.set("intent", "create-credit-note");
+    if (createCreditReason.trim()) {
+      formData.set("reason", createCreditReason.trim());
+    }
+    convertFetcher.submit(formData, { method: "post" });
+  }, [
+    canCreateCreditNote,
+    convertFetcher,
+    createCreditReason,
+    isConverting,
+  ]);
+
+  const handleViewCreditNote = useCallback(() => {
+    if (!canViewCreditNote) return;
+    const numericId = data.order.id.includes("/")
+      ? data.order.id.split("/").pop() || data.order.id
+      : data.order.id;
+    navigate(`/app/credit-note/${encodeURIComponent(numericId)}`);
+  }, [canViewCreditNote, data.order.id, navigate]);
+
   const handleSaveAsDraft = useCallback(() => {
     if (isConverting || isCancelledOrder || alreadyInvoiced || alreadyDraft) {
       return;
@@ -2190,6 +2321,16 @@ export default function SalesOrderDocumentPage() {
     isCancelledOrder,
     isConverting,
   ]);
+
+  const handleVoidInvoice = useCallback(() => {
+    if (isConverting || !canVoidInvoice) return;
+    setVoidInvoiceOpen(true);
+  }, [canVoidInvoice, isConverting]);
+
+  const confirmVoidInvoice = useCallback(() => {
+    if (isConverting || !canVoidInvoice) return;
+    convertFetcher.submit({ intent: "void-invoice" }, { method: "post" });
+  }, [canVoidInvoice, convertFetcher, isConverting]);
 
   const handleDeleteInvoice = useCallback(() => {
     if (isConverting) return;
@@ -2223,6 +2364,15 @@ export default function SalesOrderDocumentPage() {
       return;
     }
     if (!isInvoice) return;
+    if (invoiceVoided) {
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show(t("detail.toast.deleteVoided"), {
+          isError: true,
+        });
+      }
+      setDeleteInvoiceOpen(false);
+      return;
+    }
     if (data.hasCreditNote) {
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(t("detail.toast.deleteCreditFirst"), {
@@ -2237,6 +2387,7 @@ export default function SalesOrderDocumentPage() {
   }, [
     convertFetcher,
     data.hasCreditNote,
+    invoiceVoided,
     isConverting,
     isCreditNote,
     isDraft,
@@ -2328,6 +2479,19 @@ export default function SalesOrderDocumentPage() {
       } else if (result.document === "invoice") {
         setConvertInvoiceOpen(false);
         shopify.toast.show(t("detail.toast.convertedInvoice"));
+      } else if (result.document === "credit-note") {
+        setCreateCreditNoteOpen(false);
+        setCreateCreditReason("");
+        shopify.toast.show(t("detail.toast.creditCreated"));
+        const numericId = data.order.id.includes("/")
+          ? data.order.id.split("/").pop() || data.order.id
+          : data.order.id;
+        navigate(`/app/credit-note/${encodeURIComponent(numericId)}`);
+        return;
+      } else if (result.document === "void-invoice") {
+        setVoidInvoiceOpen(false);
+        shopify.toast.show(t("detail.toast.invoiceVoided"));
+        return;
       }
     }
     // Fetcher POST already revalidates via shouldRevalidate — avoid a second full reload.
@@ -2392,6 +2556,30 @@ export default function SalesOrderDocumentPage() {
       >
         {isDownloading ? t("detail.downloading") : t("common.download")}
       </s-button>
+      {canCreateCreditNote ? (
+        <s-button
+          slot="secondary-actions"
+          icon="plus"
+          loading={
+            (isConverting &&
+              convertFetcher.formData?.get("intent") ===
+                "create-credit-note") ||
+            undefined
+          }
+          disabled={isConverting || undefined}
+          onClick={handleCreateCreditNote}
+        >
+          {t("detail.createCreditNote")}
+        </s-button>
+      ) : canViewCreditNote ? (
+        <s-button
+          slot="secondary-actions"
+          disabled={isConverting || undefined}
+          onClick={handleViewCreditNote}
+        >
+          {t("detail.viewCreditNote")}
+        </s-button>
+      ) : null}
       <s-button
         slot="secondary-actions"
         icon="refresh"
@@ -2489,6 +2677,20 @@ export default function SalesOrderDocumentPage() {
       >
         {isPrinting ? t("detail.preparing") : t("list.actionPrint")}
       </s-button>
+      {canVoidInvoice ? (
+        <s-button
+          slot="secondary-actions"
+          loading={
+            (isConverting &&
+              convertFetcher.formData?.get("intent") === "void-invoice") ||
+            undefined
+          }
+          disabled={isConverting || undefined}
+          onClick={handleVoidInvoice}
+        >
+          {t("detail.voidInvoice")}
+        </s-button>
+      ) : null}
       {isInvoice || isCreditNote || isPackingSlip || isReturn || isDraft ? (
         <s-button
           slot="secondary-actions"
@@ -2506,7 +2708,9 @@ export default function SalesOrderDocumentPage() {
             undefined
           }
           disabled={
-            isConverting || (isInvoice && data.hasCreditNote) || undefined
+            isConverting ||
+            (isInvoice && (Boolean(data.hasCreditNote) || invoiceVoided)) ||
+            undefined
           }
           onClick={() => setDeleteInvoiceOpen(true)}
         >
@@ -2563,7 +2767,14 @@ export default function SalesOrderDocumentPage() {
                         </div>
                       }
                     >
-                      <Await resolve={data.salesOrders}>
+                      <Await
+                        resolve={data.salesOrders}
+                        errorElement={
+                          <div className="sales-order-document-sidebar__loading">
+                            <PageLoader label={t("detail.loadingOrders")} />
+                          </div>
+                        }
+                      >
                         {(salesOrders) => {
                           const query = sidebarQuery.trim().toLowerCase();
                           const filteredOrders = query
@@ -2639,11 +2850,20 @@ export default function SalesOrderDocumentPage() {
                           (
                             item as {
                               creditNoteVoided?: boolean;
+                              invoiceVoided?: boolean;
                             }
                           ).creditNoteVoided,
                         );
+                        const itemInvoiceVoided = Boolean(
+                          (
+                            item as {
+                              invoiceVoided?: boolean;
+                            }
+                          ).invoiceVoided,
+                        );
                         const sidebarBadgeStatus =
-                          isCreditNote && itemCreditNoteVoided
+                          (isCreditNote && itemCreditNoteVoided) ||
+                          (isInvoice && itemInvoiceVoided)
                             ? "VOIDED"
                             : item.paymentStatus;
                         const badgeTone = sidebarBadgeStatus
@@ -2843,6 +3063,73 @@ export default function SalesOrderDocumentPage() {
           </Modal.Section>
         </Modal>
         <Modal
+          open={createCreditNoteOpen}
+          onClose={() => {
+            if (isConverting) return;
+            setCreateCreditNoteOpen(false);
+            setCreateCreditReason("");
+          }}
+          title={t("detail.createCreditNoteTitle")}
+          primaryAction={{
+            content: t("detail.createCreditNoteConfirm"),
+            onAction: confirmCreateCreditNote,
+            loading:
+              isConverting &&
+              convertFetcher.formData?.get("intent") === "create-credit-note",
+          }}
+          secondaryActions={[
+            {
+              content: t("common.cancel"),
+              disabled: isConverting,
+              onAction: () => {
+                setCreateCreditNoteOpen(false);
+                setCreateCreditReason("");
+              },
+            },
+          ]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              <Text as="p">{t("detail.createCreditNoteBody")}</Text>
+              <TextField
+                label={t("detail.reason")}
+                value={createCreditReason}
+                onChange={setCreateCreditReason}
+                autoComplete="off"
+                placeholder={t("detail.reasonPlaceholder")}
+                helpText={t("detail.reasonHelp")}
+              />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+        <Modal
+          open={voidInvoiceOpen}
+          onClose={() => {
+            if (isConverting) return;
+            setVoidInvoiceOpen(false);
+          }}
+          title={t("detail.voidInvoiceTitle")}
+          primaryAction={{
+            content: t("detail.voidInvoice"),
+            destructive: true,
+            onAction: confirmVoidInvoice,
+            loading:
+              isConverting &&
+              convertFetcher.formData?.get("intent") === "void-invoice",
+          }}
+          secondaryActions={[
+            {
+              content: t("common.cancel"),
+              disabled: isConverting,
+              onAction: () => setVoidInvoiceOpen(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <Text as="p">{t("detail.voidInvoiceBody")}</Text>
+          </Modal.Section>
+        </Modal>
+        <Modal
           open={deleteInvoiceOpen}
           onClose={() => setDeleteInvoiceOpen(false)}
           title={
@@ -2869,7 +3156,8 @@ export default function SalesOrderDocumentPage() {
                   "delete-packing-slip" ||
                 convertFetcher.formData?.get("intent") === "delete-return" ||
                 convertFetcher.formData?.get("intent") === "delete-draft"),
-            disabled: isInvoice && Boolean(data.hasCreditNote),
+            disabled:
+              isInvoice && (Boolean(data.hasCreditNote) || invoiceVoided),
           }}
           secondaryActions={[
             {
@@ -2890,7 +3178,9 @@ export default function SalesOrderDocumentPage() {
                       ? t("detail.deleteDraftBody")
                       : data.hasCreditNote
                         ? t("detail.deleteInvoiceHasCredit")
-                        : t("detail.deleteInvoiceBody")}
+                        : invoiceVoided
+                          ? t("detail.deleteInvoiceVoided")
+                          : t("detail.deleteInvoiceBody")}
             </Text>
           </Modal.Section>
         </Modal>

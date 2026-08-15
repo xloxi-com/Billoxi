@@ -1,0 +1,166 @@
+/* Loaded via <link> in document head so plan cards don't flash unstyled on refresh. */
+
+.pricing-plan-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 767px) {
+  .pricing-plan-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pricing-free-row {
+  margin-top: 16px;
+}
+
+.pricing-free-row__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pricing-free-row__inner > *:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pricing-free-row__cta {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+  .pricing-free-row__inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pricing-free-row__cta .Polaris-Button {
+    width: 100%;
+  }
+}
+
+/*
+  Stretch plan cards without `height: 100%` on every nested Polaris-Box —
+  that used to paint an empty outlined box under shorter plans (Ultimate)
+  until later CSS/layout settled.
+*/
+.pricing-plan-card-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.pricing-plan-card-wrap > * {
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+}
+
+.pricing-plan-card-wrap > * > * {
+  flex: 1 1 auto;
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.pricing-plan-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.pricing-plan-card__body {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.pricing-plan-card__cta {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.pricing-plan-card__badge-spacer {
+  height: 20px;
+}
+
+.pricing-plan-card__check {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.pricing-plan-card__check .Polaris-Icon,
+.pricing-plan-card__check .Polaris-Icon--colorSuccess {
+  margin: 0 !important;
+  width: 20px !important;
+  height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+}
+
+.pricing-plan-card__check .Polaris-Icon svg,
+.pricing-plan-card__check svg {
+  width: 20px !important;
+  height: 20px !important;
+  max-width: 20px !important;
+  max-height: 20px !important;
+  display: block;
+}
+
+.pricing-plan-value .Polaris-Icon {
+  margin: 0 !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.pricing-plan-value .Polaris-Icon svg,
+.pricing-plan-value svg {
+  width: 20px !important;
+  height: 20px !important;
+  display: block;
+}
+
+.pricing-features-table .Polaris-DataTable__Cell:nth-child(n + 2),
+.pricing-features-table .Polaris-DataTable__Cell--header:nth-child(n + 2),
+.pricing-features-table th:nth-child(n + 2),
+.pricing-features-table td:nth-child(n + 2) {
+  text-align: center !important;
+}
+
+.pricing-features-table th:nth-child(n + 2) .Polaris-DataTable__Heading,
+.pricing-features-table td:nth-child(n + 2) > * {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.pricing-plan-heading,
+.pricing-plan-value {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  text-align: center;
+}

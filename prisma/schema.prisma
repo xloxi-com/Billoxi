@@ -111,16 +111,17 @@ model SalesOrderDocumentNumber {
 }
 
 model OrderInvoiceStatus {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   shop           String
   orderGid       String
-  invoicedAt     DateTime @default(now())
+  invoicedAt     DateTime  @default(now())
   sequence       Int?
   documentNumber String?
   customerNote   String?
   terms          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  voidedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@unique([shop, orderGid])
   @@unique([shop, sequence])

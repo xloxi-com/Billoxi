@@ -100,10 +100,6 @@ function currentEmbeddedPath() {
   return (window.location.pathname || "/app").replace(/\/{2,}/g, "/") || "/app";
 }
 
-function navigateToCurrentPage() {
-  navigateEmbedded(currentEmbeddedPath());
-}
-
 function reloadEmbedded() {
   clearRecoverReloadKeys();
   const path = currentEmbeddedPath();
@@ -269,7 +265,9 @@ export function renderEmbeddedRouteError(
     if (Date.now() - last > 4000) {
       sessionStorage.setItem(reloadKey, String(Date.now()));
       normalizeEmbeddedLocation();
-      navigateToCurrentPage();
+      // HMR / embed auth can leave React Router without this routeId.
+      // Hard reload remounts the client; in-app navigate keeps the stale tree.
+      window.location.reload();
       return null;
     }
   }

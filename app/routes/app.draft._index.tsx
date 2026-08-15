@@ -98,7 +98,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 const draftListCache = createAppPageClientCache();
 
+function draftListHasBlankNumbers(data: unknown) {
+  const orders = (data as { orders?: Array<{ draftNumber?: string }> })?.orders;
+  if (!Array.isArray(orders) || orders.length === 0) return false;
+  return orders.some((order) => !String(order.draftNumber || "").trim());
+}
+
 export async function clientLoader(args: ClientLoaderFunctionArgs) {
+  const cached = draftListCache.get(args.request);
+  if (cached && draftListHasBlankNumbers(cached)) {
+    draftListCache.bust();
+  }
   return cachedClientLoader(draftListCache, args);
 }
 

@@ -1,4 +1,5 @@
 import logoSvg from "./assets/Logo.svg?raw";
+import type { StoreDetails } from "./store-details";
 
 const BRAND_REDS = [/#b70228/gi, /#bb0028/gi] as const;
 
@@ -23,4 +24,24 @@ export function templatePreviewLogoDataUrl(accent: string): string {
     svg = svg.replace(pattern, brand);
   }
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** Demo seller block for template gallery, preview modal, PDF, and editor canvas. */
+export const SAMPLE_STORE_DETAILS: StoreDetails = {
+  name: "Northwind Trading",
+  address: "123 Harbor Street\nSeattle, WA 98101, USA",
+  phone: "+1 (206) 555-0148",
+  email: "hello@northwind.example",
+  website: "www.northwind.example",
+  customFields: [],
+};
+
+export function sampleStoreDetailsForTemplatePreview(
+  accent = "#B90128",
+): StoreDetails {
+  return {
+    ...SAMPLE_STORE_DETAILS,
+    logoDataUrl: templatePreviewLogoDataUrl(accent),
+    logoFileName: "Logo.svg",
+  };
 }

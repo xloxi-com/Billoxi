@@ -95,6 +95,7 @@ import {
   getInvoicedOrderGids,
   markOrderInvoiced,
   unmarkOrdersInvoiced,
+  voidOrdersInvoice,
 } from "../order-invoice-status.server";
 import {
   markOrderDraft,
@@ -187,6 +188,13 @@ function documentStatusDisplay(
   tone: SalesOrderRow["paymentTone"];
   progress: SalesOrderRow["paymentProgress"];
 } {
+  if (listMode === "invoice" && order.invoiceVoided) {
+    return {
+      label: adminPaymentStatusLabel(language, "VOIDED"),
+      tone: undefined,
+      progress: "complete",
+    };
+  }
   // Credit-note void is an app lifecycle status — only on the CN list.
   // Never override invoice status with a voided credit note.
   if (listMode === "credit-note" && order.creditNoteVoided) {
@@ -324,7 +332,8 @@ type BulkConfirmAction =
   | "delete-packing-slip"
   | "delete-return"
   | "delete-draft"
-  | "void-credit-note";
+  | "void-credit-note"
+  | "void-invoice";
 
 const BULK_CONFIRM_COPY: Record<
   BulkConfirmAction,
@@ -407,6 +416,12 @@ const BULK_CONFIRM_COPY: Record<
     title: "Void credit note?",
     message:
       "Void this credit note? It stays in the list as voided and can be deleted later.",
+    confirm: "Void",
+  },
+  "void-invoice": {
+    title: "Void invoice?",
+    message:
+      "Are you sure you want to void this invoice? Voided invoices cannot be deleted.",
     confirm: "Void",
   },
 };
@@ -510,6 +525,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     intent !== "delete-return" &&
     intent !== "delete-draft" &&
     intent !== "void-credit-note" &&
+    intent !== "void-invoice" &&
     intent !== "reload-list"
   ) {
     return Response.json({ ok: false, error: "Unknown action" }, { status: 400 });
@@ -625,7 +641,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { status: 400 },
       );
     }
-    const deleted = await unmarkOrdersInvoiced(session.shop, gids);
+    let deleted: number;
+    try {
+      deleted = await unmarkOrdersInvoiced(session.shop, gids);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete invoice";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
@@ -691,6 +714,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ok: true,
       voided,
       document: "void-credit-note" as const,
+      orderId: orderIds[0] ?? null,
+      orderIds,
+    });
+  }
+
+  if (intent === "void-invoice") {
+    let voided: number;
+    try {
+      voided = await voidOrdersInvoice(
+        session.shop,
+        orderIds.map((orderId) => toOrderGid(orderId)),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to void invoice";
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+    invalidateSalesOrdersCache(session.shop);
+    return Response.json({
+      ok: true,
+      voided,
+      document: "void-invoice" as const,
       orderId: orderIds[0] ?? null,
       orderIds,
     });
@@ -1527,6 +1572,7 @@ export default function SalesOrderPage() {
     const order = orders.find((row) => row.id === selectedResources[0]);
     if (!order) return;
     if (order.creditNote && !order.creditNoteVoided) return;
+    if (order.invoiceVoided) return;
     const status = order.paymentStatus.toLowerCase();
     if (status === "voided" || status.includes("cancel")) return;
     const formData = new FormData();
@@ -1547,12 +1593,18 @@ export default function SalesOrderPage() {
     if (selectedResources.length === 0 || isConverting) return;
     const blocked = selectedResources.some((id) => {
       const order = orders.find((row) => row.id === id);
-      return Boolean(order?.creditNote);
+      return Boolean(order?.creditNote) || Boolean(order?.invoiceVoided);
     });
     if (blocked) {
       if (typeof shopify !== "undefined" && shopify.toast) {
+        const voided = selectedResources.some((id) => {
+          const order = orders.find((row) => row.id === id);
+          return Boolean(order?.invoiceVoided);
+        });
         shopify.toast.show(
-          "Delete the credit note first. Invoices with a credit note cannot be deleted.",
+          voided
+            ? "Voided invoices cannot be deleted."
+            : "Delete the credit note first. Invoices with a credit note cannot be deleted.",
           { isError: true },
         );
       }
@@ -1605,6 +1657,19 @@ export default function SalesOrderPage() {
     }
     convertFetcher.submit(formData, { method: "post" });
   }, [convertFetcher, isConverting, selectedResources]);
+
+  const handleVoidInvoices = useCallback(() => {
+    if (selectedResources.length === 0 || isConverting) return;
+    const formData = new FormData();
+    formData.set("intent", "void-invoice");
+    for (const orderId of selectedResources) {
+      const order = orders.find((row) => row.id === orderId);
+      if (order?.invoiceVoided) continue;
+      formData.append("orderIds", orderId);
+    }
+    if (!formData.getAll("orderIds").length) return;
+    convertFetcher.submit(formData, { method: "post" });
+  }, [convertFetcher, isConverting, orders, selectedResources]);
 
   const handleSaveAsDraft = useCallback(() => {
     if (selectedResources.length !== 1 || isConverting) return;
@@ -1792,6 +1857,7 @@ export default function SalesOrderPage() {
     else if (action === "delete-return") handleDeleteReturns();
     else if (action === "delete-draft") handleDeleteDrafts();
     else if (action === "void-credit-note") handleVoidCreditNotes();
+    else if (action === "void-invoice") handleVoidInvoices();
     else void handleBulkDownloadPdf();
   }, [
     confirmAction,
@@ -1809,6 +1875,7 @@ export default function SalesOrderPage() {
     handleFinalizeDraft,
     handleSaveAsDraft,
     handleVoidCreditNotes,
+    handleVoidInvoices,
   ]);
 
   const selectedOrders = useMemo(
@@ -1878,11 +1945,16 @@ export default function SalesOrderPage() {
     selectedResources.length === 1 &&
     Boolean(selectedOrder) &&
     !hasCancelledSelected &&
+    !selectedOrder!.invoiceVoided &&
     (!selectedOrder!.creditNote || selectedOrder!.creditNoteVoided);
   const canDeleteInvoice =
     isInvoiceList &&
     selectedResources.length > 0 &&
-    selectedOrders.every((order) => !order.creditNote);
+    selectedOrders.every((order) => !order.creditNote && !order.invoiceVoided);
+  const canVoidInvoice =
+    isInvoiceList &&
+    selectedResources.length > 0 &&
+    selectedOrders.some((order) => !order.invoiceVoided);
   const canVoidCreditNote =
     isCreditNoteList &&
     selectedResources.length > 0 &&
@@ -2062,6 +2134,11 @@ export default function SalesOrderPage() {
       disabled: isBusy,
     });
     actions.push({
+      content: "Void",
+      onAction: () => setConfirmAction("void-invoice"),
+      disabled: isBusy || !canVoidInvoice,
+    });
+    actions.push({
       content: t("common.delete"),
       onAction: () => setConfirmAction("delete-invoice"),
       disabled: isBusy || !canDeleteInvoice,
@@ -2076,6 +2153,7 @@ export default function SalesOrderPage() {
     canConvertToReturn,
     canDeleteDraft,
     canDeleteInvoice,
+    canVoidInvoice,
     canFinalizeDraft,
     canSaveAsDraft,
     canSendEmail,
@@ -2117,6 +2195,7 @@ export default function SalesOrderPage() {
         | "delete-return"
         | "delete-draft"
         | "void-credit-note"
+        | "void-invoice"
         | "reload";
       orderId?: string | null;
       orderIds?: string[];
@@ -2175,6 +2254,11 @@ export default function SalesOrderPage() {
         const count = result.voided ?? 1;
         shopify.toast.show(
           count > 1 ? `Voided ${count} credit notes` : "Credit note voided",
+        );
+      } else if (result.document === "void-invoice") {
+        const count = result.voided ?? 1;
+        shopify.toast.show(
+          count > 1 ? `Voided ${count} invoices` : "Invoice voided",
         );
       } else if (result.document === "packing-slip") {
         shopify.toast.show("Converted to packing slip");
@@ -2279,6 +2363,15 @@ export default function SalesOrderPage() {
           prev.map((order) =>
             patchedIds.has(order.id)
               ? { ...order, creditNoteVoided: true }
+              : order,
+          ),
+        );
+        clearSelection();
+      } else if (result.document === "void-invoice") {
+        setOrders((prev) =>
+          prev.map((order) =>
+            patchedIds.has(order.id)
+              ? { ...order, invoiceVoided: true }
               : order,
           ),
         );
@@ -3506,7 +3599,8 @@ export default function SalesOrderPage() {
               confirmAction === "delete-packing-slip" ||
               confirmAction === "delete-return" ||
               confirmAction === "delete-draft" ||
-              confirmAction === "void-credit-note",
+              confirmAction === "void-credit-note" ||
+              confirmAction === "void-invoice",
             onAction: handleConfirmBulkAction,
           }}
           secondaryActions={[

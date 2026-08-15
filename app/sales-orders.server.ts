@@ -157,6 +157,7 @@ export type SalesOrderRow = {
   creditNoteVoided: boolean;
   invoicedAt: string | null;
   invoiceNumber: string;
+  invoiceVoided: boolean;
   paymentStatus: string;
   paymentStatusKey: string;
   fulfillmentStatus: string;
@@ -922,6 +923,7 @@ function toRow(
   returnSlip = false,
   returnNumber = "",
   returnedAt: Date | null = null,
+  invoiceVoided = false,
 ): SalesOrderRow {
   const payment = paymentBadge(order.displayFinancialStatus);
   const fulfillment = fulfillmentBadge(order.displayFulfillmentStatus);
@@ -975,6 +977,7 @@ function toRow(
     creditNoteVoided,
     invoicedAt: invoicedAt ? invoicedAt.toISOString() : null,
     invoiceNumber: invoiceNumber.trim(),
+    invoiceVoided,
     paymentStatus: formatPaymentStatus(order.displayFinancialStatus),
     paymentStatusKey: (order.displayFinancialStatus || "").toUpperCase(),
     fulfillmentStatus: formatFulfillmentStatus(order.displayFulfillmentStatus),
@@ -1305,7 +1308,7 @@ export async function loadSalesOrdersPage(
     const orderGids = nodes.map((order) => order.id);
 
     let documentNumbers = new Map<string, string>();
-    let invoicedMeta = new Map<
+    let     invoicedMeta = new Map<
       string,
       {
         invoicedAt: Date;
@@ -1315,6 +1318,7 @@ export async function loadSalesOrdersPage(
         sequence: number | null;
         customerNote: string | null;
         terms: string | null;
+        voidedAt: Date | null;
       }
     >();
     let packingSlipGids = new Set<string>();
@@ -1512,9 +1516,11 @@ export async function loadSalesOrdersPage(
         return !num;
       });
       if (missing.length > 0) {
-        void ensureDraftDocumentNumbers(shop, missing).catch((error) => {
-          console.error("Background draft number ensure failed:", error);
-        });
+        try {
+          ensuredDraftNumbers = await ensureDraftDocumentNumbers(shop, missing);
+        } catch (error) {
+          console.error("Draft number ensure failed:", error);
+        }
       }
     }
 
@@ -1588,6 +1594,7 @@ export async function loadSalesOrdersPage(
           hasReturn,
           returnNumber,
           retMeta?.convertedAt ?? null,
+          Boolean(meta?.voidedAt),
         );
       }),
       pageInfo,
@@ -1617,7 +1624,10 @@ export async function loadSalesOrdersPage(
 
   const filterAndPaginateDocumentOrders = async (
     sourceGids: string[],
-    metaForSort: Map<string, { sortAt: number; searchNumber?: string }>,
+    metaForSort: Map<
+      string,
+      { sortAt: number; searchNumber?: string; voided?: boolean }
+    >,
     forceInvoiced: boolean,
     forceCreditNote: boolean,
     forcePackingSlip = false,
@@ -1703,6 +1713,10 @@ export async function loadSalesOrdersPage(
       ]);
       orders = orders.filter((order) => {
         const status = (order.displayFinancialStatus || "").toUpperCase();
+        const appVoided = Boolean(metaForSort.get(order.id)?.voided);
+        if (forceInvoiced && appVoided) {
+          return wanted === "VOIDED";
+        }
         if (wanted === "UNPAID") return unpaidStatuses.has(status);
         return status === wanted;
       });
@@ -1883,12 +1897,13 @@ export async function loadSalesOrdersPage(
     const invoicedGids = [...metaForSortRaw.keys()];
     const metaForSort = new Map<
       string,
-      { sortAt: number; searchNumber?: string }
+      { sortAt: number; searchNumber?: string; voided?: boolean }
     >();
     for (const [gid, row] of metaForSortRaw) {
       metaForSort.set(gid, {
         sortAt: row.invoicedAt?.getTime() ?? row.createdAt?.getTime() ?? 0,
         searchNumber: row.documentNumber || undefined,
+        voided: Boolean(row.voidedAt),
       });
     }
     return filterAndPaginateDocumentOrders(

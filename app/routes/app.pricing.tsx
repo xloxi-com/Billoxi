@@ -1,6 +1,7 @@
 import type {
   ActionFunctionArgs,
   HeadersFunction,
+  LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import {
@@ -71,6 +72,11 @@ import {
 } from "../admin-pricing-i18n";
 import { useAdminI18n } from "../admin-i18n-context";
 import type { loader as appLoader } from "./app";
+import pricingStyles from "../pricing.css?url";
+
+export const links: LinksFunction = () => [
+  { rel: "stylesheet", href: pricingStyles },
+];
 
 /** Static catalog only — billing status comes from parent `routes/app` loader. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -328,7 +334,7 @@ export default function PricingPage() {
 
                 return (
                   <div key={plan.id} className="pricing-plan-card-wrap">
-                    <Card>
+                    <Card padding="0">
                       <div className="pricing-plan-card">
                         <div className="pricing-plan-card__body">
                           <BlockStack gap="400">
@@ -466,108 +472,6 @@ export default function PricingPage() {
                 </div>
               </Card>
             </div>
-
-            <style>{`
-              .pricing-plan-cards {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 16px;
-                align-items: stretch;
-              }
-              @media (min-width: 768px) {
-                .pricing-plan-cards {
-                  grid-template-columns: repeat(3, 1fr);
-                }
-              }
-              .pricing-free-row {
-                margin-top: 16px;
-              }
-              .pricing-free-row__inner {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 16px;
-              }
-              .pricing-free-row__inner > *:first-child {
-                min-width: 0;
-                flex: 1 1 auto;
-              }
-              .pricing-free-row__cta {
-                flex: 0 0 auto;
-              }
-              @media (max-width: 600px) {
-                .pricing-free-row__inner {
-                  flex-direction: column;
-                  align-items: stretch;
-                }
-                .pricing-free-row__cta .Polaris-Button {
-                  width: 100%;
-                }
-              }
-              .pricing-plan-card-wrap,
-              .pricing-plan-card-wrap > .Polaris-ShadowBevel,
-              .pricing-plan-card-wrap .Polaris-Box {
-                height: 100%;
-              }
-              .pricing-plan-card {
-                display: flex;
-                flex-direction: column;
-                text-align: center;
-                height: 100%;
-                box-sizing: border-box;
-              }
-              .pricing-plan-card__body {
-                flex: 1 1 auto;
-                text-align: left;
-              }
-              .pricing-plan-card__cta {
-                margin-top: auto;
-                padding-top: 16px;
-              }
-              .pricing-plan-card__badge-spacer {
-                height: 20px;
-              }
-              .pricing-plan-card__check {
-                flex: 0 0 auto;
-                margin-top: 1px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 20px;
-                height: 20px;
-                min-width: 20px;
-                min-height: 20px;
-                line-height: 0;
-                overflow: hidden;
-              }
-              .pricing-plan-card__check .Polaris-Icon,
-              .pricing-plan-card__check .Polaris-Icon--colorSuccess {
-                margin: 0 !important;
-                width: 20px !important;
-                height: 20px !important;
-                max-width: 20px !important;
-                max-height: 20px !important;
-              }
-              .pricing-plan-card__check .Polaris-Icon svg,
-              .pricing-plan-card__check svg {
-                width: 20px !important;
-                height: 20px !important;
-                max-width: 20px !important;
-                max-height: 20px !important;
-                display: block;
-              }
-              .pricing-plan-value .Polaris-Icon {
-                margin: 0 !important;
-                width: 20px !important;
-                height: 20px !important;
-              }
-              .pricing-plan-value .Polaris-Icon svg,
-              .pricing-plan-value svg {
-                width: 20px !important;
-                height: 20px !important;
-                display: block;
-              }
-            `}</style>
           </Layout.Section>
 
           <Layout.Section>
@@ -607,27 +511,6 @@ export default function PricingPage() {
                   stickyHeader
                 />
               </div>
-              <style>{`
-                .pricing-features-table .Polaris-DataTable__Cell:nth-child(n + 2),
-                .pricing-features-table .Polaris-DataTable__Cell--header:nth-child(n + 2),
-                .pricing-features-table th:nth-child(n + 2),
-                .pricing-features-table td:nth-child(n + 2) {
-                  text-align: center !important;
-                }
-                .pricing-features-table th:nth-child(n + 2) .Polaris-DataTable__Heading,
-                .pricing-features-table td:nth-child(n + 2) > * {
-                  margin-left: auto;
-                  margin-right: auto;
-                }
-                .pricing-plan-heading,
-                .pricing-plan-value {
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  width: 100%;
-                  text-align: center;
-                }
-              `}</style>
             </Card>
           </Layout.Section>
 

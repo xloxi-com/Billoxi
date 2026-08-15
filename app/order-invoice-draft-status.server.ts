@@ -310,10 +310,9 @@ export async function ensureDraftDocumentNumbers(
   if (orderGids.length === 0) return numbers;
 
   const meta = await getDraftMetaByOrderGids(shop, orderGids);
-  const missing = orderGids.filter((gid) => {
-    const row = meta.get(gid);
-    return row && !row.documentNumber;
-  });
+  const missing = orderGids.filter(
+    (gid) => !meta.get(gid)?.documentNumber?.trim(),
+  );
 
   for (const [gid, row] of meta) {
     if (row.documentNumber) numbers.set(gid, row.documentNumber);
@@ -325,61 +324,13 @@ export async function ensureDraftDocumentNumbers(
     return aAt - bAt;
   });
 
-  if (missing.length > 0) {
-    const series = await loadNumberSeriesEntryForShop(shop, "draft");
-    const entry = draftSeriesEntry(series);
-    const last = await getLastDraftSequence(shop);
-    const digitWidth = await getMaxDraftDigitWidth(shop, entry, last);
-    let nextSequence = resolveNumberSeriesNextSequence(entry, last);
-    const paddedEntry = {
-      ...entry,
-      startingNumber: widenStartingNumberPad(entry.startingNumber, digitWidth),
-    };
-
-    for (const orderGid of missing) {
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const sequence = nextSequence;
-        const documentNumber = formatNumberSeriesValue(paddedEntry, sequence);
-        try {
-          const updated = await prisma.$executeRaw`
-            UPDATE "OrderInvoiceDraftStatus"
-            SET
-              sequence = ${sequence},
-              "documentNumber" = ${documentNumber},
-              "updatedAt" = CURRENT_TIMESTAMP
-            WHERE shop = ${shop}
-              AND "orderGid" = ${orderGid}
-              AND "documentNumber" IS NULL
-          `;
-          if (Number(updated) > 0) {
-            numbers.set(orderGid, documentNumber);
-            nextSequence += 1;
-            break;
-          }
-
-          const existing = await prisma.$queryRaw<
-            Array<{ documentNumber: string | null }>
-          >`
-            SELECT "documentNumber"
-            FROM "OrderInvoiceDraftStatus"
-            WHERE shop = ${shop}
-              AND "orderGid" = ${orderGid}
-            LIMIT 1
-          `;
-          if (existing[0]?.documentNumber) {
-            numbers.set(orderGid, existing[0].documentNumber);
-          }
-          break;
-        } catch (error) {
-          if (isUniqueConflict(error)) {
-            nextSequence += 1;
-            continue;
-          }
-          throw error;
-        }
-      }
+  for (const orderGid of missing) {
+    try {
+      const documentNumber = (await markOrderDraft(shop, orderGid))?.trim();
+      if (documentNumber) numbers.set(orderGid, documentNumber);
+    } catch (error) {
+      console.error("Draft number ensure failed:", orderGid, error);
     }
-    await raiseNumberSeriesNextSequence(shop, "draft", nextSequence);
   }
 
   return numbers;
@@ -460,44 +411,35 @@ export async function markOrderDraft(shop: string, orderGid: string) {
       await raiseNumberSeriesNextSequence(shop, "draft", sequence + 1);
       return documentNumber;
     } catch (error) {
-      if (isUniqueConflict(error)) continue;
+      if (isUniqueConflict(error)) {
+        const after = await prisma.$queryRaw<
+          Array<{ documentNumber: string | null }>
+        >`
+          SELECT "documentNumber"
+          FROM "OrderInvoiceDraftStatus"
+          WHERE shop = ${shop}
+            AND "orderGid" = ${orderGid}
+          LIMIT 1
+        `;
+        if (after[0]?.documentNumber) return after[0].documentNumber;
+        continue;
+      }
       throw error;
     }
   }
 
-  if (hasDraftDelegate()) {
-    await prisma.orderInvoiceDraftStatus.upsert({
-      where: {
-        shop_orderGid: { shop, orderGid },
-      },
-      create: {
-        shop,
-        orderGid,
-        draftedAt: new Date(),
-      },
-      update: {
-        draftedAt: new Date(),
-      },
-    });
-    return "";
-  }
-
-  await prisma.$executeRaw`
-    INSERT INTO "OrderInvoiceDraftStatus" (id, shop, "orderGid", "draftedAt", "createdAt", "updatedAt")
-    VALUES (
-      ${randomUUID()},
-      ${shop},
-      ${orderGid},
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP,
-      CURRENT_TIMESTAMP
-    )
-    ON CONFLICT (shop, "orderGid")
-    DO UPDATE SET
-      "draftedAt" = CURRENT_TIMESTAMP,
-      "updatedAt" = CURRENT_TIMESTAMP
+  const fallback = await prisma.$queryRaw<
+    Array<{ documentNumber: string | null }>
+  >`
+    SELECT "documentNumber"
+    FROM "OrderInvoiceDraftStatus"
+    WHERE shop = ${shop}
+      AND "orderGid" = ${orderGid}
+    LIMIT 1
   `;
-  return "";
+  if (fallback[0]?.documentNumber) return fallback[0].documentNumber;
+
+  throw new Error(`Failed to assign a draft number for ${orderGid}`);
 }
 
 /** Remove draft marks for the given orders. */

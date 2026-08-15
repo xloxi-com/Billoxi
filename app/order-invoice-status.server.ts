@@ -30,6 +30,7 @@ type OrderInvoiceNumberRow = {
   sequence: number | null;
   customerNote: string | null;
   terms: string | null;
+  voidedAt: Date | null;
 };
 
 export type InvoicedOrderMeta = {
@@ -40,7 +41,29 @@ export type InvoicedOrderMeta = {
   sequence: number | null;
   customerNote: string | null;
   terms: string | null;
+  voidedAt: Date | null;
 };
+
+function mapInvoicedMetaRow(row: OrderInvoiceNumberRow): InvoicedOrderMeta {
+  return {
+    invoicedAt: row.invoicedAt,
+    createdAt: row.createdAt ?? row.invoicedAt,
+    updatedAt: row.updatedAt ?? row.invoicedAt,
+    documentNumber: row.documentNumber,
+    sequence: row.sequence,
+    customerNote: row.customerNote,
+    terms: row.terms,
+    voidedAt: row.voidedAt ?? null,
+  };
+}
+
+function isMissingVoidedAtColumnError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /column .*voidedAt.* does not exist/i.test(message) ||
+    /\b42703\b/.test(message)
+  );
+}
 
 function hasInvoiceDelegate() {
   return typeof (prisma as { orderInvoiceStatus?: unknown }).orderInvoiceStatus ===
@@ -208,22 +231,25 @@ export async function getInvoicedMetaByOrderGids(
   if (orderGids.length === 0) return invoiced;
 
   // Prefer raw SQL so this works even if the Prisma client is temporarily stale.
-  const rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
-    SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
-    FROM "OrderInvoiceStatus"
-    WHERE shop = ${shop}
-      AND "orderGid" IN (${Prisma.join(orderGids)})
-  `;
+  let rows: OrderInvoiceNumberRow[];
+  try {
+    rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
+      SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms, "voidedAt"
+      FROM "OrderInvoiceStatus"
+      WHERE shop = ${shop}
+        AND "orderGid" IN (${Prisma.join(orderGids)})
+    `;
+  } catch (error) {
+    if (!isMissingVoidedAtColumnError(error)) throw error;
+    rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
+      SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
+      FROM "OrderInvoiceStatus"
+      WHERE shop = ${shop}
+        AND "orderGid" IN (${Prisma.join(orderGids)})
+    `;
+  }
   for (const row of rows) {
-    invoiced.set(row.orderGid, {
-      invoicedAt: row.invoicedAt,
-      createdAt: row.createdAt ?? row.invoicedAt,
-      updatedAt: row.updatedAt ?? row.invoicedAt,
-      documentNumber: row.documentNumber,
-      sequence: row.sequence,
-      customerNote: row.customerNote,
-      terms: row.terms,
-    });
+    invoiced.set(row.orderGid, mapInvoicedMetaRow(row));
   }
   return invoiced;
 }
@@ -233,22 +259,25 @@ export async function getAllInvoicedMeta(
   shop: string,
 ): Promise<Map<string, InvoicedOrderMeta>> {
   const invoiced = new Map<string, InvoicedOrderMeta>();
-  const rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
-    SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
-    FROM "OrderInvoiceStatus"
-    WHERE shop = ${shop}
-    ORDER BY "createdAt" DESC
-  `;
+  let rows: OrderInvoiceNumberRow[];
+  try {
+    rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
+      SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms, "voidedAt"
+      FROM "OrderInvoiceStatus"
+      WHERE shop = ${shop}
+      ORDER BY "createdAt" DESC
+    `;
+  } catch (error) {
+    if (!isMissingVoidedAtColumnError(error)) throw error;
+    rows = await prisma.$queryRaw<OrderInvoiceNumberRow[]>`
+      SELECT "orderGid", "invoicedAt", "createdAt", "updatedAt", "documentNumber", sequence, "customerNote", terms
+      FROM "OrderInvoiceStatus"
+      WHERE shop = ${shop}
+      ORDER BY "createdAt" DESC
+    `;
+  }
   for (const row of rows) {
-    invoiced.set(row.orderGid, {
-      invoicedAt: row.invoicedAt,
-      createdAt: row.createdAt ?? row.invoicedAt,
-      updatedAt: row.updatedAt ?? row.invoicedAt,
-      documentNumber: row.documentNumber,
-      sequence: row.sequence,
-      customerNote: row.customerNote,
-      terms: row.terms,
-    });
+    invoiced.set(row.orderGid, mapInvoicedMetaRow(row));
   }
   return invoiced;
 }
@@ -512,6 +541,11 @@ export async function unmarkOrdersInvoiced(shop: string, orderGids: string[]) {
   const gids = orderGids.map((gid) => gid.trim()).filter(Boolean);
   if (gids.length === 0) return 0;
 
+  const meta = await getInvoicedMetaByOrderGids(shop, gids);
+  if ([...meta.values()].some((row) => row.voidedAt)) {
+    throw new Error("Voided invoices cannot be deleted.");
+  }
+
   if (hasInvoiceDelegate()) {
     const result = await prisma.orderInvoiceStatus.deleteMany({
       where: { shop, orderGid: { in: gids } },
@@ -523,6 +557,21 @@ export async function unmarkOrdersInvoiced(shop: string, orderGids: string[]) {
     DELETE FROM "OrderInvoiceStatus"
     WHERE shop = ${shop}
       AND "orderGid" IN (${Prisma.join(gids)})
+  `;
+  return gids.length;
+}
+
+/** Soft-void invoices (keeps history; Voided badge; cannot be deleted). */
+export async function voidOrdersInvoice(shop: string, orderGids: string[]) {
+  const gids = orderGids.map((gid) => gid.trim()).filter(Boolean);
+  if (gids.length === 0) return 0;
+
+  await prisma.$executeRaw`
+    UPDATE "OrderInvoiceStatus"
+    SET "voidedAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
+    WHERE shop = ${shop}
+      AND "orderGid" IN (${Prisma.join(gids)})
+      AND "voidedAt" IS NULL
   `;
   return gids.length;
 }

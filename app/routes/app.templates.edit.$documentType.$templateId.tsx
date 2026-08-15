@@ -119,7 +119,10 @@ import {
 import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { PageLoader } from "../components/page-loader";
-import { templatePreviewLogoDataUrl } from "../template-preview-logo";
+import {
+  sampleStoreDetailsForTemplatePreview,
+  templatePreviewLogoDataUrl,
+} from "../template-preview-logo";
 import { useAdminI18n } from "../admin-i18n-context";
 import {
   teT,
@@ -2336,33 +2339,31 @@ export default function TemplateEditorPage() {
     }
   }, [isDirty]);
   const previewSettings = useMemo(() => {
-    const withStoreBrand = {
+    const preset = findTemplatePreset(data.templateId) ?? null;
+    const previewLogo = preset
+      ? templatePreviewLogoDataUrl(preset.accent)
+      : deferredSettings.logoDataUrl;
+    return {
       ...deferredSettings,
-      transactionLabels: {
-        ...deferredSettings.transactionLabels,
-        organization:
-          storeBrand.name ||
-          deferredSettings.transactionLabels.organization,
-      },
-      ...(storeBrand.logoDataUrl
+      ...(previewLogo
         ? {
-            logoDataUrl: storeBrand.logoDataUrl,
-            logoFileName: storeBrand.logoFileName,
+            logoDataUrl: previewLogo,
+            logoFileName: "preview-logo.svg",
           }
         : {}),
-    };
-    if (withStoreBrand.logoDataUrl) return withStoreBrand;
-    const preset = findTemplatePreset(data.templateId) ?? null;
-    if (!preset) return withStoreBrand;
-    return {
-      ...withStoreBrand,
-      logoDataUrl: templatePreviewLogoDataUrl(preset.accent),
       header: {
-        ...withStoreBrand.header,
+        ...deferredSettings.header,
         showLogo: true,
       },
     };
-  }, [storeBrand, data.templateId, deferredSettings]);
+  }, [data.templateId, deferredSettings]);
+  const previewStoreDetails = useMemo(
+    () =>
+      sampleStoreDetailsForTemplatePreview(
+        findTemplatePreset(data.templateId)?.accent ?? "#B90128",
+      ),
+    [data.templateId],
+  );
   const lastAllocatedSequence =
     (fetcher.data &&
     "lastAllocatedSequence" in fetcher.data &&
@@ -5139,7 +5140,7 @@ export default function TemplateEditorPage() {
                   <SalesOrderLiveDocument
                     settings={previewDocumentSettings}
                     templateId={data.templateId}
-                    storeDetails={data.storeDetails}
+                    storeDetails={previewStoreDetails}
                     order={previewOrder}
                   />
                 </Suspense>

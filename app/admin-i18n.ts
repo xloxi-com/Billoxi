@@ -413,6 +413,14 @@ export type AdminMessageKey =
   | "detail.convertToInvoice"
   | "detail.convertToPackingSlip"
   | "detail.convertToReturn"
+  | "detail.createCreditNote"
+  | "detail.viewCreditNote"
+  | "detail.createCreditNoteTitle"
+  | "detail.createCreditNoteBody"
+  | "detail.createCreditNoteConfirm"
+  | "detail.voidInvoice"
+  | "detail.voidInvoiceTitle"
+  | "detail.voidInvoiceBody"
   | "detail.sidebarInvoices"
   | "detail.sidebarDrafts"
   | "detail.sidebarCreditNotes"
@@ -468,6 +476,7 @@ export type AdminMessageKey =
   | "detail.dateCreditNote"
   | "detail.reason"
   | "detail.reasonPlaceholder"
+  | "detail.reasonHelp"
   | "detail.afterSavingNumber"
   | "detail.numberModeContinue"
   | "detail.numberModeManual"
@@ -498,6 +507,10 @@ export type AdminMessageKey =
   | "detail.toast.convertedReturn"
   | "detail.toast.convertedInvoice"
   | "detail.toast.savedDraft"
+  | "detail.toast.creditCreated"
+  | "detail.toast.invoiceVoided"
+  | "detail.toast.deleteVoided"
+  | "detail.deleteInvoiceVoided"
   | "detail.toast.deleteCreditFirst";
 
 export function isAdminUiLanguage(value: unknown): value is AdminUiLanguage {

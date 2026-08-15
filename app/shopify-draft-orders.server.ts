@@ -261,7 +261,6 @@ function toDraftRow(
     returnedAt: null,
     draft: true,
     // Billoxi DFT- only — Shopify #D… stays in Reference (order.name).
-    // Before Sync: empty → list shows "—".
     draftNumber: billoxiNumber,
     draftedAt: order.createdAt,
     creditNote: false,
@@ -271,6 +270,7 @@ function toDraftRow(
     creditNoteVoided: false,
     invoicedAt: null,
     invoiceNumber: "",
+    invoiceVoided: false,
     paymentStatus: formatDraftStatus(statusKey),
     paymentStatusKey: statusKey,
     fulfillmentStatus: "—",
@@ -958,10 +958,23 @@ export async function fetchDraftOrderSidebarList(
       { documentNumber: string | null }
     >();
     if (shop && nodes.length > 0) {
-      draftMeta = await getDraftMetaByOrderGids(
-        shop,
-        nodes.map((node) => node.id),
-      );
+      const gids = nodes.map((node) => node.id);
+      const meta = await getDraftMetaByOrderGids(shop, gids);
+      for (const gid of gids) {
+        const existing = meta.get(gid)?.documentNumber?.trim();
+        if (existing) {
+          draftMeta.set(gid, { documentNumber: existing });
+          continue;
+        }
+        try {
+          const documentNumber = (await markOrderDraft(shop, gid))?.trim();
+          if (documentNumber) {
+            draftMeta.set(gid, { documentNumber });
+          }
+        } catch (error) {
+          console.error("Draft number allocate failed:", gid, error);
+        }
+      }
     }
 
     return nodes.map((node) => {
@@ -1088,27 +1101,30 @@ export async function loadShopifyDraftOrdersPage(
         ? await getDraftMetaByOrderGids(shop, gids)
         : new Map();
 
-    // Fill missing DFT- numbers in the background — don't block list TTFB.
-    if (gids.length > 0 && numbersSynced) {
-      const missing = gids.filter(
-        (gid) => !draftMeta.get(gid)?.documentNumber?.trim(),
+    // Assign DFT- for this page before returning so the list never shows "—".
+    const numberByGid = new Map<string, string>();
+    for (const gid of gids) {
+      const existing = draftMeta.get(gid)?.documentNumber?.trim();
+      if (existing) numberByGid.set(gid, existing);
+    }
+    const missing = nodes
+      .filter((node) => !numberByGid.has(node.id))
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       );
-      if (missing.length > 0) {
-        void (async () => {
-          for (const gid of missing) {
-            try {
-              await markOrderDraft(shop, gid);
-            } catch (error) {
-              console.error("Draft number allocate failed:", gid, error);
-            }
-          }
-        })();
+    for (const node of missing) {
+      try {
+        const documentNumber = (await markOrderDraft(shop, node.id))?.trim();
+        if (documentNumber) numberByGid.set(node.id, documentNumber);
+      } catch (error) {
+        console.error("Draft number allocate failed:", node.id, error);
       }
     }
 
     return {
       orders: nodes.map((node) =>
-        toDraftRow(node, draftMeta.get(node.id)?.documentNumber),
+        toDraftRow(node, numberByGid.get(node.id)),
       ),
       pageInfo: result.data.draftOrders.pageInfo,
       query: params.query,

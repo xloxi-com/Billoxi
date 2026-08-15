@@ -75,7 +75,7 @@ import { emptyStoreDetails } from "../store-details";
 import { fetchShopCurrencyCode } from "../store-details.server";
 import prisma from "../db.server";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
-import { templatePreviewLogoDataUrl } from "../template-preview-logo";
+import { templatePreviewLogoDataUrl, sampleStoreDetailsForTemplatePreview } from "../template-preview-logo";
 import "../templates.css";
 import "../template-editor.css";
 import "../sales-order-document.css";
@@ -221,7 +221,6 @@ function buildPreviewBundle(args: {
     | "return";
   templateId: string;
   customizationSettings: unknown;
-  storeDetails: StoreDetails;
   numberSeries: NumberSeriesEntry;
 }): SalesOrderPreviewBundle {
   const templateName = salesOrderTemplateName(args.templateId);
@@ -232,13 +231,10 @@ function buildPreviewBundle(args: {
     args.templateId,
   );
   settings.numbering = numberingFromSeries(args.numberSeries);
-  if (args.storeDetails.name) {
-    settings.transactionLabels.organization = args.storeDetails.name;
-  }
-  if (args.storeDetails.logoDataUrl) {
-    settings.logoDataUrl = args.storeDetails.logoDataUrl;
-    settings.logoFileName = args.storeDetails.logoFileName;
-  }
+  const preset = getSalesOrderTemplatePreset(args.templateId);
+  const sampleStore = sampleStoreDetailsForTemplatePreview(preset.accent);
+  delete settings.logoDataUrl;
+  delete settings.logoFileName;
   // Pin document-type header defaults, then keep merchant toggles on top.
   settings.header = { ...defaults.header, ...settings.header };
   const title = settings.transactionLabels.documentTitle?.trim() ?? "";
@@ -273,7 +269,7 @@ function buildPreviewBundle(args: {
   }
   return {
     settings,
-    storeDetails: args.storeDetails,
+    storeDetails: sampleStore,
   };
 }
 
@@ -500,7 +496,6 @@ function TemplateThumbnail({ template }: { template: Template }) {
 function buildPreviewSettings(
   settings: TemplateEditorSettings,
   templateId: string,
-  storeLogoDataUrl?: string,
   opts?: { galleryCard?: boolean },
 ) {
   const preset = getSalesOrderTemplatePreset(templateId);
@@ -556,11 +551,8 @@ function buildPreviewSettings(
     previewSettings.metaStyle = preset.metaStyle;
   }
 
-  // Prefer shop store logo; otherwise tinted placeholder for gallery cards.
-  previewSettings.logoDataUrl =
-    storeLogoDataUrl ||
-    settings.logoDataUrl ||
-    templatePreviewLogoDataUrl(preset.accent);
+  // Always sample Northwind logo — never the merchant's store logo.
+  previewSettings.logoDataUrl = templatePreviewLogoDataUrl(preset.accent);
   previewSettings.header = {
     ...previewSettings.header,
     showLogo: true,
@@ -590,7 +582,6 @@ function SalesOrderCardThumbnail({
   const previewSettings = buildPreviewSettings(
     preview.settings,
     templateId,
-    preview.storeDetails.logoDataUrl,
     { galleryCard: true },
   );
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
@@ -765,7 +756,6 @@ function SalesOrderTemplatePreview({
   const previewSettings = buildPreviewSettings(
     preview.settings,
     templateId,
-    preview.storeDetails.logoDataUrl,
   );
   const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
   const previewOrder = {
@@ -774,6 +764,7 @@ function SalesOrderTemplatePreview({
       : sampleSalesOrderForShop(shopCurrencyCode)),
     name: "#1008",
     documentNumber,
+    referenceNumber: "SO-0001",
   };
 
   return (
@@ -806,7 +797,6 @@ export default function TemplatesPage() {
   const {
     shopCurrencyCode,
     selectedTemplates: serverSelectedTemplates,
-    storeDetails,
     numberSeries,
     customizationByKey,
   } = useLoaderData<typeof loader>();
@@ -890,7 +880,6 @@ export default function TemplatesPage() {
         templateId: template.id,
         customizationSettings:
           customizationByKey[`${activeType}:${template.id}`] ?? null,
-        storeDetails,
         numberSeries: series[activeType],
       });
     }
@@ -900,7 +889,6 @@ export default function TemplatesPage() {
     customizationByKey,
     isEditRoute,
     numberSeries,
-    storeDetails,
   ]);
 
   const salesOrderPreviewBundle = useMemo(() => {
@@ -1006,7 +994,6 @@ export default function TemplatesPage() {
         const previewSettings = buildPreviewSettings(
           preview.settings,
           template.id,
-          preview.storeDetails.logoDataUrl,
         );
         const documentNumber = `${previewSettings.numbering.prefix}${previewSettings.numbering.startingNumber}${previewSettings.numbering.suffix ?? ""}`;
         const previewOrder = {
@@ -1015,6 +1002,7 @@ export default function TemplatesPage() {
             : sampleSalesOrderForShop(shopCurrencyCode)),
           name: "#1008",
           documentNumber,
+          referenceNumber: "SO-0001",
         };
         const { downloadTemplatePreviewPdf } = await import(
           "../sales-order-dom-export.client"
