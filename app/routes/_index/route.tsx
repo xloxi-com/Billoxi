@@ -92,11 +92,15 @@ export default function App() {
   return (
     <div className={styles.page}>
       <header className={styles.nav}>
-        <a className={styles.brand} href="/">
-          <span className={styles.mark} aria-hidden>
-            B
-          </span>
-          <span>
+        <a className={styles.brand} href="/" aria-label="Billoxi home">
+          <img
+            className={styles.logoMark}
+            src="/billoxi-favicon.svg"
+            alt=""
+            width={36}
+            height={36}
+          />
+          <span className={styles.logoWord}>
             Billoxi
             <small>by XLOXI</small>
           </span>

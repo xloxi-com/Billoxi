@@ -1,16 +1,16 @@
 .page {
-  --ink: #14110e;
-  --paper: #f4efe6;
-  --card: #fffcf7;
-  --line: rgba(20, 17, 14, 0.12);
-  --muted: #5c564c;
-  --accent: #c45c26;
-  --accent-ink: #fff8f2;
+  --ink: #191919;
+  --paper: #191919;
+  --card: #242424;
+  --line: rgba(227, 255, 117, 0.14);
+  --muted: #b7b7b7;
+  --accent: #e3ff75;
+  --accent-ink: #191919;
+  --text: #f4f4f4;
   min-height: 100vh;
-  color: var(--ink);
+  color: var(--text);
   background:
-    radial-gradient(1200px 480px at 10% -10%, rgba(196, 92, 38, 0.12), transparent 55%),
-    radial-gradient(900px 420px at 100% 0%, rgba(20, 17, 14, 0.06), transparent 50%),
+    radial-gradient(900px 420px at 0% -10%, rgba(227, 255, 117, 0.08), transparent 50%),
     var(--paper);
   font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -35,28 +35,30 @@
   align-items: center;
   gap: 0.7rem;
   text-decoration: none;
-  font-weight: 650;
-  letter-spacing: -0.03em;
+  color: var(--text);
 }
 
-.brand small {
+.logoMark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
   display: block;
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 
-.mark {
-  width: 2rem;
-  height: 2rem;
-  display: grid;
-  place-items: center;
-  border-radius: 0.45rem;
-  background: var(--ink);
-  color: var(--accent-ink);
-  font-size: 0.95rem;
+.logoWord {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.logoWord small {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .links {
@@ -133,11 +135,13 @@
   border-radius: 999px;
   text-decoration: none;
   font-size: 0.9rem;
-  background: rgba(255, 252, 247, 0.6);
+  background: transparent;
+  color: var(--text);
 }
 
 .ghost:hover {
-  border-color: var(--ink);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .card {
@@ -174,12 +178,13 @@
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--line);
   border-radius: 0.65rem;
-  background: #fff;
+  background: #191919;
+  color: var(--text);
   font: inherit;
 }
 
 .input:focus {
-  outline: 2px solid rgba(196, 92, 38, 0.35);
+  outline: 2px solid rgba(227, 255, 117, 0.4);
   border-color: var(--accent);
 }
 
@@ -193,15 +198,15 @@
   padding: 0.75rem 1rem;
   border: 0;
   border-radius: 0.7rem;
-  background: var(--ink);
+  background: var(--accent);
   color: var(--accent-ink);
   font: inherit;
-  font-weight: 650;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .button:hover {
-  background: #2c2620;
+  filter: brightness(1.05);
 }
 
 .sectionHead {
@@ -252,11 +257,11 @@
   width: fit-content;
   padding: 0.12rem 0.4rem;
   border-radius: 0.3rem;
-  background: var(--ink);
+  background: var(--accent);
   color: var(--accent-ink);
   font-size: 0.68rem;
   letter-spacing: 0.08em;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .steps {
@@ -341,10 +346,15 @@
   border-radius: 0.85rem;
 }
 
+.input::placeholder {
+  color: #8a8a8a;
+}
+
 .stats strong {
   display: block;
   font-size: 1.55rem;
   letter-spacing: -0.04em;
+  color: var(--accent);
 }
 
 .stats span {
@@ -366,7 +376,7 @@
 }
 
 .appGrid a:hover {
-  border-color: var(--ink);
+  border-color: var(--accent);
 }
 
 .footer {
@@ -380,7 +390,7 @@
 }
 
 .footer a {
-  color: var(--ink);
+  color: var(--accent);
 }
 
 @media (max-width: 64rem) {
