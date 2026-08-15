@@ -410,7 +410,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     ? getCreditNoteOrderGids(session.shop, metaGids)
     : null;
   const salesOrderNumbersPromise =
-    isInvoice || isPackingSlip || isReturn
+    isInvoice || isCreditNote || isPackingSlip || isReturn
       ? getSalesOrderDocumentNumbersByOrderGids(
           session.shop,
           salesOrderTemplateId,
@@ -491,7 +491,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
     // Ref# = Billoxi sales-order number; Shopify # is order.name (separate row).
     referenceNumber =
-      soNumbers.get(order.id) || soNumbers.get(orderGid) || undefined;
+      soNumbers?.get(order.id) || soNumbers?.get(orderGid) || undefined;
   } else if (isInvoice) {
     const [invoiceMeta, creditNoteGids, soNumbers] = await Promise.all([
       invoiceMetaPromise!,
