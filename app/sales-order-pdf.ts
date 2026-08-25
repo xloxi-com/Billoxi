@@ -26,6 +26,7 @@ import {
   taxSummaryDisplayRows,
   taxSummaryTotals,
   reconcileTaxSummaryToOrderTotal,
+  shouldShowDocumentAddressBlock,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
 } from "./sales-order-document";
@@ -1045,43 +1046,52 @@ async function buildSalesOrderVectorPdf({
   // `.live-document__header { margin-bottom: 3em }`
   y = Math.max(leftY, rightY, headerTop) + emMm(sizeBody, 3.0);
 
-  // Bill To / Ship To / Customer Details — 3 slots in configured order
-  // (empty slots stay blank so remaining columns keep their place).
+  // Bill To / Ship To / Customer Details — only columns with content (pickup omits Ship To).
   const addressOrder =
     settings.addressBlockOrder?.length === 3
       ? settings.addressBlockOrder
       : (["billing", "shipping", "customer"] as const);
-  const partySlots = addressOrder.map((block) => {
-    if (block === "billing") {
-      return settings.header.showBilling
-        ? {
-            label: settings.transactionLabels.customer,
-            fields: settings.billingDetails,
-            party: order.billing,
-          }
-        : null;
-    }
-    if (block === "shipping") {
-      return settings.header.showShipping
-        ? {
-            label: settings.transactionLabels.shipping,
-            fields: settings.shippingDetails,
-            party: order.shipping,
-          }
-        : null;
-    }
-    return settings.header.showCustomerDetails
-      ? {
-          label: settings.transactionLabels.customerDetails,
-          fields: settings.customerBlockDetails,
-          party: order.customer,
-        }
-      : null;
-  });
+  const isPackingSlip = templateId.startsWith("packing-");
+  const isCreditNote = templateId.startsWith("credit-");
+  const addressBlockVisibility = {
+    isPackingSlip,
+    isCreditNote,
+    isStorePickup: order.isStorePickup === true,
+  };
+  const partySlots = addressOrder
+    .filter((block) =>
+      shouldShowDocumentAddressBlock(
+        block,
+        settings,
+        order,
+        addressBlockVisibility,
+      ),
+    )
+    .map((block) => {
+      if (block === "billing") {
+        return {
+          label: settings.transactionLabels.customer,
+          fields: settings.billingDetails,
+          party: order.billing,
+        };
+      }
+      if (block === "shipping") {
+        return {
+          label: settings.transactionLabels.shipping,
+          fields: settings.shippingDetails,
+          party: order.shipping,
+        };
+      }
+      return {
+        label: settings.transactionLabels.customerDetails,
+        fields: settings.customerBlockDetails,
+        party: order.customer,
+      };
+    });
 
-  if (partySlots.some(Boolean)) {
+  if (partySlots.length > 0) {
     ensureSpace(40);
-    const partySlotCount = 3;
+    const partySlotCount = partySlots.length;
     const gap = contentWidth * 0.07;
     const colW =
       (contentWidth - gap * (partySlotCount - 1)) / partySlotCount;
@@ -1126,7 +1136,6 @@ async function buildSalesOrderVectorPdf({
 
     let maxColY = y;
     partySlots.forEach((column, index) => {
-      if (!column) return;
       const colX = margin.left + index * (colW + gap);
       const colY = drawPartyColumn(
         column.label,

@@ -30,6 +30,7 @@ import {
   salesOrderLayoutStyle,
   salesOrderLogoPosition,
   salesOrderMetaStyle,
+  shouldShowDocumentAddressBlock,
   type PaymentStatusStyle,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
@@ -156,6 +157,30 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
   const metaStyle = salesOrderMetaStyle(templateId, settings);
   const isPackingSlip = templateId.startsWith("packing-");
   const isCreditNote = templateId.startsWith("credit-");
+  const addressBlockOrder =
+    settings.addressBlockOrder?.length === 3
+      ? settings.addressBlockOrder
+      : (["billing", "shipping", "customer"] as const);
+  const addressBlockVisibility = useMemo(
+    () => ({
+      isPackingSlip,
+      isCreditNote,
+      isStorePickup: order.isStorePickup === true,
+    }),
+    [isCreditNote, isPackingSlip, order.isStorePickup],
+  );
+  const visibleAddressBlocks = useMemo(
+    () =>
+      addressBlockOrder.filter((block) =>
+        shouldShowDocumentAddressBlock(
+          block,
+          settings,
+          order,
+          addressBlockVisibility,
+        ),
+      ),
+    [addressBlockOrder, addressBlockVisibility, order, settings],
+  );
   const orderDate = formatOrderDate(
     order.documentDate || order.createdAt,
     settings.dateFormat,
@@ -533,28 +558,15 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
       </header>
 
       <section className="live-document__details">
-        {settings.header.showBilling ||
-        settings.header.showShipping ||
-        settings.header.showCustomerDetails ? (
-          <div className="live-document__address-blocks">
-            {(
-              settings.addressBlockOrder?.length
-                ? settings.addressBlockOrder
-                : (["billing", "shipping", "customer"] as const)
-            ).map((block) => {
+        {visibleAddressBlocks.length > 0 ? (
+          <div
+            className="live-document__address-blocks"
+            style={{
+              gridTemplateColumns: `repeat(${visibleAddressBlocks.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {visibleAddressBlocks.map((block) => {
               if (block === "billing") {
-                if (!settings.header.showBilling) {
-                  // Packing slips never use Bill To — omit the slot so Ship To
-                  // aligns with the organization block on the left.
-                  if (isPackingSlip) return null;
-                  return (
-                    <div
-                      key="billing-empty"
-                      className="live-document__customer live-document__customer--empty"
-                      aria-hidden="true"
-                    />
-                  );
-                }
                 return (
                   <div
                     key="billing"
@@ -572,18 +584,6 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                 );
               }
               if (block === "shipping") {
-                if (!settings.header.showShipping) {
-                  // Credit notes omit Ship To — drop the slot so Bill To / Customer
-                  // Details share a clean two-column row.
-                  if (isPackingSlip || isCreditNote) return null;
-                  return (
-                    <div
-                      key="shipping-empty"
-                      className="live-document__customer live-document__customer--empty"
-                      aria-hidden="true"
-                    />
-                  );
-                }
                 return (
                   <div
                     key="shipping"
@@ -598,16 +598,6 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
                       "shipping",
                     )}
                   </div>
-                );
-              }
-              if (!settings.header.showCustomerDetails) {
-                if (isPackingSlip) return null;
-                return (
-                  <div
-                    key="customer-empty"
-                    className="live-document__customer live-document__customer--empty"
-                    aria-hidden="true"
-                  />
                 );
               }
               return (

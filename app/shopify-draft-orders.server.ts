@@ -11,6 +11,7 @@ import {
   formatQuantityDisplay,
   reconcilePaymentAmounts,
   reconcileTaxSummaryToOrderTotal,
+  isPickupShippingLineTitle,
   type SalesOrderDocumentData,
   type CustomerOrderListItem,
 } from "./sales-order-document";
@@ -365,6 +366,7 @@ type DraftOrderNode = {
   phone?: string | null;
   status?: string | null;
   currencyCode?: string | null;
+  shippingLine?: { title?: string | null } | null;
   customer?: {
     id?: string | null;
     displayName?: string | null;
@@ -460,6 +462,9 @@ const DRAFT_ORDER_DOCUMENT_QUERY = `#graphql
       phone
       status
       currencyCode
+      shippingLine {
+        title
+      }
       customer {
         id
         displayName
@@ -920,6 +925,7 @@ export async function fetchDraftOrderDocument(
       total,
       moneyAmount(documentTaxSet?.shopMoney),
     ),
+    isStorePickup: isPickupShippingLineTitle(order.shippingLine?.title),
   };
 
   draftDocumentCache.set(cacheKey, {

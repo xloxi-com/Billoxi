@@ -32,6 +32,7 @@ import {
   type ReturnDocumentLineSource,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
+  isStorePickupDeliveryMethod,
 } from "./sales-order-document";
 import {
   applyTemplateLanguageLabels,
@@ -738,6 +739,7 @@ type OrderNode = {
     nodes?: Array<{
       fulfillAt?: string | null;
       fulfillBy?: string | null;
+      deliveryMethod?: { methodType?: string | null } | null;
     } | null> | null;
   } | null;
   transactions?: Array<{
@@ -1048,6 +1050,7 @@ function expectedShipmentDateFromOrder(order: {
     nodes?: Array<{
       fulfillAt?: string | null;
       fulfillBy?: string | null;
+      deliveryMethod?: { methodType?: string | null } | null;
     } | null> | null;
   } | null;
 }) {
@@ -1055,6 +1058,25 @@ function expectedShipmentDateFromOrder(order: {
     return resolveExpectedShipmentDate(order.fulfillmentOrders?.nodes);
   } catch {
     return "";
+  }
+}
+
+function isStorePickupFromOrder(order: {
+  fulfillmentOrders?: {
+    nodes?: Array<{
+      deliveryMethod?: { methodType?: string | null } | null;
+    } | null> | null;
+  } | null;
+}) {
+  try {
+    for (const node of order.fulfillmentOrders?.nodes ?? []) {
+      if (isStorePickupDeliveryMethod(node?.deliveryMethod?.methodType)) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 
@@ -1218,6 +1240,9 @@ export async function fetchSalesOrderDocument(
             nodes {
               fulfillAt
               fulfillBy
+              deliveryMethod {
+                methodType
+              }
             }
           }
           transactions(first: 20) {
@@ -1679,6 +1704,7 @@ export async function fetchSalesOrderDocument(
       moneyAmount(documentTotalSet?.shopMoney),
       moneyAmount(documentTaxSet?.shopMoney),
     ),
+    isStorePickup: isStorePickupFromOrder(order),
   };
 
   if (options?.asCreditNote) {

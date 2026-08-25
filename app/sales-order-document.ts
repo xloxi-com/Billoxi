@@ -614,6 +614,8 @@ export type SalesOrderDocumentData = {
     taxableAmount: string;
     taxAmount: string;
   }>;
+  /** Store pickup / in-store fulfillment — Ship To is omitted on the document. */
+  isStorePickup?: boolean;
 };
 
 /** Bump when premium presets get new per-template colors / look. */
@@ -2997,6 +2999,83 @@ export function resolveCustomerMetafieldValue(
   const parsed = parseCustomerMetafieldDetailKey(detailKey);
   if (!parsed) return "";
   return party.metafields?.[customerMetafieldLookupKey(parsed.namespace, parsed.key)] || "";
+}
+
+export type DocumentPartyBlock =
+  | SalesOrderDocumentData["billing"]
+  | SalesOrderDocumentData["customer"];
+
+/** True when at least one enabled field would render content for this party block. */
+export function partyBlockHasContent(
+  fields: TemplateEditorSettings["billingDetails"],
+  party: DocumentPartyBlock,
+): boolean {
+  for (const field of fields) {
+    if (!field.enabled) continue;
+    if (field.key === "company" && party.company?.trim()) return true;
+    if (field.key === "name" && party.name?.trim()) return true;
+    if (field.key === "address" && party.address.length > 0) return true;
+    if (field.key === "phone" && party.phone?.trim()) return true;
+    if (field.key === "email" && party.email?.trim()) return true;
+    if (field.key === "companyId" && party.companyId?.trim()) return true;
+    if (field.key === "taxId" && party.taxId?.trim()) return true;
+    if (field.key === "vatNumber" && party.vatNumber?.trim()) return true;
+    if (isCustomerMetafieldDetailKey(field.key)) {
+      if (resolveCustomerMetafieldValue(party, field.key)?.trim()) return true;
+    }
+  }
+  return false;
+}
+
+const STORE_PICKUP_DELIVERY_METHODS = new Set(["PICK_UP", "RETAIL"]);
+
+export function isStorePickupDeliveryMethod(
+  methodType: string | null | undefined,
+): boolean {
+  return Boolean(
+    methodType && STORE_PICKUP_DELIVERY_METHODS.has(methodType.toUpperCase()),
+  );
+}
+
+export function isPickupShippingLineTitle(
+  title: string | null | undefined,
+): boolean {
+  if (!title?.trim()) return false;
+  return /\bpick\s*-?\s*up\b/i.test(title);
+}
+
+export type AddressBlockVisibilityOptions = {
+  isPackingSlip?: boolean;
+  isCreditNote?: boolean;
+  isStorePickup?: boolean;
+};
+
+/** Whether a Bill To / Ship To / Customer Details column should render for this order. */
+export function shouldShowDocumentAddressBlock(
+  block: AddressBlockKey,
+  settings: TemplateEditorSettings,
+  order: SalesOrderDocumentData,
+  options: AddressBlockVisibilityOptions = {},
+): boolean {
+  const { isPackingSlip, isCreditNote, isStorePickup } = options;
+
+  if (block === "billing") {
+    if (!settings.header.showBilling || isPackingSlip) return false;
+    return partyBlockHasContent(settings.billingDetails, order.billing);
+  }
+  if (block === "shipping") {
+    if (
+      !settings.header.showShipping ||
+      isPackingSlip ||
+      isCreditNote ||
+      isStorePickup
+    ) {
+      return false;
+    }
+    return partyBlockHasContent(settings.shippingDetails, order.shipping);
+  }
+  if (!settings.header.showCustomerDetails) return false;
+  return partyBlockHasContent(settings.customerBlockDetails, order.customer);
 }
 
 export type ExpandedTableColumn = TemplateEditorSettings["columns"][number] & {
