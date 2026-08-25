@@ -42,6 +42,9 @@ export type TemplateLabelPack = {
     shopifyOrder?: string;
     expectedShipmentDate: string;
     paymentMethod: string;
+    deliveryMethod?: string;
+    deliveryMethodPickup?: string;
+    deliveryMethodShipping?: string;
   };
   columns: {
     number: string;
@@ -105,6 +108,9 @@ const en: TemplateLabelPack = {
     shopifyOrder: "Shopify Order#",
     expectedShipmentDate: "Expected Shipment Date",
     paymentMethod: "Payment Method",
+    deliveryMethod: "Delivery Method",
+    deliveryMethodPickup: "Pick up in store",
+    deliveryMethodShipping: "Shipping",
   },
   columns: {
     number: "#",

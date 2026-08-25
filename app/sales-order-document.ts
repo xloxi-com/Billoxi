@@ -263,6 +263,7 @@ export type TemplateEditorSettings = {
     showShopifyOrder: boolean;
     showExpectedShipmentDate: boolean;
     showPaymentMethod: boolean;
+    showDeliveryMethod: boolean;
   };
   billingDetails: Array<{ key: string; enabled: boolean; label: string }>;
   shippingDetails: Array<{ key: string; enabled: boolean; label: string }>;
@@ -282,6 +283,9 @@ export type TemplateEditorSettings = {
     shopifyOrder: string;
     expectedShipmentDate: string;
     paymentMethod: string;
+    deliveryMethod: string;
+    deliveryMethodPickup: string;
+    deliveryMethodShipping: string;
   };
   numbering: {
     prefix: string;
@@ -3050,6 +3054,19 @@ export type AddressBlockVisibilityOptions = {
   isStorePickup?: boolean;
 };
 
+export function resolveDocumentDeliveryMethod(
+  order: Pick<SalesOrderDocumentData, "isStorePickup">,
+  labels: Pick<
+    TemplateEditorSettings["transactionLabels"],
+    "deliveryMethodPickup" | "deliveryMethodShipping"
+  >,
+): string {
+  if (order.isStorePickup === true) {
+    return labels.deliveryMethodPickup?.trim() || "Pick up in store";
+  }
+  return labels.deliveryMethodShipping?.trim() || "Shipping";
+}
+
 /** Whether a Bill To / Ship To / Customer Details column should render for this order. */
 export function shouldShowDocumentAddressBlock(
   block: AddressBlockKey,
@@ -4270,6 +4287,8 @@ export function defaultTemplateSettings(
   const isSalesOrderDoc =
     !isInvoice && !isDraft && !isReturn && !isCreditNote && !isPackingSlip;
   const isNonPaymentDoc = isDraft || isReturn || isCreditNote || isPackingSlip;
+  const showDeliveryMethodDefault =
+    isSalesOrderDoc || isInvoice || isDraft || isPackingSlip;
   return {
     name,
     language: "en",
@@ -4312,6 +4331,7 @@ export function defaultTemplateSettings(
       showShopifyOrder: false,
       showExpectedShipmentDate: isPackingSlip,
       showPaymentMethod: !isNonPaymentDoc,
+      showDeliveryMethod: showDeliveryMethodDefault,
     },
     billingDetails: [
       { key: "company", enabled: true, label: "Company" },
@@ -4376,6 +4396,9 @@ export function defaultTemplateSettings(
       shopifyOrder: "Shopify Order#",
       expectedShipmentDate: "Expected Shipment Date",
       paymentMethod: "Payment Method",
+      deliveryMethod: "Delivery Method",
+      deliveryMethodPickup: "Pick up in store",
+      deliveryMethodShipping: "Shipping",
     },
     numbering: {
       prefix: isPackingSlip
@@ -4773,6 +4796,7 @@ export function mergeTemplateSettings(
           incoming.showShopifyOrder === true,
         showExpectedShipmentDate: merged.showExpectedShipmentDate === true,
         showPaymentMethod: merged.showPaymentMethod !== false,
+        showDeliveryMethod: merged.showDeliveryMethod !== false,
       };
     })(),
     billingDetails: (() => {
@@ -4887,6 +4911,15 @@ export function mergeTemplateSettings(
       paymentMethod:
         input.transactionLabels?.paymentMethod ??
         defaults.transactionLabels.paymentMethod,
+      deliveryMethod:
+        input.transactionLabels?.deliveryMethod ??
+        defaults.transactionLabels.deliveryMethod,
+      deliveryMethodPickup:
+        input.transactionLabels?.deliveryMethodPickup ??
+        defaults.transactionLabels.deliveryMethodPickup,
+      deliveryMethodShipping:
+        input.transactionLabels?.deliveryMethodShipping ??
+        defaults.transactionLabels.deliveryMethodShipping,
     },
     numbering: (() => {
       const incoming =

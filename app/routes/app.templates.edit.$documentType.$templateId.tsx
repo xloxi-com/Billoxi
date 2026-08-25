@@ -313,6 +313,7 @@ type TemplateEditorSettings = {
     showShopifyOrder: boolean;
     showExpectedShipmentDate: boolean;
     showPaymentMethod: boolean;
+    showDeliveryMethod: boolean;
   };
   billingDetails: CustomerDetailField[];
   shippingDetails: CustomerDetailField[];
@@ -330,6 +331,9 @@ type TemplateEditorSettings = {
     shopifyOrder: string;
     expectedShipmentDate: string;
     paymentMethod: string;
+    deliveryMethod: string;
+    deliveryMethodPickup: string;
+    deliveryMethodShipping: string;
   };
   numbering: {
     prefix: string;
@@ -1379,6 +1383,7 @@ function mergeSettings(
           incoming.showShopifyOrder === true,
         showExpectedShipmentDate: merged.showExpectedShipmentDate === true,
         showPaymentMethod: merged.showPaymentMethod !== false,
+        showDeliveryMethod: merged.showDeliveryMethod !== false,
       };
     })(),
     billingDetails: normalizeCustomerDetails(
@@ -1428,6 +1433,15 @@ function mergeSettings(
       paymentMethod:
         input.transactionLabels?.paymentMethod ??
         defaults.transactionLabels.paymentMethod,
+      deliveryMethod:
+        input.transactionLabels?.deliveryMethod ??
+        defaults.transactionLabels.deliveryMethod,
+      deliveryMethodPickup:
+        input.transactionLabels?.deliveryMethodPickup ??
+        defaults.transactionLabels.deliveryMethodPickup,
+      deliveryMethodShipping:
+        input.transactionLabels?.deliveryMethodShipping ??
+        defaults.transactionLabels.deliveryMethodShipping,
     },
     numbering: normalizeNumbering(input.numbering, defaults.numbering),
     columns: Array.isArray(input.columns)
@@ -4120,6 +4134,22 @@ export default function TemplateEditorPage() {
                                         ],
                                       ] as const)
                                     : []),
+                                  ...(!isCreditNoteEditor
+                                    ? ([
+                                        [
+                                          "deliveryMethod",
+                                          "te.tx.deliveryMethodLabel",
+                                        ],
+                                        [
+                                          "deliveryMethodPickup",
+                                          "te.tx.deliveryMethodPickupLabel",
+                                        ],
+                                        [
+                                          "deliveryMethodShipping",
+                                          "te.tx.deliveryMethodShippingLabel",
+                                        ],
+                                      ] as const)
+                                    : []),
                                 ] as const
                               ).map(([key, labelKey]) => (
                                 <TextField
@@ -4210,6 +4240,20 @@ export default function TemplateEditorPage() {
                                       header: {
                                         ...settings.header,
                                         showPaymentMethod,
+                                      },
+                                    })
+                                  }
+                                />
+                              ) : null}
+                              {!isCreditNoteEditor ? (
+                                <Checkbox
+                                  label={teT(language, "te.tx.showDeliveryMethod")}
+                                  checked={settings.header.showDeliveryMethod}
+                                  onChange={(showDeliveryMethod) =>
+                                    updateSettings({
+                                      header: {
+                                        ...settings.header,
+                                        showDeliveryMethod,
                                       },
                                     })
                                   }

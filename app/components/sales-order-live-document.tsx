@@ -27,6 +27,7 @@ import {
   taxSummaryDisplayRows,
   taxSummaryTotals,
   reconcileTaxSummaryToOrderTotal,
+  resolveDocumentDeliveryMethod,
   salesOrderLayoutStyle,
   salesOrderLogoPosition,
   salesOrderMetaStyle,
@@ -551,6 +552,17 @@ export const SalesOrderLiveDocument = memo(function SalesOrderLiveDocument({
               <>
                 <dt>{settings.transactionLabels.paymentMethod}</dt>
                 <dd>{order.paymentMethod}</dd>
+              </>
+            ) : null}
+            {settings.header.showDeliveryMethod ? (
+              <>
+                <dt>{settings.transactionLabels.deliveryMethod}</dt>
+                <dd>
+                  {resolveDocumentDeliveryMethod(
+                    order,
+                    settings.transactionLabels,
+                  )}
+                </dd>
               </>
             ) : null}
           </dl>

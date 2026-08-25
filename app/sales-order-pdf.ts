@@ -26,6 +26,7 @@ import {
   taxSummaryDisplayRows,
   taxSummaryTotals,
   reconcileTaxSummaryToOrderTotal,
+  resolveDocumentDeliveryMethod,
   shouldShowDocumentAddressBlock,
   type SalesOrderDocumentData,
   type TemplateEditorSettings,
@@ -961,6 +962,12 @@ async function buildSalesOrderVectorPdf({
     metaRows.push([
       settings.transactionLabels.paymentMethod,
       order.paymentMethod,
+    ]);
+  }
+  if (settings.header.showDeliveryMethod) {
+    metaRows.push([
+      settings.transactionLabels.deliveryMethod,
+      resolveDocumentDeliveryMethod(order, settings.transactionLabels),
     ]);
   }
   if (metaRows.length > 0) {
