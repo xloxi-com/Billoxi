@@ -739,8 +739,14 @@ type OrderNode = {
     nodes?: Array<{
       fulfillAt?: string | null;
       fulfillBy?: string | null;
-      deliveryMethod?: { methodType?: string | null } | null;
+      deliveryMethod?: {
+        methodType?: string | null;
+        presentedName?: string | null;
+      } | null;
     } | null> | null;
+  } | null;
+  shippingLines?: {
+    nodes?: Array<{ title?: string | null } | null> | null;
   } | null;
   transactions?: Array<{
     kind?: string | null;
@@ -1080,6 +1086,34 @@ function isStorePickupFromOrder(order: {
   }
 }
 
+function resolveDeliveryMethodNameFromOrder(order: {
+  shippingLines?: {
+    nodes?: Array<{ title?: string | null } | null> | null;
+  } | null;
+  fulfillmentOrders?: {
+    nodes?: Array<{
+      deliveryMethod?: {
+        methodType?: string | null;
+        presentedName?: string | null;
+      } | null;
+    } | null> | null;
+  } | null;
+}) {
+  try {
+    for (const line of order.shippingLines?.nodes ?? []) {
+      const title = line?.title?.trim();
+      if (title) return title;
+    }
+    for (const node of order.fulfillmentOrders?.nodes ?? []) {
+      const presented = node?.deliveryMethod?.presentedName?.trim();
+      if (presented) return presented;
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 function creditNoteRefundSourceFromOrder(
   order: OrderNode,
 ): CreditNoteRefundSource {
@@ -1242,7 +1276,13 @@ export async function fetchSalesOrderDocument(
               fulfillBy
               deliveryMethod {
                 methodType
+                presentedName
               }
+            }
+          }
+          shippingLines(first: 5) {
+            nodes {
+              title
             }
           }
           transactions(first: 20) {
@@ -1705,6 +1745,7 @@ export async function fetchSalesOrderDocument(
       moneyAmount(documentTaxSet?.shopMoney),
     ),
     isStorePickup: isStorePickupFromOrder(order),
+    deliveryMethodName: resolveDeliveryMethodNameFromOrder(order),
   };
 
   if (options?.asCreditNote) {

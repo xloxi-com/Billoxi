@@ -19,6 +19,7 @@ export const sampleSalesOrder: SalesOrderDocumentData = {
   createdAt: "2026-07-19T10:00:00.000Z",
   expectedShipmentDate: "2026-07-25T12:00:00.000Z",
   paymentMethod: "Bank Transfer",
+  deliveryMethodName: "Standard Shipping",
   email: "jane.cooper@acme.example",
   phone: "+1 (512) 555-0147",
   customerId: null,

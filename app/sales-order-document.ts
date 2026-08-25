@@ -620,6 +620,8 @@ export type SalesOrderDocumentData = {
   }>;
   /** Store pickup / in-store fulfillment — Ship To is omitted on the document. */
   isStorePickup?: boolean;
+  /** Checkout shipping / delivery option name (shipping line or fulfillment method). */
+  deliveryMethodName?: string;
 };
 
 /** Bump when premium presets get new per-template colors / look. */
@@ -3055,12 +3057,14 @@ export type AddressBlockVisibilityOptions = {
 };
 
 export function resolveDocumentDeliveryMethod(
-  order: Pick<SalesOrderDocumentData, "isStorePickup">,
+  order: Pick<SalesOrderDocumentData, "isStorePickup" | "deliveryMethodName">,
   labels: Pick<
     TemplateEditorSettings["transactionLabels"],
     "deliveryMethodPickup" | "deliveryMethodShipping"
   >,
 ): string {
+  const fromOrder = order.deliveryMethodName?.trim();
+  if (fromOrder) return fromOrder;
   if (order.isStorePickup === true) {
     return labels.deliveryMethodPickup?.trim() || "Pick up in store";
   }

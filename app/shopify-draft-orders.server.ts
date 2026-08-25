@@ -926,6 +926,7 @@ export async function fetchDraftOrderDocument(
       moneyAmount(documentTaxSet?.shopMoney),
     ),
     isStorePickup: isPickupShippingLineTitle(order.shippingLine?.title),
+    deliveryMethodName: order.shippingLine?.title?.trim() || "",
   };
 
   draftDocumentCache.set(cacheKey, {
