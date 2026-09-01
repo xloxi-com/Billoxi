@@ -143,9 +143,7 @@ async function fetchShopBillingState(
   try {
     const { hasActivePayment, appSubscriptions } = await billing.check({
       plans: [...ALL_BILLING_PLAN_NAMES],
-      // Include test subscriptions so Partner development stores stay gated
-      // after approving a test charge.
-      isTest: true,
+      // Omit isTest so live + test subscriptions both count (dev stores vs merchants).
     });
 
     const active = hasActivePayment ? appSubscriptions[0] : null;
@@ -284,18 +282,18 @@ export async function loadShopPlanIdFromAdmin(
 }
 
 /**
- * Test charges by default so hosted apps (NODE_ENV=production) can still be
- * approved on stores with no payment method. Set SHOPIFY_BILLING_TEST=false
- * for live merchant charges. Development stores always stay on test charges.
+ * Live merchant charges by default. Set SHOPIFY_BILLING_TEST=true for local
+ * testing on non-development stores. Partner development stores always use
+ * test charges (they cannot add a real payment method).
  */
 export function isShopifyBillingTestMode(): boolean {
   const raw = process.env.SHOPIFY_BILLING_TEST?.trim().toLowerCase();
-  return raw !== "false" && raw !== "0";
+  return raw === "true" || raw === "1";
 }
 
 export async function shouldUseTestBillingCharge(
   admin: AdminGraphql,
 ): Promise<boolean> {
-  if (isShopifyBillingTestMode()) return true;
-  return isPartnerDevelopmentShop(admin);
+  if (await isPartnerDevelopmentShop(admin)) return true;
+  return isShopifyBillingTestMode();
 }
