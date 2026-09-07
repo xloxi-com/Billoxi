@@ -1024,7 +1024,7 @@ export function parseSalesOrdersSearchParams(url: URL) {
   const sortSelected = (
     requestedSort in SORT_OPTIONS ? requestedSort : "date desc"
   ) as SortSelected;
-  const bypassCache = url.searchParams.get("fresh") === "1";
+  const bypassCache = url.searchParams.has("fresh");
 
   return {
     after,
@@ -1106,6 +1106,8 @@ export async function loadSalesOrdersPage(
   templateId: string = DEFAULT_SALES_ORDER_TEMPLATE_ID,
   options?: {
     listFilter?: "invoiced" | "credit-note" | "packing-slip" | "return" | "draft";
+    /** Scope window — keep separate caches so re-auth to read_all_orders cannot reuse a 60-day list. */
+    orderAccess?: "all" | "recent";
   },
 ): Promise<SalesOrdersPage> {
   const sortConfig = SORT_OPTIONS[params.sortSelected];
@@ -1121,6 +1123,7 @@ export async function loadSalesOrdersPage(
   const isPackingSlipView = options?.listFilter === "packing-slip";
   const isReturnView = options?.listFilter === "return";
   const isDraftView = options?.listFilter === "draft";
+  const orderAccess = options?.orderAccess === "all" ? "all" : "recent";
 
   const emptyPage = (): SalesOrdersPage => ({
     orders: [],
@@ -1145,6 +1148,7 @@ export async function loadSalesOrdersPage(
   const cacheKeyBase = [
     shop,
     templateId,
+    orderAccess,
     params.after ?? "",
     params.before ?? "",
     isDraftView

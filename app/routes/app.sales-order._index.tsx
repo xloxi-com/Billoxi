@@ -434,12 +434,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     session.shop,
     "sales-order",
   );
+  const orderAccess = session.scope?.includes("read_all_orders")
+    ? "all"
+    : "recent";
   const pagePromise = templatePromise.then((shopSelectedTemplateId) =>
     loadSalesOrdersPage(
       admin,
       session.shop,
       params,
       resolveSalesOrderTemplateId(shopSelectedTemplateId),
+      { orderAccess },
     ),
   );
   const [shopSelectedTemplateId, smtpSettings, planId, page] =
@@ -532,13 +536,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "reload-list") {
-    // Cheap watermark check — skip full GraphQL list reload when nothing changed.
+    const force = String(formData.get("force") || "") === "1";
+    // Manual Reload must always bust cache. Watermark skip is only safe for
+    // background poll — serverless instances keep separate in-memory caches, so
+    // skipping invalidate can resurface a stale short list after a full fetch.
+    if (force) {
+      invalidateSalesOrdersCache(session.shop);
+      return Response.json({
+        ok: true,
+        document: "reload" as const,
+        changed: true,
+        force: true,
+      });
+    }
     const changed = await salesOrdersListMayHaveChanged(admin, session.shop);
     if (changed) invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,
       document: "reload" as const,
       changed,
+      force: false,
     });
   }
 
@@ -2216,7 +2233,18 @@ export default function SalesOrderPage() {
     }
 
     if (result.document === "reload") {
-      revalidator.revalidate();
+      const forceReload = Boolean(
+        (result as { force?: boolean }).force,
+      );
+      if (forceReload) {
+        // Bypass every serverless instance's in-memory list cache.
+        // Unique fresh token so repeat Reloads still trigger a new load.
+        const params = new URLSearchParams(searchParams);
+        params.set("fresh", String(Date.now()));
+        setSearchParams(params, { replace: true, preventScrollReset: true });
+      } else {
+        revalidator.revalidate();
+      }
       return;
     }
 
@@ -2505,6 +2533,8 @@ export default function SalesOrderPage() {
     isReturnList,
     orders,
     revalidator,
+    searchParams,
+    setSearchParams,
   ]);
 
   useEffect(() => {
@@ -2520,6 +2550,7 @@ export default function SalesOrderPage() {
     clearSelection();
     const formData = new FormData();
     formData.set("intent", "reload-list");
+    formData.set("force", "1");
     convertFetcher.submit(formData, { method: "post" });
   }, [clearSelection, convertFetcher, isBusy, isInvoiceList]);
 

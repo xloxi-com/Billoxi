@@ -40,7 +40,7 @@ export function createAppPageClientCache(options?: {
     /** Fresh within soft TTL — safe to skip server entirely. */
     getFresh(request: Request) {
       const url = new URL(request.url);
-      if (url.searchParams.get("fresh") === "1") return null;
+      if (url.searchParams.has("fresh")) return null;
       const hit = cache.get(keyFromUrl(url));
       if (hit && Date.now() - hit.created < softTtlMs) return hit.data;
       return null;
@@ -50,7 +50,7 @@ export function createAppPageClientCache(options?: {
      */
     getStale(request: Request) {
       const url = new URL(request.url);
-      if (url.searchParams.get("fresh") === "1") return null;
+      if (url.searchParams.has("fresh")) return null;
       const hit = cache.get(keyFromUrl(url));
       if (!hit) return null;
       const now = Date.now();
@@ -64,7 +64,7 @@ export function createAppPageClientCache(options?: {
     },
     set(request: Request, data: unknown) {
       const url = new URL(request.url);
-      if (url.searchParams.get("fresh") === "1") return;
+      if (url.searchParams.has("fresh")) return;
       const key = keyFromUrl(url);
       const now = Date.now();
       cache.set(key, {

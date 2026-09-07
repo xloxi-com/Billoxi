@@ -64,6 +64,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       session.shop,
       params,
       resolveSalesOrderTemplateId(shopSelectedTemplateId),
+      {
+        orderAccess: session.scope?.includes("read_all_orders")
+          ? "all"
+          : "recent",
+      },
     ),
   );
   const [
