@@ -119,10 +119,6 @@ import {
 import { sampleSalesOrderForShop, sampleCreditNoteForShop } from "../sales-order-sample";
 import { PaperScaleFrame } from "../components/paper-scale-frame";
 import { PageLoader } from "../components/page-loader";
-import {
-  sampleStoreDetailsForTemplatePreview,
-  templatePreviewLogoDataUrl,
-} from "../template-preview-logo";
 import { useAdminI18n } from "../admin-i18n-context";
 import {
   teT,
@@ -2353,30 +2349,37 @@ export default function TemplateEditorPage() {
     }
   }, [isDirty]);
   const previewSettings = useMemo(() => {
-    const preset = findTemplatePreset(data.templateId) ?? null;
-    const previewLogo = preset
-      ? templatePreviewLogoDataUrl(preset.accent)
-      : deferredSettings.logoDataUrl;
+    // Editor canvas uses the merchant store logo (same as Organization details).
+    // Gallery thumbs still use the sample Northwind/XLOXI mark elsewhere.
+    const shopLogo = storeBrand.logoDataUrl || deferredSettings.logoDataUrl;
     return {
       ...deferredSettings,
-      ...(previewLogo
+      ...(shopLogo
         ? {
-            logoDataUrl: previewLogo,
-            logoFileName: "preview-logo.svg",
+            logoDataUrl: shopLogo,
+            logoFileName:
+              storeBrand.logoFileName ||
+              deferredSettings.logoFileName ||
+              "store-logo",
           }
-        : {}),
+        : {
+            logoDataUrl: undefined,
+            logoFileName: undefined,
+          }),
       header: {
         ...deferredSettings.header,
         showLogo: true,
       },
     };
-  }, [data.templateId, deferredSettings]);
+  }, [deferredSettings, storeBrand.logoDataUrl, storeBrand.logoFileName]);
   const previewStoreDetails = useMemo(
-    () =>
-      sampleStoreDetailsForTemplatePreview(
-        findTemplatePreset(data.templateId)?.accent ?? "#B90128",
-      ),
-    [data.templateId],
+    () => ({
+      ...data.storeDetails,
+      name: storeBrand.name || data.storeDetails.name,
+      logoDataUrl: storeBrand.logoDataUrl ?? data.storeDetails.logoDataUrl,
+      logoFileName: storeBrand.logoFileName ?? data.storeDetails.logoFileName,
+    }),
+    [data.storeDetails, storeBrand],
   );
   const lastAllocatedSequence =
     (fetcher.data &&
