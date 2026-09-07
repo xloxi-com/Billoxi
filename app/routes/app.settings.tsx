@@ -531,7 +531,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 const SETTINGS_CLIENT_TTL_MS = 120_000;
-const SETTINGS_CACHE_VERSION = "plan-v2";
+const SETTINGS_CACHE_VERSION = "plan-v3-starter-auto-docs";
 const settingsClientCache = new Map<string, { expires: number; data: unknown }>();
 
 function bustSettingsClientCache() {

@@ -25,8 +25,6 @@ export const PREMIUM_CAPABILITIES: readonly PlanCapability[] = [
   "smtp",
   "emailTemplates",
   "emailAttachPdf",
-  "autoInvoice",
-  "autoCreditNote",
   "multiCurrency",
   "dashboardChart",
 ] as const;
@@ -43,8 +41,9 @@ export const PLAN_CAPABILITY_MIN: Record<PlanCapability, PlanId> = {
   smtp: "premium",
   emailTemplates: "premium",
   emailAttachPdf: "premium",
-  autoInvoice: "premium",
-  autoCreditNote: "premium",
+  /** Advanced automation — available on all paid plans including STARTER. */
+  autoInvoice: "starter",
+  autoCreditNote: "starter",
   multiCurrency: "premium",
   customerDownloadLinks: "ultimate",
   /** All paid plans — gated by monthly order quota, not plan tier. */

@@ -306,14 +306,14 @@ export const PLAN_COMPARISON_ROWS: readonly PlanComparisonRow[] = [
   {
     category: "Settings",
     feature: "Auto invoice on paid",
-    starter: "No",
+    starter: "Yes",
     premium: "Yes",
     ultimate: "Yes",
   },
   {
     category: "Settings",
     feature: "Auto credit note (cancel / refund)",
-    starter: "No",
+    starter: "Yes",
     premium: "Yes",
     ultimate: "Yes",
   },
@@ -370,7 +370,7 @@ export const BILLIOXI_PLANS: readonly PlanDefinition[] = [
     monthlyOrderLimit: 50,
     tagline: "For small and new stores getting started with documents.",
     appStoreCopy:
-      "All 6 document types — sales orders, invoices, packing slips, credit notes, drafts & returns. All templates available, print & PDF download. Perfect for small stores.",
+      "All 6 document types — sales orders, invoices, packing slips, credit notes, drafts & returns. Auto invoice on paid, auto credit notes, all templates, print & PDF. Perfect for small stores.",
     highlights: [
       "All 6 document types",
       "50 orders / month",
@@ -379,6 +379,7 @@ export const BILLIOXI_PLANS: readonly PlanDefinition[] = [
       "Print & PDF download",
       "Live preview & convert docs",
       "Store details & numbering",
+      "Auto invoice / credit note",
       "All template languages",
     ],
   },
@@ -389,16 +390,15 @@ export const BILLIOXI_PLANS: readonly PlanDefinition[] = [
     trialDays: 7,
     monthlyOrderLimit: 200,
     tagline:
-      "For growing stores that need SMTP email, bulk actions, and automation.",
+      "For growing stores that need SMTP email, bulk actions, and multi-currency.",
     appStoreCopy:
-      "SMTP email with PDF, bulk download & automation. All templates available.",
+      "SMTP email with PDF, bulk download & multi-currency. All templates available.",
     highlights: [
       "Everything in STARTER",
       "200 orders / month",
       "Email templates (all 6 types)",
       "SMTP email with PDF attach",
       "Bulk download, email & convert",
-      "Auto invoice / credit note",
       "Multi-currency",
       "Dashboard daily chart",
     ],
