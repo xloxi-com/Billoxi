@@ -336,6 +336,8 @@ type DraftOrderLineNode = {
   variantTitle?: string | null;
   name?: string | null;
   quantity: number;
+  /** Snapshot on the line — remains when variant is deleted/unlinked. */
+  sku?: string | null;
   originalUnitPriceSet?: MoneyBag | null;
   originalTotalSet?: MoneyBag | null;
   totalDiscountSet?: MoneyBag | null;
@@ -581,6 +583,7 @@ const DRAFT_ORDER_DOCUMENT_QUERY = `#graphql
           variantTitle
           name
           quantity
+          sku
           originalUnitPriceSet { shopMoney { amount } presentmentMoney { amount } }
           originalTotalSet { shopMoney { amount } presentmentMoney { amount } }
           totalDiscountSet { shopMoney { amount } presentmentMoney { amount } }
@@ -835,7 +838,7 @@ export async function fetchDraftOrderDocument(
       taxPercentage,
       taxAmount: taxAmountNum.toFixed(2),
       amount: Number.isFinite(amount) ? amount.toFixed(2) : "0.00",
-      sku: item.variant?.sku || "",
+      sku: item.variant?.sku?.trim() || item.sku?.trim() || "",
       barcode: item.variant?.barcode || "",
     };
   });

@@ -896,6 +896,8 @@ type OrderNode = {
       variantTitle?: string | null;
       name?: string | null;
       quantity: number;
+      /** Snapshot on the line — remains when variant is deleted/unlinked. */
+      sku?: string | null;
       originalUnitPriceSet?: { shopMoney?: { amount: string } };
       discountedTotalSet?: { shopMoney?: { amount: string } };
       originalTotalSet?: { shopMoney?: { amount: string } };
@@ -1489,6 +1491,7 @@ export async function fetchSalesOrderDocument(
               variantTitle
               name
               quantity
+              sku
               originalUnitPriceSet { shopMoney { amount } presentmentMoney { amount } }
               originalTotalSet { shopMoney { amount } presentmentMoney { amount } }
               totalDiscountSet { shopMoney { amount } presentmentMoney { amount } }
@@ -1650,7 +1653,7 @@ export async function fetchSalesOrderDocument(
         taxPercentage,
         taxAmount: taxAmountNum.toFixed(2),
         amount: Number.isFinite(amount) ? amount.toFixed(2) : "0.00",
-        sku: item.variant?.sku || "",
+        sku: item.variant?.sku?.trim() || item.sku?.trim() || "",
         barcode: item.variant?.barcode?.trim() || "",
       };
     });
