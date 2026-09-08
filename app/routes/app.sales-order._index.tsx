@@ -97,6 +97,7 @@ import {
   unmarkOrdersInvoiced,
   voidOrdersInvoice,
 } from "../order-invoice-status.server";
+import { ensureInvoiceOrderNumbersSynced } from "../invoice-order-number-sync.server";
 import {
   markOrderDraft,
   unmarkOrdersDraft,
@@ -666,6 +667,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error instanceof Error ? error.message : "Failed to delete invoice";
       return Response.json({ ok: false, error: message }, { status: 400 });
     }
+    // Lock install/auto paid-order backfill so deleted invoices stay gone.
+    await ensureInvoiceOrderNumbersSynced(session.shop);
     invalidateSalesOrdersCache(session.shop);
     return Response.json({
       ok: true,

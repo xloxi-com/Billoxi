@@ -97,6 +97,7 @@ import {
   voidOrdersInvoice,
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
+import { ensureInvoiceOrderNumbersSynced } from "../invoice-order-number-sync.server";
 import {
   getDraftMetaByOrderGids,
   getDraftOrderGids,
@@ -931,6 +932,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         error instanceof Error ? error.message : "Failed to delete invoice";
       return Response.json({ ok: false, error: message }, { status: 400 });
     }
+    // Lock install/auto paid-order backfill so deleted invoices stay gone.
+    await ensureInvoiceOrderNumbersSynced(session.shop);
     invalidateSalesOrderDocumentCache(session.shop, orderGid);
     invalidateDraftOrderDocumentCache(session.shop, orderGid);
     invalidateSalesOrdersCache(session.shop);

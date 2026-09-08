@@ -9,6 +9,7 @@ import {
   type NumberSeriesEntry,
 } from "./number-series";
 import {
+  loadInvoiceSettingsForShop,
   loadNumberSeriesForShop,
   loadNumberSyncFlagsForShop,
   saveNumberSeriesForShop,
@@ -186,6 +187,17 @@ async function markInvoiceOrderNumbersSynced(shop: string): Promise<void> {
   }
 }
 
+/**
+ * After the merchant deletes invoices, lock install/auto backfill so paid
+ * Shopify orders are not turned into invoices again on reopen/reinstall.
+ */
+export async function ensureInvoiceOrderNumbersSynced(
+  shop: string,
+): Promise<void> {
+  if (await hasInvoiceOrderNumbersSynced(shop)) return;
+  await markInvoiceOrderNumbersSynced(shop);
+}
+
 async function clearInvoiceOrderNumbersSynced(shop: string): Promise<void> {
   syncedShops.delete(shop);
   try {
@@ -358,8 +370,9 @@ async function upsertInvoiceNumber(
 }
 
 /**
- * Merchant-triggered sync: create/renumber invoices for all paid Shopify orders
- * using saved Prefix + Starting number (oldest → newest). Replaces existing INV- numbers.
+ * Install / list auto-sync: create invoices for paid Shopify orders (oldest → newest)
+ * using Prefix + Starting number. Skips when already synced, or when Advanced →
+ * On paid is off (empty invoice list is a valid merchant choice after deletes).
  */
 export async function syncInvoiceOrderNumbersForShop(
   shop: string,
@@ -398,6 +411,47 @@ export async function syncInvoiceOrderNumbersForShop(
   syncInFlight.set(shop, inFlight);
 
   try {
+    // Already ran once — do not recreate invoices just because the merchant
+    // deleted every row (unlike a DB wipe, empty Invoice list is intentional).
+    if (await hasInvoiceOrderNumbersSynced(shop)) {
+      const [lastAllocatedSequence, invoiceOrderSync, numberSeries] =
+        await Promise.all([
+          getLastInvoiceAllocatedSequence(shop),
+          getInvoiceOrderNumbersSyncStatus(shop),
+          loadNumberSeriesForShop(shop),
+        ]);
+      return {
+        assigned: 0,
+        skipped: invoiceOrderSync.assignedCount,
+        lastNumber: null,
+        lastAllocatedSequence,
+        invoiceOrderSync,
+        numberSeries,
+      };
+    }
+
+    // Respect Advanced → Invoice → On paid: when off, do not backfill historical
+    // paid orders into the Invoice list (same intent as orders/paid webhook).
+    const invoiceSettings = await loadInvoiceSettingsForShop(shop);
+    if (!invoiceSettings.autoOnPaid) {
+      await markInvoiceOrderNumbersSynced(shop);
+      invalidateSalesOrdersCache(shop);
+      const [lastAllocatedSequence, invoiceOrderSync, numberSeries] =
+        await Promise.all([
+          getLastInvoiceAllocatedSequence(shop),
+          getInvoiceOrderNumbersSyncStatus(shop),
+          loadNumberSeriesForShop(shop),
+        ]);
+      return {
+        assigned: 0,
+        skipped: 0,
+        lastNumber: null,
+        lastAllocatedSequence,
+        invoiceOrderSync,
+        numberSeries,
+      };
+    }
+
     const [numberSeries, orderGids] = await Promise.all([
       loadNumberSeriesForShop(shop),
       fetchAllPaidOrderGidsByCreatedAtOldestFirst(admin),
@@ -408,17 +462,6 @@ export async function syncInvoiceOrderNumbersForShop(
       throw new Error(
         "Invoice numbering is set to manual. Switch to auto before syncing existing invoices.",
       );
-    }
-
-    if (await hasInvoiceOrderNumbersSynced(shop)) {
-      const assigned = await countAssignedInvoiceNumbers(shop);
-      if (assigned === 0) {
-        await clearInvoiceOrderNumbersSynced(shop);
-      } else {
-        throw new Error(
-          "Invoice sync already completed. Reset sync first to sync again.",
-        );
-      }
     }
 
     await clearAllInvoiceDocumentNumbers(shop);
