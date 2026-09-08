@@ -699,12 +699,13 @@ const defaultColumns: TemplateColumn[] = [
   { key: "number", enabled: true, width: 4, label: "#" },
   { key: "item", enabled: true, width: 36, label: "Item", showImage: false },
   { key: "custom", enabled: false, width: 12, label: "Custom" },
-  { key: "sku", enabled: true, width: 12, label: "SKU" },
+  { key: "sku", enabled: true, width: 12, label: "SKU", showBelowItem: false },
   {
     key: "barcode",
     enabled: false,
     width: 12,
     label: "Barcode",
+    showBelowItem: false,
   },
   { key: "quantity", enabled: true, width: 10, label: "Qty", showUnit: false },
   { key: "rate", enabled: true, width: 10, label: "Rate", showComparePrice: true },
@@ -1915,33 +1916,50 @@ export async function action({ request, params }: ActionFunctionArgs) {
             : params.documentType === "return"
               ? "return"
               : "sales-order";
-  const series = await loadNumberSeriesEntryForShop(session.shop, seriesModule);
-  settings.numbering = numberingFromSeries(series);
-  // Logo lives in Settings → Store details (shared). Never persist per-template.
-  delete settings.logoDataUrl;
-  delete settings.logoFileName;
+  try {
+    const series = await loadNumberSeriesEntryForShop(session.shop, seriesModule);
+    settings.numbering = numberingFromSeries(series);
+    // Logo lives in Settings → Store details (shared). Never persist per-template.
+    delete settings.logoDataUrl;
+    delete settings.logoFileName;
 
-  await prisma.templateCustomization.upsert({
-    where: {
-      shop_documentType_templateId: {
+    await prisma.templateCustomization.upsert({
+      where: {
+        shop_documentType_templateId: {
+          shop: session.shop,
+          documentType: params.documentType,
+          templateId: params.templateId,
+        },
+      },
+      update: { settings: settings as unknown as Prisma.InputJsonValue },
+      create: {
         shop: session.shop,
         documentType: params.documentType,
         templateId: params.templateId,
+        settings: settings as unknown as Prisma.InputJsonValue,
       },
-    },
-    update: { settings: settings as unknown as Prisma.InputJsonValue },
-    create: {
-      shop: session.shop,
-      documentType: params.documentType,
-      templateId: params.templateId,
-      settings: settings as unknown as Prisma.InputJsonValue,
-    },
-  });
+    });
 
-  invalidateDocumentTemplateSettingsCache(session.shop);
-  await syncNumberCounter(session.shop, params.templateId, settings.numbering);
+    invalidateDocumentTemplateSettingsCache(session.shop);
+    await syncNumberCounter(session.shop, params.templateId, settings.numbering);
 
-  return { saved: true };
+    return {
+      saved: true,
+      settings: hydrateEditorSettings(settings, params.templateId),
+    };
+  } catch (error) {
+    console.error("Template save failed:", error);
+    return Response.json(
+      {
+        saved: false,
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : "Could not save template. Try again.",
+      },
+      { status: 500 },
+    );
+  }
 }
 
 function withNormalizedTotalLabels(
@@ -2434,11 +2452,17 @@ export default function TemplateEditorPage() {
     if (handledFetcherDataRef.current === fetcher.data) return;
     handledFetcherDataRef.current = fetcher.data;
 
-    if ("saved" in fetcher.data && fetcher.data.saved && pendingSaveRef.current) {
-      const committed = pendingSaveRef.current;
+    if ("saved" in fetcher.data && fetcher.data.saved) {
+      const returned =
+        "settings" in fetcher.data && fetcher.data.settings
+          ? (fetcher.data.settings as TemplateEditorSettings)
+          : null;
+      const committed = returned ?? pendingSaveRef.current;
       pendingSaveRef.current = null;
-      setSavedSettings(committed);
-      setSettings(committed);
+      if (!committed) return;
+      const next = hydrateEditorSettings(committed, data.templateId);
+      setSavedSettings(next);
+      setSettings(next);
       if (typeof shopify !== "undefined" && shopify.toast) {
         shopify.toast.show(teT(language, "te.savedToast"));
       }
@@ -2447,6 +2471,7 @@ export default function TemplateEditorPage() {
       } catch {
         // ignore
       }
+      return;
     }
 
     if ("error" in fetcher.data && fetcher.data.error) {
@@ -2455,7 +2480,7 @@ export default function TemplateEditorPage() {
         shopify.toast.show(String(fetcher.data.error), { isError: true });
       }
     }
-  }, [fetcher.state, fetcher.data]);
+  }, [data.templateId, fetcher.data, fetcher.state, language]);
 
   useEffect(() => {
     const family = resolveFontFamily(settings.fontFamily);
@@ -2535,8 +2560,11 @@ export default function TemplateEditorPage() {
     event?.stopPropagation?.();
     if (!isDirty || isSaving) return;
     pendingSaveRef.current = settings;
+    // Logo is store-level — never ship base64 in the template save payload.
+    const { logoDataUrl: _logo, logoFileName: _logoName, ...persistable } =
+      settings;
     fetcher.submit(
-      { intent: "save", settings: JSON.stringify(settings) },
+      { intent: "save", settings: JSON.stringify(persistable) },
       { method: "post" },
     );
   };
