@@ -123,6 +123,10 @@ import {
   salesOrdersListMayHaveChanged,
   type SalesOrderRow,
 } from "../sales-orders.server";
+import {
+  INVOICE_LIST_BUST_KEY,
+  markInvoiceListNeedsFreshLoad,
+} from "../invoice-list-fresh.client";
 import { loadSelectedTemplateForShop, loadSmtpSettingsForShop } from "../shop-settings.server";
 import { isSmtpReadyForSend, SMTP_REQUIRED_NOTICE } from "../smtp-settings";
 import {
@@ -856,7 +860,6 @@ export const headers: HeadersFunction = (headersArgs) => {
 };
 
 const PENDING_INVOICES_KEY = "billoxi:pending-invoices";
-const INVOICE_LIST_BUST_KEY = "billoxi:invoice-list-bust";
 
 function readPendingInvoices(): SalesOrderRow[] {
   if (typeof window === "undefined") return [];
@@ -884,7 +887,7 @@ function pushPendingInvoices(rows: SalesOrderRow[]) {
   const byId = new Map(readPendingInvoices().map((row) => [row.id, row]));
   for (const row of rows) byId.set(row.id, row);
   writePendingInvoices([...byId.values()]);
-  window.sessionStorage.setItem(INVOICE_LIST_BUST_KEY, "1");
+  markInvoiceListNeedsFreshLoad();
 }
 
 function removePendingInvoices(orderIds: Iterable<string>) {
@@ -1159,8 +1162,11 @@ export default function SalesOrderPage() {
     if (typeof window === "undefined") return;
     if (window.sessionStorage.getItem(INVOICE_LIST_BUST_KEY) !== "1") return;
     window.sessionStorage.removeItem(INVOICE_LIST_BUST_KEY);
-    revalidator.revalidate();
-  }, [isInvoiceList, revalidator]);
+    // Same bypass as manual Reload — serverless list caches are per-instance.
+    const params = new URLSearchParams(window.location.search);
+    params.set("fresh", String(Date.now()));
+    setSearchParams(params, { replace: true, preventScrollReset: true });
+  }, [isInvoiceList, setSearchParams]);
 
   useEffect(() => {
     const localTemplate = window.localStorage.getItem(
@@ -2328,6 +2334,14 @@ export default function SalesOrderPage() {
               ),
         );
         clearSelection();
+        if (isInvoiceList) {
+          markInvoiceListNeedsFreshLoad();
+          const params = new URLSearchParams(searchParams);
+          params.set("fresh", String(Date.now()));
+          setSearchParams(params, { replace: true, preventScrollReset: true });
+        } else {
+          markInvoiceListNeedsFreshLoad();
+        }
       } else if (result.document === "delete-credit-note") {
         setOrders((prev) =>
           isCreditNoteList
@@ -2490,6 +2504,7 @@ export default function SalesOrderPage() {
             prev.filter((order) => !patchedIds.has(order.id)),
           );
           clearSelection();
+          markInvoiceListNeedsFreshLoad();
         } else {
           const pendingRows = orders
             .filter((order) => patchedIds.has(order.id))
@@ -2505,7 +2520,11 @@ export default function SalesOrderPage() {
               draftNumber: "",
               draftedAt: null,
             }));
-          pushPendingInvoices(pendingRows);
+          if (pendingRows.length > 0) {
+            pushPendingInvoices(pendingRows);
+          } else {
+            markInvoiceListNeedsFreshLoad();
+          }
           setOrders((prev) =>
             prev.map((order) => {
               if (!patchedIds.has(order.id)) return order;
@@ -2522,6 +2541,12 @@ export default function SalesOrderPage() {
               };
             }),
           );
+        }
+        // Bypass per-instance list caches (same as Reload) so Invoice shows now.
+        if (isInvoiceList) {
+          const params = new URLSearchParams(searchParams);
+          params.set("fresh", String(Date.now()));
+          setSearchParams(params, { replace: true, preventScrollReset: true });
         }
       }
     }

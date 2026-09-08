@@ -4,10 +4,8 @@ import type {
   LinksFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import {
-  cachedClientLoader,
-  createAppPageClientCache,
-} from "../client-page-cache";
+import { cachedClientLoader } from "../client-page-cache";
+import { invoiceListClientCache } from "../invoice-list-client-cache";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { renderEmbeddedRouteError } from "../embedded-route-error";
@@ -121,10 +119,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 }
 
-const invoiceListCache = createAppPageClientCache();
-
 export async function clientLoader(args: ClientLoaderFunctionArgs) {
-  return cachedClientLoader(invoiceListCache, args);
+  return cachedClientLoader(invoiceListClientCache, args);
 }
 
 export function shouldRevalidate({
@@ -139,14 +135,14 @@ export function shouldRevalidate({
   defaultShouldRevalidate: boolean;
 }) {
   if (formMethod && formMethod.toUpperCase() !== "GET") {
-    invoiceListCache.bust();
+    invoiceListClientCache.bust();
     return true;
   }
   if (currentUrl.search !== nextUrl.search) {
-    invoiceListCache.bust();
+    invoiceListClientCache.bust();
     return true;
   }
-  if (defaultShouldRevalidate) invoiceListCache.bust();
+  if (defaultShouldRevalidate) invoiceListClientCache.bust();
   return defaultShouldRevalidate;
 }
 

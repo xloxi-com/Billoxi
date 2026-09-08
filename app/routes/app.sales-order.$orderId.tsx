@@ -98,6 +98,7 @@ import {
   updateInvoiceDocumentDetails,
 } from "../order-invoice-status.server";
 import { ensureInvoiceOrderNumbersSynced } from "../invoice-order-number-sync.server";
+import { markInvoiceListNeedsFreshLoad } from "../invoice-list-fresh.client";
 import {
   getDraftMetaByOrderGids,
   getDraftOrderGids,
@@ -2472,6 +2473,7 @@ export default function SalesOrderDocumentPage() {
       ) {
         setConvertInvoiceOpen(false);
         shopify.toast.show(t("detail.toast.convertedInvoice"));
+        markInvoiceListNeedsFreshLoad();
         const numericId = data.order.id.includes("/")
           ? data.order.id.split("/").pop() || data.order.id
           : data.order.id;
@@ -2482,6 +2484,7 @@ export default function SalesOrderDocumentPage() {
       } else if (result.document === "invoice") {
         setConvertInvoiceOpen(false);
         shopify.toast.show(t("detail.toast.convertedInvoice"));
+        markInvoiceListNeedsFreshLoad();
       } else if (result.document === "credit-note") {
         setCreateCreditNoteOpen(false);
         setCreateCreditReason("");
