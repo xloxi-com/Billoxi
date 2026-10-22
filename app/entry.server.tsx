@@ -1,4 +1,6 @@
-import { renderToReadableStream } from "react-dom/server";
+import { PassThrough } from "node:stream";
+import { renderToPipeableStream } from "react-dom/server";
+import { createReadableStreamFromReadable } from "@react-router/node";
 import { ServerRouter } from "react-router";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
@@ -6,6 +8,13 @@ import { addDocumentResponseHeaders } from "./shopify.server";
 
 export const streamTimeout = 10000;
 
+/**
+ * React 18's Node `react-dom/server` exports `renderToPipeableStream` only.
+ * `renderToReadableStream` lives on the browser/edge build. Vercel Node
+ * (nodejs24.x) loads this file as native ESM, so a named import of
+ * `renderToReadableStream` crashes the function at instantiate time with
+ * FUNCTION_INVOCATION_FAILED.
+ */
 export default async function handleRequest(
   request: Request,
   responseStatusCode: number,
@@ -14,33 +23,39 @@ export default async function handleRequest(
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
   const userAgent = request.headers.get("user-agent");
-  const waitForAllReady = isbot(userAgent ?? "");
+  const readyOption = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
 
-  const abortController = new AbortController();
-  const abortTimer = setTimeout(
-    () => abortController.abort(),
-    streamTimeout + 1000,
-  );
+  return new Promise<Response>((resolve, reject) => {
+    let shellRendered = false;
+    const { pipe, abort } = renderToPipeableStream(
+      <ServerRouter context={reactRouterContext} url={request.url} />,
+      {
+        [readyOption]() {
+          shellRendered = true;
+          const body = new PassThrough();
+          const stream = createReadableStreamFromReadable(body);
 
-  const body = await renderToReadableStream(
-    <ServerRouter context={reactRouterContext} url={request.url} />,
-    {
-      signal: abortController.signal,
-      onError(error) {
-        responseStatusCode = 500;
-        console.error(error);
+          responseHeaders.set("Content-Type", "text/html");
+          resolve(
+            new Response(stream, {
+              headers: responseHeaders,
+              status: responseStatusCode,
+            }),
+          );
+          pipe(body);
+        },
+        onShellError(error) {
+          reject(error);
+        },
+        onError(error) {
+          responseStatusCode = 500;
+          if (shellRendered) {
+            console.error(error);
+          }
+        },
       },
-    },
-  );
+    );
 
-  if (waitForAllReady) {
-    await body.allReady;
-  }
-
-  clearTimeout(abortTimer);
-  responseHeaders.set("Content-Type", "text/html");
-  return new Response(body, {
-    headers: responseHeaders,
-    status: responseStatusCode,
+    setTimeout(abort, streamTimeout + 1000);
   });
 }
