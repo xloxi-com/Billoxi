@@ -4,6 +4,7 @@ node_modules
 .DS_Store
 
 /.cache
+/.wrangler
 /build
 /app/build
 /public/build/

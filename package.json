@@ -3,7 +3,11 @@
   "private": true,
   "scripts": {
     "build": "npm run build:extension-pdf && react-router build",
+    "build:cloudflare": "npm run build:extension-pdf && react-router build",
     "build:extension-pdf": "vite build --config vite.extension-pdf.config.ts",
+    "preview:cloudflare": "npm run build:cloudflare && vite preview",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy -c wrangler.jsonc",
+    "cf-typegen": "wrangler types",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -68,9 +72,11 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "graphql-config": "^5.1.1",
     "preact": "^10.29.8",
+    "@cloudflare/vite-plugin": "^1.15.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
-    "vite": "^6.3.6"
+    "vite": "^6.3.6",
+    "wrangler": "^4.45.3"
   },
   "workspaces": [
     "extensions/*"

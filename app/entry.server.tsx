@@ -1,7 +1,5 @@
-import { PassThrough } from "stream";
-import { renderToPipeableStream } from "react-dom/server";
+import { renderToReadableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
-import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
@@ -16,47 +14,33 @@ export default async function handleRequest(
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
   const userAgent = request.headers.get("user-agent");
-  const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
+  const waitForAllReady = isbot(userAgent ?? "");
 
-  return new Promise((resolve, reject) => {
-    const renderState: {
-      abortTimer?: ReturnType<typeof setTimeout>;
-    } = {};
-    const clearAbortTimer = () => {
-      if (renderState.abortTimer) clearTimeout(renderState.abortTimer);
-    };
+  const abortController = new AbortController();
+  const abortTimer = setTimeout(
+    () => abortController.abort(),
+    streamTimeout + 1000,
+  );
 
-    const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={reactRouterContext} url={request.url} />,
-      {
-        [callbackName]: () => {
-          const body = new PassThrough();
-          const stream = createReadableStreamFromReadable(body);
-          body.once("close", clearAbortTimer);
-
-          responseHeaders.set("Content-Type", "text/html");
-          resolve(
-            new Response(stream, {
-              headers: responseHeaders,
-              status: responseStatusCode,
-            }),
-          );
-          pipe(body);
-        },
-        onShellError(error) {
-          clearAbortTimer();
-          reject(error);
-        },
-        onError(error) {
-          responseStatusCode = 500;
-          console.error(error);
-        },
+  const body = await renderToReadableStream(
+    <ServerRouter context={reactRouterContext} url={request.url} />,
+    {
+      signal: abortController.signal,
+      onError(error) {
+        responseStatusCode = 500;
+        console.error(error);
       },
-    );
+    },
+  );
 
-    // Automatically timeout the React renderer after 6 seconds, which ensures
-    // React has enough time to flush down the rejected boundary contents
-    renderState.abortTimer = setTimeout(abort, streamTimeout + 1000);
-    renderState.abortTimer.unref();
+  if (waitForAllReady) {
+    await body.allReady;
+  }
+
+  clearTimeout(abortTimer);
+  responseHeaders.set("Content-Type", "text/html");
+  return new Response(body, {
+    headers: responseHeaders,
+    status: responseStatusCode,
   });
 }

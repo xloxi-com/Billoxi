@@ -1,0 +1,20 @@
+/**
+ * Explicit Worker config so Wrangler does not run application detection at the
+ * npm/pnpm workspace root (extensions/*). Deploy with:
+ *   npx wrangler deploy -c wrangler.jsonc
+ *
+ * Input config for @cloudflare/vite-plugin. After `npm run build:cloudflare`
+ * the plugin writes an output wrangler.json that points at the SSR bundle and
+ * client assets. Do not set assets.not_found_handling to single-page-application.
+ */
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "billoxi",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-10-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true
+}

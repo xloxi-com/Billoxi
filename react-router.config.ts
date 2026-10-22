@@ -1,9 +1,12 @@
 import type { Config } from "@react-router/dev/config";
 import { vercelPreset } from "@vercel/react-router/vite";
+import { isCloudflareBuild } from "./is-cloudflare-build";
 
 export default {
   ssr: true,
-  presets: [vercelPreset()],
+  // Vercel keeps vercelPreset. Cloudflare Workers builds skip it so the
+  // official @cloudflare/vite-plugin can emit the Worker + assets bundle.
+  presets: isCloudflareBuild() ? [] : [vercelPreset()],
   // Avoid fog-of-war / lazy discovery bugs that throw:
   // "No result found for routeId routes/app.templates" (and similar).
   routeDiscovery: { mode: "initial" },
