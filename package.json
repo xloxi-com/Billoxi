@@ -52,6 +52,7 @@
     "vite-tsconfig-paths": "^5.1.4"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.64.0",
     "@preact/signals": "^2.11.0",
     "@shopify/api-codegen-preset": "^1.2.0",
     "@shopify/app-bridge-types": "^0.7.2",
@@ -72,11 +73,10 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "graphql-config": "^5.1.1",
     "preact": "^10.29.8",
-    "@cloudflare/vite-plugin": "^1.15.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "vite": "^6.3.6",
-    "wrangler": "^4.45.3"
+    "wrangler": "^4.151.3"
   },
   "workspaces": [
     "extensions/*"
